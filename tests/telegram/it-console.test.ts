@@ -173,3 +173,88 @@ describe("Slice 3.1 Telegram IT console", () => {
     expect(sender.sendMessage).toHaveBeenCalledWith(7001, "Akun Gwens aktif.\n\nDivisi: IT\nRole: ADMIN\nStatus: Aktif");
   });
 });
+
+function navigationBot(consoleService = harness().console, overrides: Record<string, unknown> = {}) {
+  const sender = {
+    sendMessage: vi.fn().mockResolvedValue(undefined),
+    editMessage: vi.fn().mockResolvedValue(undefined),
+    removeInlineKeyboard: vi.fn().mockResolvedValue(undefined),
+    answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+  const bot = new TelegramBot(
+    "token",
+    new TelegramRegistrationService({ upsertTelegramRegistration: vi.fn() }),
+    { resolveByLegacyTelegramUserId: vi.fn() },
+    sender,
+    { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    consoleService,
+  );
+  return { bot, sender };
+}
+
+async function callback(bot: TelegramBot, data: string) {
+  await bot.handleUpdate({
+    update_id: 100,
+    callback_query: { id: "callback-token", from: { id: 9001 }, data, message: { message_id: 77, chat: { id: 7001 } } },
+  });
+}
+
+describe("Slice 4 Telegram single-message navigation gate", () => {
+  it("1. /admin sends exactly one initial menu message", async () => {
+    const test = navigationBot();
+    await test.bot.handleUpdate({ update_id: 1, message: { text: "/admin", chat: { id: 7001 }, from: { id: 9001 } } });
+    expect(test.sender.sendMessage).toHaveBeenCalledTimes(1); expect(test.sender.editMessage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["2. User Management", "ac:u"],
+    ["3. Pending Users", "ac:l:p:0"],
+    ["4. Active Users", "ac:l:a:0"],
+    ["5. Inactive Users", "ac:l:i:0"],
+    ["6. User Detail", "ac:d:2:p:0"],
+    ["7. Assign Division", "ac:x:d:2"],
+    ["8. Assign Role", "ac:x:r:2"],
+    ["9. confirmation preview", "ac:v:d:2:20"],
+    ["10. Back", "ac:m"],
+  ])("%s edits the existing message", async (_label, data) => {
+    const test = navigationBot(); await callback(test.bot, data);
+    expect(test.sender.editMessage).toHaveBeenCalledWith(7001, 77, expect.any(String), expect.anything());
+    expect(test.sender.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("11. mutation success refreshes User Detail in the same message", async () => {
+    const state = harness(); const test = navigationBot(state.console); await callback(test.bot, "ac:c:d:2:20");
+    expect(test.sender.editMessage).toHaveBeenCalledWith(7001, 77, expect.stringContaining("User Detail"), expect.anything());
+    expect(test.sender.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("12. acknowledges callback before editing", async () => {
+    const test = navigationBot(); await callback(test.bot, "ac:u");
+    expect(test.sender.answerCallbackQuery).toHaveBeenCalledWith("callback-token");
+    expect(test.sender.answerCallbackQuery.mock.invocationCallOrder[0]).toBeLessThan(test.sender.editMessage.mock.invocationCallOrder[0]!);
+  });
+
+  it("13. removes the stale keyboard before safe replacement", async () => {
+    const editMessage = vi.fn().mockRejectedValue(new AppError(502, "TELEGRAM_EDIT_FAILED", "edit failed"));
+    const test = navigationBot(harness().console, { editMessage }); await callback(test.bot, "ac:u");
+    expect(test.sender.removeInlineKeyboard).toHaveBeenCalledWith(7001, 77);
+    expect(test.sender.removeInlineKeyboard.mock.invocationCallOrder[0]).toBeLessThan(test.sender.sendMessage.mock.invocationCallOrder[0]!);
+  });
+
+  it("14. edit failure sends exactly one safe replacement without crashing", async () => {
+    const test = navigationBot(harness().console, { editMessage: vi.fn().mockRejectedValue(new Error("edit unavailable")) });
+    await callback(test.bot, "ac:u"); expect(test.sender.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("15. unauthorized callback is rechecked and safely rejected", async () => {
+    const state = harness({ authority: false }); const test = navigationBot(state.console); await callback(test.bot, "ac:c:d:2:20");
+    expect(test.sender.editMessage).toHaveBeenCalledWith(7001, 77, "Perintah tidak tersedia.", undefined);
+    expect(state.repository.updates).toHaveLength(0);
+  });
+
+  it("16. normal callback navigation never stacks messages", async () => {
+    const test = navigationBot(); await callback(test.bot, "ac:u"); await callback(test.bot, "ac:l:p:0"); await callback(test.bot, "ac:m");
+    expect(test.sender.editMessage).toHaveBeenCalledTimes(3); expect(test.sender.sendMessage).not.toHaveBeenCalled();
+  });
+});

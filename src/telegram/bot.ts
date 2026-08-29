@@ -17,7 +17,7 @@ interface TelegramUpdate {
     id: string;
     from: { id: number };
     data?: string;
-    message?: { chat: { id: number } };
+    message?: { message_id: number; chat: { id: number } };
   };
 }
 
@@ -143,12 +143,20 @@ export class TelegramBot {
     const query = update.callback_query!;
     this.logger.info({ updateId: update.update_id }, "Telegram callback received");
     try {
-      const chatId = query.message?.chat.id;
-      if (chatId === undefined) return;
+      await this.sender.answerCallbackQuery?.(query.id);
+    } catch (error) {
+      this.logger.warn(
+        { errorType: error instanceof Error ? error.name : "UnknownError", updateId: update.update_id },
+        "Telegram callback acknowledgement failed",
+      );
+    }
+    try {
+      const message = query.message;
+      if (!message) return;
       const response = this.itConsole
         ? await this.itConsole.handleCallback(query.from.id, query.data ?? "")
         : { text: "Perintah tidak tersedia." };
-      await this.sendConsoleResponse(chatId, response);
+      await this.editConsoleResponse(message.chat.id, message.message_id, response);
     } catch (error) {
       this.logger.error(
         { errorType: error instanceof Error ? error.name : "UnknownError", updateId: update.update_id },
@@ -156,15 +164,6 @@ export class TelegramBot {
       );
       const chatId = query.message?.chat.id;
       if (chatId !== undefined) await this.sender.sendMessage(chatId, "Permintaan belum dapat diproses. Silakan coba lagi.");
-    } finally {
-      try {
-        await this.sender.answerCallbackQuery?.(query.id);
-      } catch (error) {
-        this.logger.warn(
-          { errorType: error instanceof Error ? error.name : "UnknownError", updateId: update.update_id },
-          "Telegram callback acknowledgement failed",
-        );
-      }
     }
   }
 
@@ -180,6 +179,34 @@ export class TelegramBot {
 
   private sendConsoleResponse(chatId: number, response: { text: string; inlineKeyboard?: import("../services/telegram.service.js").TelegramInlineButton[][] }): Promise<void> {
     return this.sender.sendMessage(chatId, response.text, response.inlineKeyboard ? { inlineKeyboard: response.inlineKeyboard } : undefined);
+  }
+
+  private async editConsoleResponse(
+    chatId: number,
+    messageId: number,
+    response: { text: string; inlineKeyboard?: import("../services/telegram.service.js").TelegramInlineButton[][] },
+  ): Promise<void> {
+    if (!this.sender.editMessage) {
+      await this.sendConsoleResponse(chatId, response);
+      return;
+    }
+    try {
+      await this.sender.editMessage(chatId, messageId, response.text, response.inlineKeyboard ? { inlineKeyboard: response.inlineKeyboard } : undefined);
+    } catch (error) {
+      this.logger.warn(
+        { errorType: error instanceof Error ? error.name : "UnknownError" },
+        "Telegram menu edit failed; using safe replacement",
+      );
+      try {
+        await this.sender.removeInlineKeyboard?.(chatId, messageId);
+      } catch (markupError) {
+        this.logger.warn(
+          { errorType: markupError instanceof Error ? markupError.name : "UnknownError" },
+          "Telegram stale keyboard removal failed",
+        );
+      }
+      await this.sendConsoleResponse(chatId, response);
+    }
   }
 
   async start(): Promise<void> {

@@ -110,12 +110,17 @@ export class TelegramItConsoleService implements TelegramItConsole {
   private async userDetail(id: number, status: UserManagementStatus, page: number): Promise<TelegramConsoleResponse> {
     const user = await this.safeUser(id);
     if (!user) return unavailable();
+    return this.userDetailResponse(user, status, page);
+  }
+
+  private userDetailResponse(user: ManagedUser, status: UserManagementStatus, page: number, notice?: string): TelegramConsoleResponse {
+    const id = user.id;
     const actions: TelegramInlineButton[][] = [
       [button("Assign Division", `ac:x:d:${id}`), button("Assign Role", `ac:x:r:${id}`)],
       [user.active ? button("Deactivate", `ac:v:z:${id}`) : button("Activate", `ac:v:a:${id}`)],
       [button("Back", `ac:l:${this.statusCode(status)}:${page}`)],
     ];
-    return { text: this.userDetailText(user), inlineKeyboard: actions };
+    return { text: `${notice ? `${notice}\n\n` : ""}User Detail\n\n${this.userDetailText(user)}`, inlineKeyboard: actions };
   }
 
   private async catalog(kind: string, id: number): Promise<TelegramConsoleResponse> {
@@ -154,7 +159,7 @@ export class TelegramItConsoleService implements TelegramItConsole {
       role_id: kind === "r" ? catalogId : user.role?.id ?? null,
       active: user.active,
     }, "telegram_it_console", actor.userId);
-    return { text: `Perubahan berhasil.\n\n${this.userDetailText(updated)}`, inlineKeyboard: [[button("Back", `ac:d:${id}:${this.statusCode(this.category(updated))}:0`)]] };
+    return this.userDetailResponse(updated, this.category(updated), 0, `${kind === "d" ? "Division" : "Role"} berhasil diperbarui.`);
   }
 
   private async activePreview(kind: string, id: number): Promise<TelegramConsoleResponse> {
@@ -183,7 +188,7 @@ export class TelegramItConsoleService implements TelegramItConsole {
         role_id: user.role?.id ?? null,
         active,
       }, "telegram_it_console", actor.userId);
-      return { text: `User berhasil ${active ? "diaktifkan" : "dinonaktifkan"}.\n\n${this.userDetailText(updated)}`, inlineKeyboard: [[button("Back", "ac:u")]] };
+      return this.userDetailResponse(updated, this.category(updated), 0, `User berhasil ${active ? "diaktifkan" : "dinonaktifkan"}.`);
     } catch (error) {
       if (error instanceof AppError && error.code === "GOVERNANCE_INVARIANT") {
         return { text: "User ini tidak dapat dinonaktifkan karena merupakan SYSTEM_ADMIN aktif terakhir.", inlineKeyboard: [[button("Back", "ac:u")]] };

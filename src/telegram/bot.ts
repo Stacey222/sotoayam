@@ -4,13 +4,20 @@ import type { TelegramRegistrationService } from "../services/telegram-registrat
 import type { TelegramSender } from "../services/telegram.service.js";
 import type { UserAccessStateResolver } from "../services/user-access-state.service.js";
 import type { TelegramUser } from "../types/index.js";
+import type { TelegramItConsole } from "./it-console.js";
 
 interface TelegramUpdate {
   update_id: number;
   message?: {
     text?: string;
     chat: { id: number; username?: string; first_name?: string };
-    from?: { username?: string; first_name?: string };
+    from?: { id?: number; username?: string; first_name?: string };
+  };
+  callback_query?: {
+    id: string;
+    from: { id: number };
+    data?: string;
+    message?: { chat: { id: number } };
   };
 }
 
@@ -43,11 +50,22 @@ export class TelegramBot {
     private readonly accessStateResolver: UserAccessStateResolver,
     private readonly sender: TelegramSender,
     private readonly logger: Pick<FastifyBaseLogger, "info" | "warn" | "error">,
+    private readonly itConsole?: TelegramItConsole,
   ) {}
 
   async handleUpdate(update: TelegramUpdate): Promise<void> {
+    if (update.callback_query) {
+      await this.handleCallback(update);
+      return;
+    }
     const message = update.message;
-    if (!message || !/^\/start(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) return;
+    if (!message) return;
+    if (/^\/admin(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) {
+      this.logger.info({ updateId: update.update_id }, "Telegram /admin received");
+      await this.sendConsoleResponse(message.chat.id, await this.openConsole(message.from?.id));
+      return;
+    }
+    if (!/^\/start(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) return;
     this.logger.info({ updateId: update.update_id }, "Telegram /start received");
     const username = message.from?.username ?? message.chat.username ?? null;
     const firstName = message.from?.first_name ?? message.chat.first_name ?? null;
@@ -121,6 +139,49 @@ export class TelegramBot {
     }
   }
 
+  private async handleCallback(update: TelegramUpdate): Promise<void> {
+    const query = update.callback_query!;
+    this.logger.info({ updateId: update.update_id }, "Telegram callback received");
+    try {
+      const chatId = query.message?.chat.id;
+      if (chatId === undefined) return;
+      const response = this.itConsole
+        ? await this.itConsole.handleCallback(query.from.id, query.data ?? "")
+        : { text: "Perintah tidak tersedia." };
+      await this.sendConsoleResponse(chatId, response);
+    } catch (error) {
+      this.logger.error(
+        { errorType: error instanceof Error ? error.name : "UnknownError", updateId: update.update_id },
+        "Telegram console callback failed",
+      );
+      const chatId = query.message?.chat.id;
+      if (chatId !== undefined) await this.sender.sendMessage(chatId, "Permintaan belum dapat diproses. Silakan coba lagi.");
+    } finally {
+      try {
+        await this.sender.answerCallbackQuery?.(query.id);
+      } catch (error) {
+        this.logger.warn(
+          { errorType: error instanceof Error ? error.name : "UnknownError", updateId: update.update_id },
+          "Telegram callback acknowledgement failed",
+        );
+      }
+    }
+  }
+
+  private async openConsole(externalTelegramId: number | undefined) {
+    if (!this.itConsole || externalTelegramId === undefined) return { text: "Perintah tidak tersedia." };
+    try {
+      return await this.itConsole.open(externalTelegramId);
+    } catch (error) {
+      this.logger.error({ errorType: error instanceof Error ? error.name : "UnknownError" }, "Telegram console authorization failed");
+      return { text: "Permintaan belum dapat diproses. Silakan coba lagi." };
+    }
+  }
+
+  private sendConsoleResponse(chatId: number, response: { text: string; inlineKeyboard?: import("../services/telegram.service.js").TelegramInlineButton[][] }): Promise<void> {
+    return this.sender.sendMessage(chatId, response.text, response.inlineKeyboard ? { inlineKeyboard: response.inlineKeyboard } : undefined);
+  }
+
   async start(): Promise<void> {
     this.stopped = false;
     this.logger.info("Telegram bot initialization started");
@@ -133,7 +194,7 @@ export class TelegramBot {
         const url = new URL(`https://api.telegram.org/bot${this.token}/getUpdates`);
         url.searchParams.set("offset", String(this.offset));
         url.searchParams.set("timeout", "25");
-        url.searchParams.set("allowed_updates", JSON.stringify(["message"]));
+        url.searchParams.set("allowed_updates", JSON.stringify(["message", "callback_query"]));
         const response = await fetch(url, { signal: this.controller.signal });
         const payload = (await response.json().catch(() => ({ ok: false }))) as TelegramApiResponse<TelegramUpdate[]>;
         if (!response.ok || !payload.ok) {
@@ -146,7 +207,7 @@ export class TelegramBot {
         for (const update of payload.result ?? []) {
           this.offset = update.update_id + 1;
           this.logger.info(
-            { updateId: update.update_id, hasMessage: Boolean(update.message) },
+            { updateId: update.update_id, updateType: update.callback_query ? "callback_query" : "message" },
             "Telegram update received",
           );
           try {

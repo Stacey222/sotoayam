@@ -31,7 +31,7 @@ export class UserManagementService {
     return { divisions, roles };
   }
 
-  async updateAccess(id: number, update: AccessUpdate, source = "admin_api_shared_key"): Promise<ManagedUser> {
+  async updateAccess(id: number, update: AccessUpdate, source = "admin_api_shared_key", actorUserId: number | null = null): Promise<ManagedUser> {
     const current = await this.get(id);
     const division = update.division_id === null ? null : (await this.divisions.findAll()).find((item) => item.id === update.division_id);
     const role = update.role_id === null ? null : (await this.roles.findAll()).find((item) => item.id === update.role_id);
@@ -46,7 +46,7 @@ export class UserManagementService {
     if (update.active && (!division || !role)) {
       throw new AppError(400, "VALIDATION_ERROR", "Active user requires a division and role");
     }
-    return this.users.updateAccess(id, update, source);
+    return this.users.updateAccess(id, update, source, actorUserId);
   }
 
   async updateLegacyAccess(legacyId: number, update: UserUpdate): Promise<void> {

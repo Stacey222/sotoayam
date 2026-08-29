@@ -15,6 +15,7 @@ import { SupabaseSystemAuthorityRepository } from "./repositories/system-authori
 import { SupabaseUserManagementRepository } from "./repositories/user-management.repository.js";
 import { SupabaseUsersRepository } from "./repositories/users.repository.js";
 import { SupabaseUserAccessStateRepository } from "./repositories/user-access-state.repository.js";
+import { SupabaseUserChannelsRepository } from "./repositories/user-channels.repository.js";
 import { SupabaseTasksRepository } from "./repositories/tasks.repository.js";
 import { SupabaseTaskUsersRepository } from "./repositories/task-users.repository.js";
 import { SupabaseTaskActivitiesRepository } from "./repositories/task-activities.repository.js";
@@ -42,6 +43,7 @@ import {
   type TelegramRegistrationWriter,
 } from "./services/telegram-registration.service.js";
 import { TelegramBot } from "./telegram/bot.js";
+import { TelegramItConsoleService } from "./telegram/it-console.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -83,7 +85,6 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
         });
   const resolver = new RecipientResolverService(repository);
   const notificationService = new NotificationService(resolver, telegramSender, app.log);
-  const bot = new TelegramBot(options.config.telegramBotToken, registrationService, accessStateResolver, telegramSender, app.log);
   const userManagementService = client ? new UserManagementService(
     new SupabaseUserManagementRepository(client),
     new SupabaseDivisionsRepository(client),
@@ -92,6 +93,19 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const systemAuthorityService = client ? new SystemAuthorityService(
     new SupabaseUsersRepository(client), new SupabaseSystemAuthorityRepository(client),
   ) : undefined;
+  const itConsole = client && userManagementService ? new TelegramItConsoleService(
+    new SupabaseUserChannelsRepository(client),
+    new SupabaseSystemAuthorityRepository(client),
+    userManagementService,
+  ) : undefined;
+  const bot = new TelegramBot(
+    options.config.telegramBotToken,
+    registrationService,
+    accessStateResolver,
+    telegramSender,
+    app.log,
+    itConsole,
+  );
 
   app.setErrorHandler((error, request, reply) => {
     const appError = error instanceof AppError ? error : null;

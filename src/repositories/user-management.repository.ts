@@ -13,7 +13,7 @@ export interface UserManagementRepository {
   findAll(status?: UserManagementStatus): Promise<ManagedUser[]>;
   findById(id: number): Promise<ManagedUser | null>;
   findNormalizedByLegacyId(legacyId: number): Promise<ManagedUser | null>;
-  updateAccess(id: number, update: AccessUpdate, source: string): Promise<ManagedUser>;
+  updateAccess(id: number, update: AccessUpdate, source: string, actorUserId?: number | null): Promise<ManagedUser>;
 }
 
 const selection = "id,display_name,division_id,role_id,active,legacy_telegram_user_id,created_at,updated_at,divisions(id,code,name,active,created_at,updated_at),roles(id,code,name,active,created_at,updated_at),user_channels(channel_type,active)";
@@ -69,13 +69,13 @@ export class SupabaseUserManagementRepository implements UserManagementRepositor
     return data ? toManagedUser(data as unknown as ManagedUserRow) : null;
   }
 
-  async updateAccess(id: number, update: AccessUpdate, source: string): Promise<ManagedUser> {
+  async updateAccess(id: number, update: AccessUpdate, source: string, actorUserId: number | null = null): Promise<ManagedUser> {
     const { error } = await this.client.rpc("update_user_access", {
       p_user_id: id,
       p_division_id: update.division_id,
       p_role_id: update.role_id,
       p_active: update.active,
-      p_actor_user_id: null,
+      p_actor_user_id: actorUserId,
       p_source: source,
     }).single();
     if (error) throw databaseError("Unable to update user access", error);

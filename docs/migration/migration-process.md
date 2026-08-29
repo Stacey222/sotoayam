@@ -7,6 +7,7 @@ Repository migration files:
 1. `202608260001_create_telegram_users.sql`
 2. `202608270001_add_missing_telegram_users_division.sql`
 3. `202608290001_create_governance_foundation.sql` (applied live on 2026-08-29)
+4. `202608290002_create_normalized_identity.sql` (local Slice 2; pending deployment)
 
 Safe diagnostics prove the application-required `telegram_users` table/columns and reversible server write currently work. On 2026-08-29, authenticated Supabase CLI tooling linked to the project matching the application's configured hostname and authoritatively read the remote migration registry. The registry initially contained none of the three local versions even though the legacy schema existed live.
 

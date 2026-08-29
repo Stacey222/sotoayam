@@ -8,17 +8,23 @@ import {
   SupabaseTelegramUsersRepository,
   type TelegramUsersRepository,
 } from "./repositories/telegram-users.repository.js";
+import { SupabaseNormalizedRegistrationRepository } from "./repositories/normalized-registration.repository.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
 import { usersRoutes } from "./routes/users.routes.js";
 import { NotificationService } from "./services/notification.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
 import { TelegramService, type TelegramSender } from "./services/telegram.service.js";
+import {
+  TelegramRegistrationService,
+  type TelegramRegistrationWriter,
+} from "./services/telegram-registration.service.js";
 import { TelegramBot } from "./telegram/bot.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
   repository?: TelegramUsersRepository;
+  registrationWriter?: TelegramRegistrationWriter;
   telegramSender?: TelegramSender;
   logger?: boolean;
 }
@@ -30,12 +36,15 @@ export interface AppRuntime {
 
 export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const app = Fastify({ logger: options.logger === false ? false : { level: options.config.logLevel } });
-  const repository =
-    options.repository ?? new SupabaseTelegramUsersRepository(createSupabaseClient(options.config));
+  const client = options.repository ? null : createSupabaseClient(options.config);
+  const repository = options.repository ?? new SupabaseTelegramUsersRepository(client!);
+  const registrationWriter = options.registrationWriter
+    ?? (options.repository ? options.repository : new SupabaseNormalizedRegistrationRepository(client!));
+  const registrationService = new TelegramRegistrationService(registrationWriter);
   const telegramSender = options.telegramSender ?? new TelegramService(options.config.telegramBotToken, app.log);
   const resolver = new RecipientResolverService(repository);
   const notificationService = new NotificationService(resolver, telegramSender, app.log);
-  const bot = new TelegramBot(options.config.telegramBotToken, repository, telegramSender, app.log);
+  const bot = new TelegramBot(options.config.telegramBotToken, registrationService, telegramSender, app.log);
 
   app.setErrorHandler((error, request, reply) => {
     const appError = error instanceof AppError ? error : null;

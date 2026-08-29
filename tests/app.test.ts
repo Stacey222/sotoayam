@@ -6,6 +6,7 @@ import type { TelegramUsersRepository } from "../src/repositories/telegram-users
 import { NotificationService } from "../src/services/notification.service.js";
 import { RecipientResolverService } from "../src/services/recipient-resolver.service.js";
 import type { TelegramSender } from "../src/services/telegram.service.js";
+import { TelegramRegistrationService } from "../src/services/telegram-registration.service.js";
 import { TelegramBot } from "../src/telegram/bot.js";
 import type {
   NotificationPreference,
@@ -178,7 +179,7 @@ describe("Telegram behavior", () => {
     const configured = user({ division: "Management", role: "Owner", active: true, owner_report: true });
     const repository = new MemoryRepository([configured]);
     const sender = { sendMessage: vi.fn().mockResolvedValue(undefined) };
-    const bot = new TelegramBot("token", repository, sender, silentLogger);
+    const bot = new TelegramBot("token", new TelegramRegistrationService(repository), sender, silentLogger);
     await bot.handleUpdate({ update_id: 1, message: { text: "/start", chat: { id: 1001 }, from: { username: "andi_baru", first_name: "Andi" } } });
     await bot.handleUpdate({ update_id: 2, message: { text: "/start", chat: { id: 1001 }, from: { username: "andi_baru", first_name: "Andi" } } });
     expect(repository.users).toHaveLength(1);
@@ -195,7 +196,7 @@ describe("Telegram behavior", () => {
       }),
     );
     const sender = { sendMessage: vi.fn().mockResolvedValue(undefined) };
-    const bot = new TelegramBot("token", repository, sender, silentLogger);
+    const bot = new TelegramBot("token", new TelegramRegistrationService(repository), sender, silentLogger);
 
     await bot.handleUpdate({
       update_id: 3,

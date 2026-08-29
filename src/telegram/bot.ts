@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger } from "fastify";
 import { DatabaseError } from "../errors.js";
-import type { TelegramUsersRepository } from "../repositories/telegram-users.repository.js";
+import type { TelegramRegistrationService } from "../services/telegram-registration.service.js";
 import type { TelegramSender } from "../services/telegram.service.js";
 
 interface TelegramUpdate {
@@ -37,7 +37,7 @@ export class TelegramBot {
 
   constructor(
     private readonly token: string,
-    private readonly repository: TelegramUsersRepository,
+    private readonly registrationService: TelegramRegistrationService,
     private readonly sender: TelegramSender,
     private readonly logger: Pick<FastifyBaseLogger, "info" | "warn" | "error">,
   ) {}
@@ -45,11 +45,11 @@ export class TelegramBot {
   async handleUpdate(update: TelegramUpdate): Promise<void> {
     const message = update.message;
     if (!message || !/^\/start(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) return;
-    this.logger.info({ updateId: update.update_id, telegramChatId: message.chat.id }, "Telegram /start received");
+    this.logger.info({ updateId: update.update_id }, "Telegram /start received");
     const username = message.from?.username ?? message.chat.username ?? null;
     const firstName = message.from?.first_name ?? message.chat.first_name ?? null;
     try {
-      await this.repository.upsertTelegramRegistration({
+      await this.registrationService.register({
         telegram_chat_id: message.chat.id,
         telegram_username: username,
         telegram_first_name: firstName,
@@ -68,7 +68,6 @@ export class TelegramBot {
           errorType: error instanceof Error ? error.name : "UnknownError",
           ...diagnostic,
           updateId: update.update_id,
-          telegramChatId: message.chat.id,
         },
         "Telegram registration failed",
       );
@@ -82,14 +81,13 @@ export class TelegramBot {
           {
             errorType: sendError instanceof Error ? sendError.name : "UnknownError",
             updateId: update.update_id,
-            telegramChatId: message.chat.id,
           },
           "Telegram registration failure message could not be sent",
         );
       }
       return;
     }
-    this.logger.info({ updateId: update.update_id, telegramChatId: message.chat.id }, "Telegram registration succeeded");
+    this.logger.info({ updateId: update.update_id }, "Telegram registration succeeded");
     const usernameLine = username ? `\nUsername: @${username}` : "";
     await this.sender.sendMessage(
       message.chat.id,

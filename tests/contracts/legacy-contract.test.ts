@@ -6,6 +6,7 @@ import type { TelegramUsersRepository } from "../../src/repositories/telegram-us
 import { NotificationService } from "../../src/services/notification.service.js";
 import { RecipientResolverService } from "../../src/services/recipient-resolver.service.js";
 import type { TelegramSender } from "../../src/services/telegram.service.js";
+import { TelegramRegistrationService } from "../../src/services/telegram-registration.service.js";
 import { TelegramBot } from "../../src/telegram/bot.js";
 import {
   NOTIFICATION_PREFERENCE_BY_TYPE,
@@ -116,7 +117,7 @@ describe("LEGACY COMPATIBILITY CONTRACT — Telegram registration", () => {
   it("registers a new /start user and sends the established success response", async () => {
     const repository = new ContractRepository();
     const sender = { sendMessage: vi.fn().mockResolvedValue(undefined) };
-    const bot = new TelegramBot("contract-token", repository, sender, logger());
+    const bot = new TelegramBot("contract-token", new TelegramRegistrationService(repository), sender, logger());
 
     await bot.handleUpdate({
       update_id: 10,
@@ -150,7 +151,7 @@ describe("LEGACY COMPATIBILITY CONTRACT — Telegram registration", () => {
     });
     const repository = new ContractRepository([existing]);
     const sender = { sendMessage: vi.fn().mockResolvedValue(undefined) };
-    const bot = new TelegramBot("contract-token", repository, sender, logger());
+    const bot = new TelegramBot("contract-token", new TelegramRegistrationService(repository), sender, logger());
     const update = {
       message: { text: "/start", chat: { id: 2002 }, from: { username: "renamed", first_name: "Owner" } },
     };
@@ -184,7 +185,7 @@ describe("LEGACY COMPATIBILITY CONTRACT — Telegram registration", () => {
     );
     const sender = { sendMessage: vi.fn().mockResolvedValue(undefined) };
     const testLogger = logger();
-    const bot = new TelegramBot(botToken, repository, sender, testLogger);
+    const bot = new TelegramBot(botToken, new TelegramRegistrationService(repository), sender, testLogger);
 
     await bot.handleUpdate({
       update_id: 13,

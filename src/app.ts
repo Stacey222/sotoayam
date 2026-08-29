@@ -15,11 +15,18 @@ import { SupabaseSystemAuthorityRepository } from "./repositories/system-authori
 import { SupabaseUserManagementRepository } from "./repositories/user-management.repository.js";
 import { SupabaseUsersRepository } from "./repositories/users.repository.js";
 import { SupabaseUserAccessStateRepository } from "./repositories/user-access-state.repository.js";
+import { SupabaseTasksRepository } from "./repositories/tasks.repository.js";
+import { SupabaseTaskUsersRepository } from "./repositories/task-users.repository.js";
+import { SupabaseTaskActivitiesRepository } from "./repositories/task-activities.repository.js";
+import { SupabaseTaskRelationshipsRepository } from "./repositories/task-relationships.repository.js";
+import { SupabasePermissionsRepository } from "./repositories/permissions.repository.js";
+import { SupabaseAuditRepository } from "./repositories/audit.repository.js";
 import { adminUserManagementRoutes } from "./routes/admin-user-management.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
 import { usersRoutes } from "./routes/users.routes.js";
 import { systemAuthorityRoutes } from "./routes/system-authority.routes.js";
+import { tasksRoutes } from "./routes/tasks.routes.js";
 import { NotificationService } from "./services/notification.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
 import { TelegramService, type TelegramSender } from "./services/telegram.service.js";
@@ -27,6 +34,9 @@ import { UserManagementService } from "./services/user-management.service.js";
 import { SystemAuthorityService } from "./services/system-authority.service.js";
 import { UserAccessStateService, type UserAccessStateResolver } from "./services/user-access-state.service.js";
 import { resolveUserAccessState } from "./identity/user-access-state.js";
+import { TrustedTaskActorService } from "./services/task-actor.service.js";
+import { TaskAuthorizationService } from "./services/task-authorization.service.js";
+import { TaskService } from "./services/task.service.js";
 import {
   TelegramRegistrationService,
   type TelegramRegistrationWriter,
@@ -127,6 +137,19 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     service: systemAuthorityService,
     adminApiKey: options.config.adminApiKey,
   });
+  if (client) {
+    const taskUsers = new SupabaseTaskUsersRepository(client);
+    const taskService = new TaskService(
+      new SupabaseTasksRepository(client), taskUsers, new SupabaseTaskActivitiesRepository(client),
+      new SupabaseTaskRelationshipsRepository(client), new SupabaseAuditRepository(client), new TaskAuthorizationService(),
+    );
+    await app.register(tasksRoutes, {
+      prefix: "/api/tasks",
+      service: taskService,
+      actorResolver: new TrustedTaskActorService(taskUsers, new SupabasePermissionsRepository(client)),
+      adminApiKey: options.config.adminApiKey,
+    });
+  }
   await app.register(notificationRoutes, {
     prefix: "/api/notifications",
     notificationService,

@@ -44,6 +44,7 @@ function main(): void {
     { name: "TYPECHECK", passed: run(npm, ["run", "typecheck"]) },
     { name: "LEGACY_CONTRACT", passed: run(npm, ["run", "test:contract"]) },
     { name: "SCHEMA_COMPATIBILITY", passed: run(npm, ["run", "check:schema"]) },
+    { name: "GOVERNANCE_FOUNDATION", passed: run(npm, ["run", "check:governance-schema"]) },
     { name: "SUPABASE_CONNECTION", passed: run(npm, ["run", "check:supabase"]) },
     { name: "RECONCILIATION_HARNESS", passed: run(npm, ["run", "check:reconciliation"]) },
     { name: "SECRET_SCAN", passed: run(npm, ["run", "check:secrets"]) },

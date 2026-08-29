@@ -10,6 +10,7 @@
     "start": "node dist/src/server.js",
     "check:supabase": "tsx scripts/check-supabase.ts",
     "check:schema": "tsx scripts/check-schema.ts",
+    "check:governance-schema": "tsx scripts/check-governance-foundation.ts",
     "check:secrets": "tsx scripts/check-secrets.ts",
     "check:reconciliation": "tsx scripts/reconcile-legacy.ts",
     "check:migration-baseline": "tsx scripts/check-migration-baseline.ts",

@@ -6,10 +6,21 @@ Repository migration files:
 
 1. `202608260001_create_telegram_users.sql`
 2. `202608270001_add_missing_telegram_users_division.sql`
+3. `202608290001_create_governance_foundation.sql` (local Slice 1 only; not applied live by this task)
 
 Safe diagnostics prove the application-required table/columns and reversible server write currently work. They do not prove entries in Supabase's migration-history catalog. The repository has no linked Supabase CLI configuration or checked-in deployment record, so both files are **assumed applied based on resulting schema**, not independently registry-verified.
 
 Before Slice 1 deployment, an authorized operator should use Supabase CLI/management tooling to read migration history and record migration version/checksum—without exposing credentials or business rows.
+
+Current authoritative registry mapping:
+
+| Version | Live status |
+| --- | --- |
+| `202608260001` | `UNKNOWN` |
+| `202608270001` | `UNKNOWN` |
+| `202608290001` | `NOT_APPLIED_BY_THIS_TASK` |
+
+Until an authorized read of `supabase_migrations.schema_migrations` succeeds, live Slice 1 deployment is blocked. `npm run check:governance-schema` validates the local migration contract only; it does not claim a live schema change.
 
 ## Forward-only rules
 

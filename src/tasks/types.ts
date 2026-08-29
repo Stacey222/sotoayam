@@ -34,7 +34,7 @@ export interface Task {
   updated_at: string;
 }
 
-export interface TaskReadModel extends Task { is_overdue: boolean }
+export interface TaskReadModel extends Task { is_overdue: boolean; activities?: TaskActivity[] }
 
 export interface TaskUser {
   id: number;
@@ -52,6 +52,7 @@ export interface CreateTaskInput {
   priority?: TaskPriority;
   deadline?: string | null;
   assignedToUserId?: number | null;
+  ownerDivisionId?: number;
 }
 
 export interface UpdateTaskInput {

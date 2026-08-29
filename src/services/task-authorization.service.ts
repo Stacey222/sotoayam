@@ -8,9 +8,11 @@ export class TaskAuthorizationService {
   }
 
   canView(actor: TaskActor, task: Task): boolean {
-    if (!actor.active) return false;
+    if (!actor.active || actor.divisionId === null || actor.roleId === null) return false;
+    if (task.created_by_user_id === actor.id) return true;
     if (task.assigned_to_user_id === actor.id && actor.permissions.has("task.view_assigned")) return true;
-    return actor.divisionId === task.owner_division_id && actor.permissions.has("task.view_division");
+    return (actor.divisionId === task.owner_division_id || actor.divisionId === task.requesting_division_id)
+      && actor.permissions.has("task.view_division");
   }
 
   assertCanView(actor: TaskActor, task: Task): void {

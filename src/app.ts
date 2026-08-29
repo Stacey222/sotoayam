@@ -22,12 +22,14 @@ import { SupabaseTaskActivitiesRepository } from "./repositories/task-activities
 import { SupabaseTaskRelationshipsRepository } from "./repositories/task-relationships.repository.js";
 import { SupabasePermissionsRepository } from "./repositories/permissions.repository.js";
 import { SupabaseAuditRepository } from "./repositories/audit.repository.js";
+import { SupabaseDivisionCollaborationRepository } from "./repositories/division-collaboration.repository.js";
 import { adminUserManagementRoutes } from "./routes/admin-user-management.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
 import { usersRoutes } from "./routes/users.routes.js";
 import { systemAuthorityRoutes } from "./routes/system-authority.routes.js";
 import { tasksRoutes } from "./routes/tasks.routes.js";
+import { collaborationRulesRoutes } from "./routes/collaboration-rules.routes.js";
 import { NotificationService } from "./services/notification.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
 import { TelegramService, type TelegramSender } from "./services/telegram.service.js";
@@ -38,6 +40,8 @@ import { resolveUserAccessState } from "./identity/user-access-state.js";
 import { TrustedTaskActorService } from "./services/task-actor.service.js";
 import { TaskAuthorizationService } from "./services/task-authorization.service.js";
 import { TaskService } from "./services/task.service.js";
+import { DivisionCollaborationService } from "./services/division-collaboration.service.js";
+import { CollaborationRuleManagementService } from "./services/collaboration-rule-management.service.js";
 import {
   TelegramRegistrationService,
   type TelegramRegistrationWriter,
@@ -93,10 +97,23 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const systemAuthorityService = client ? new SystemAuthorityService(
     new SupabaseUsersRepository(client), new SupabaseSystemAuthorityRepository(client),
   ) : undefined;
+  const taskUsers = client ? new SupabaseTaskUsersRepository(client) : undefined;
+  const collaborationRepository = client ? new SupabaseDivisionCollaborationRepository(client) : undefined;
+  const collaborationManagementService = client && userManagementService && taskUsers && collaborationRepository
+    ? new CollaborationRuleManagementService(
+        collaborationRepository,
+        new SupabaseDivisionsRepository(client),
+        taskUsers,
+        userManagementService,
+        new SupabaseSystemAuthorityRepository(client),
+        new SupabaseAuditRepository(client),
+      )
+    : undefined;
   const itConsole = client && userManagementService ? new TelegramItConsoleService(
     new SupabaseUserChannelsRepository(client),
     new SupabaseSystemAuthorityRepository(client),
     userManagementService,
+    collaborationManagementService,
   ) : undefined;
   const bot = new TelegramBot(
     options.config.telegramBotToken,
@@ -151,11 +168,16 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     service: systemAuthorityService,
     adminApiKey: options.config.adminApiKey,
   });
-  if (client) {
-    const taskUsers = new SupabaseTaskUsersRepository(client);
+  if (collaborationManagementService) await app.register(collaborationRulesRoutes, {
+    prefix: "/api/admin/collaboration-rules",
+    service: collaborationManagementService,
+    adminApiKey: options.config.adminApiKey,
+  });
+  if (client && taskUsers && collaborationRepository) {
     const taskService = new TaskService(
       new SupabaseTasksRepository(client), taskUsers, new SupabaseTaskActivitiesRepository(client),
       new SupabaseTaskRelationshipsRepository(client), new SupabaseAuditRepository(client), new TaskAuthorizationService(),
+      undefined, new DivisionCollaborationService(collaborationRepository),
     );
     await app.register(tasksRoutes, {
       prefix: "/api/tasks",

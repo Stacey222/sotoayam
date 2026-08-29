@@ -14,6 +14,7 @@
     "check:identity-schema": "tsx scripts/check-identity-schema.ts",
     "check:user-management": "tsx scripts/check-user-management.ts",
     "check:task-schema": "tsx scripts/check-task-schema.ts",
+    "check:collaboration-schema": "tsx scripts/check-collaboration-schema.ts",
     "check:secrets": "tsx scripts/check-secrets.ts",
     "check:reconciliation": "tsx scripts/reconcile-legacy.ts",
     "check:migration-baseline": "tsx scripts/check-migration-baseline.ts",

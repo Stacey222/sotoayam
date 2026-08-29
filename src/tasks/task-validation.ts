@@ -35,11 +35,12 @@ function evidence(value: unknown): EvidenceInput | null | undefined {
 }
 
 export function parseCreateTask(bodyValue: unknown): CreateTaskInput {
-  const body = object(bodyValue); unknownField(body, ["title", "description", "priority", "deadline", "assigned_to"]);
+  const body = object(bodyValue); unknownField(body, ["title", "description", "priority", "deadline", "assigned_to", "owner_division_id"]);
   if (typeof body.title !== "string") throw new AppError(400, "VALIDATION_ERROR", "Task title is required");
   if (body.priority !== undefined && (typeof body.priority !== "string" || !TASK_PRIORITIES.includes(body.priority as never))) throw new AppError(400, "VALIDATION_ERROR", "Invalid task priority");
   return { title: body.title, description: optionalString(body.description, "description"), priority: body.priority as TaskPriority | undefined,
-    deadline: optionalString(body.deadline, "deadline"), assignedToUserId: optionalId(body.assigned_to, "assigned_to") };
+    deadline: optionalString(body.deadline, "deadline"), assignedToUserId: optionalId(body.assigned_to, "assigned_to"),
+    ownerDivisionId: optionalId(body.owner_division_id, "owner_division_id") ?? undefined };
 }
 
 export function parseUpdateTask(bodyValue: unknown): UpdateTaskInput {

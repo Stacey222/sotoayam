@@ -12,7 +12,10 @@ export interface NewTaskActivity {
   evidence_reference: string | null;
 }
 
-export interface TaskActivitiesRepository { append(input: NewTaskActivity): Promise<TaskActivity> }
+export interface TaskActivitiesRepository {
+  append(input: NewTaskActivity): Promise<TaskActivity>;
+  findForTask(taskId: number): Promise<TaskActivity[]>;
+}
 
 export class SupabaseTaskActivitiesRepository implements TaskActivitiesRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -20,5 +23,10 @@ export class SupabaseTaskActivitiesRepository implements TaskActivitiesRepositor
     const { data, error } = await this.client.from("task_activities").insert(input).select("*").single();
     if (error) throw governanceDatabaseError("Unable to append task activity", error);
     return data as TaskActivity;
+  }
+  async findForTask(taskId: number): Promise<TaskActivity[]> {
+    const { data, error } = await this.client.from("task_activities").select("*").eq("task_id", taskId).order("created_at", { ascending: true });
+    if (error) throw governanceDatabaseError("Unable to load task activities", error);
+    return (data ?? []) as TaskActivity[];
   }
 }

@@ -43,6 +43,7 @@ class MemoryUsers implements TaskUsersRepository {
 class MemoryActivities implements TaskActivitiesRepository {
   rows: TaskActivity[] = [];
   async append(input: NewTaskActivity) { const row = { ...input, id: this.rows.length + 1, created_at: fixedNow.toISOString() }; this.rows.push(row); return row; }
+  async findForTask(taskId: number) { return this.rows.filter((row) => row.task_id === taskId); }
 }
 class MemoryRelationships implements TaskRelationshipsRepository {
   rows: TaskRelationship[] = [];
@@ -76,11 +77,11 @@ describe("Slice 3 Task Core acceptance", () => {
   it("16. never marks completed task overdue", () => { expect(isTaskOverdue(task({ deadline: "2026-08-28T00:00:00Z", status: "COMPLETED", completed_at: fixedNow.toISOString() }), fixedNow)).toBe(false); });
   it("17. never marks cancelled task overdue", () => { expect(isTaskOverdue(task({ deadline: "2026-08-28T00:00:00Z", status: "CANCELLED", cancelled_at: fixedNow.toISOString() }), fixedNow)).toBe(false); });
   it("18. lets STAFF view an assigned task", async () => { tasks.rows = [task()]; expect((await service.get(staff(), 1)).id).toBe(1); });
-  it("19. denies STAFF an unrelated task", async () => { tasks.rows = [task({ assigned_to_user_id: 2 })]; await expect(service.get(staff(), 1)).rejects.toMatchObject({ code: "TASK_FORBIDDEN" }); });
+  it("19. denies STAFF an unrelated task", async () => { tasks.rows = [task({ created_by_user_id: 99, assigned_to_user_id: 2 })]; await expect(service.get(staff(), 1)).rejects.toMatchObject({ code: "TASK_FORBIDDEN" }); });
   it("20. lets STAFF update an assigned task", async () => { tasks.rows = [task()]; expect((await service.update(staff(), 1, { priority: "HIGH" })).priority).toBe("HIGH"); });
   it("21. denies STAFF update of unrelated task", async () => { tasks.rows = [task({ assigned_to_user_id: 2 })]; await expect(service.update(staff(), 1, { priority: "HIGH" })).rejects.toMatchObject({ code: "TASK_FORBIDDEN" }); });
   it("22. lets ADMIN view own-Divisi task", async () => { tasks.rows = [task({ assigned_to_user_id: 2 })]; expect((await service.get(admin(), 1)).id).toBe(1); });
-  it("23. denies ADMIN automatic other-Divisi visibility", async () => { tasks.rows = [task({ owner_division_id: 20, assigned_to_user_id: 2 })]; await expect(service.get(admin(), 1)).rejects.toMatchObject({ code: "TASK_FORBIDDEN" }); });
+  it("23. denies ADMIN automatic unrelated-Divisi visibility", async () => { tasks.rows = [task({ created_by_user_id: 99, requesting_division_id: 30, owner_division_id: 20, assigned_to_user_id: 2 })]; await expect(service.get(admin(), 1)).rejects.toMatchObject({ code: "TASK_FORBIDDEN" }); });
   it("24. does not grant OWNER task modification", async () => { tasks.rows = [task({ assigned_to_user_id: 9 })]; const owner = staff({ id: 9, roleCode: "OWNER", permissions: perms("report.view_cross_division") }); await expect(service.update(owner, 1, { priority: "HIGH" })).rejects.toMatchObject({ code: "TASK_FORBIDDEN" }); });
   it("25. does not let SYSTEM_ADMIN bypass business permissions", async () => { tasks.rows = [task({ assigned_to_user_id: 9 })]; const systemAdmin = staff({ id: 9, permissions: perms() }); await expect(service.update(systemAdmin, 1, { priority: "HIGH" })).rejects.toMatchObject({ code: "TASK_FORBIDDEN" }); });
   it("26. adds SHARED activity", async () => { tasks.rows = [task()]; expect((await service.addActivity(staff(), 1, { activityType: "COMMENT", note: "Shared" })).visibility).toBe("SHARED"); });

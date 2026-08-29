@@ -1,0 +1,41 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { loadConfig } from "../src/config/env.js";
+import { createSupabaseClient } from "../src/db/supabase.js";
+
+const migrationPath = path.resolve(process.cwd(), "supabase/migrations/202608290005_create_division_collaboration_rules.sql");
+const sql = await readFile(migrationPath, "utf8");
+const checks: Record<string, boolean> = {
+  TABLE: sql.includes("create table public.division_collaboration_rules"),
+  DIRECTIONAL: sql.includes("source_division_id") && sql.includes("target_division_id"),
+  SOURCE_TARGET_DIFFER: sql.includes("source_division_id <> target_division_id"),
+  ACTIVE_UNIQUE: sql.includes("division_collaboration_rules_active_unique") && sql.includes("where active"),
+  RLS: sql.includes("alter table public.division_collaboration_rules enable row level security"),
+  NO_PUBLIC_POLICIES: !/create\s+policy/i.test(sql),
+  DEFAULT_DENY: sql.includes("Missing active relation means denied"),
+  IDEMPOTENT_SEED: /on conflict[\s\S]*do nothing/i.test(sql),
+  CONFIRMED_SEED_ONLY: (sql.match(/source\.code\s*=\s*'ONPAGE_B2C'/g) ?? []).length === 1
+    && (sql.match(/target\.code\s*=\s*'CONTENT_CREATOR'/g) ?? []).length === 1,
+  NON_DESTRUCTIVE: !/\b(?:drop\s+table|truncate|delete\s+from)\b/i.test(sql),
+};
+
+const client = createSupabaseClient(loadConfig());
+const { data, error } = await client.from("division_collaboration_rules")
+  .select("allowed,requires_approval,active,source_division:divisions!division_collaboration_rules_source_division_id_fkey(code),target_division:divisions!division_collaboration_rules_target_division_id_fkey(code)");
+const pending = error?.code === "PGRST205";
+const rows = (data ?? []) as unknown as Array<{ allowed: boolean; requires_approval: boolean; active: boolean; source_division: { code: string }; target_division: { code: string } }>;
+if (!pending) {
+  checks.LIVE_SCHEMA = !error;
+  checks.LIVE_CONFIRMED_SEED = rows.length === 1 && rows[0]?.source_division.code === "ONPAGE_B2C"
+    && rows[0]?.target_division.code === "CONTENT_CREATOR" && rows[0].allowed && !rows[0].requires_approval && rows[0].active;
+  checks.NO_SPECULATIVE_RULES = rows.length === 1;
+}
+
+console.log("Gwens Division Collaboration Schema\n");
+for (const [name, passed] of Object.entries(checks)) console.log(`${name} = ${passed ? "PASS" : "FAIL"}`);
+console.log(`LIVE_STATE = ${pending ? "PENDING_MIGRATION" : error ? "FAIL" : "PASS"}`);
+console.log(`MIGRATION_SHA256 = ${createHash("sha256").update(sql).digest("hex")}`);
+const passed = Object.values(checks).every(Boolean) && (pending || !error);
+console.log(`\nRESULT = ${passed ? "PASS" : "FAIL"}`);
+if (!passed) process.exitCode = 1;

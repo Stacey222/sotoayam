@@ -4,6 +4,7 @@ import type { UserChannelsRepository } from "../repositories/user-channels.repos
 import type { UserManagementService } from "../services/user-management.service.js";
 import type { TelegramInlineButton } from "../services/telegram.service.js";
 import type { ManagedUser, UserManagementStatus } from "../user-management/types.js";
+import type { CollaborationRuleReader } from "../services/collaboration-rule-management.service.js";
 
 export interface TelegramConsoleResponse {
   text: string;
@@ -28,6 +29,7 @@ export class TelegramItConsoleService implements TelegramItConsole {
     private readonly channels: UserChannelsRepository,
     private readonly authorities: SystemAuthorityRepository,
     private readonly users: UserManagementService,
+    private readonly collaborationRules?: CollaborationRuleReader,
   ) {}
 
   async open(externalTelegramId: number): Promise<TelegramConsoleResponse> {
@@ -41,6 +43,8 @@ export class TelegramItConsoleService implements TelegramItConsole {
     if (data === "ac:m") return this.mainMenu();
     if (data === "ac:u") return this.userMenu();
     if (data === "ac:s") return this.systemStatus();
+    if (data === "ac:g") return this.collaborationMenu();
+    if (data === "ac:gv") return this.collaborationList();
 
     let match = /^ac:l:(p|a|i):(\d+)$/.exec(data);
     if (match) return this.userList(this.status(match[1]!), Number(match[2]));
@@ -70,7 +74,10 @@ export class TelegramItConsoleService implements TelegramItConsole {
   }
 
   private mainMenu(): TelegramConsoleResponse {
-    return { text: "Gwens IT Console", inlineKeyboard: [[button("User Management", "ac:u"), button("System Status", "ac:s")]] };
+    return { text: "Gwens IT Console", inlineKeyboard: [
+      [button("User Management", "ac:u"), button("System Status", "ac:s")],
+      [button("Collaboration Rules", "ac:g")],
+    ] };
   }
 
   private userMenu(): TelegramConsoleResponse {
@@ -86,6 +93,18 @@ export class TelegramItConsoleService implements TelegramItConsole {
 
   private systemStatus(): TelegramConsoleResponse {
     return { text: "System Status\n\nRuntime: Aktif\nUser Management: Tersedia", inlineKeyboard: [[button("Back", "ac:m")]] };
+  }
+
+  private collaborationMenu(): TelegramConsoleResponse {
+    return { text: "Collaboration Rules", inlineKeyboard: [[button("View Rules", "ac:gv")], [button("Back", "ac:m")]] };
+  }
+
+  private async collaborationList(): Promise<TelegramConsoleResponse> {
+    if (!this.collaborationRules) return unavailable();
+    const rules = await this.collaborationRules.list();
+    const text = rules.length === 0 ? "Collaboration Rules\n\nTidak ada rule."
+      : `Collaboration Rules\n\n${rules.map((rule) => `${rule.source_division.code} → ${rule.target_division.code}\nAllowed: ${rule.allowed ? "Yes" : "No"}\nApproval: ${rule.requires_approval ? "Required" : "No"}\nStatus: ${rule.active ? "Active" : "Inactive"}`).join("\n\n")}`;
+    return { text, inlineKeyboard: [[button("Back", "ac:g")]] };
   }
 
   private async userList(status: UserManagementStatus, requestedPage: number): Promise<TelegramConsoleResponse> {

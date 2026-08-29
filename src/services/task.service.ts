@@ -10,6 +10,7 @@ import type {
   TaskReadModel, TaskRelationshipType, TransitionTaskInput, UpdateTaskInput,
 } from "../tasks/types.js";
 import { TaskAuthorizationService } from "./task-authorization.service.js";
+import type { CollaborationPolicyResolver } from "./division-collaboration.service.js";
 
 export class TaskService {
   constructor(
@@ -20,13 +21,19 @@ export class TaskService {
     private readonly audit: AuditRepository,
     private readonly authorization: TaskAuthorizationService,
     private readonly now: () => Date = () => new Date(),
+    private readonly collaboration?: CollaborationPolicyResolver,
   ) {}
 
   async createManual(actor: TaskActor, input: CreateTaskInput): Promise<TaskReadModel> {
     this.authorization.assertCanCreate(actor);
     if (actor.divisionId === null) throw new AppError(403, "TASK_FORBIDDEN", "Creator requires a home division");
     const title = this.title(input.title);
-    const assignedTo = await this.validateAssignee(input.assignedToUserId ?? null, actor.divisionId);
+    const ownerDivisionId = input.ownerDivisionId ?? actor.divisionId;
+    if (ownerDivisionId !== actor.divisionId) {
+      if (!this.collaboration) throw new AppError(409, "TASK_CROSS_DIVISION_NOT_ALLOWED", "Cross-Divisi task collaboration is not allowed");
+      await this.collaboration.assertTaskCollaborationAllowed(actor.divisionId, ownerDivisionId, "ALL");
+    }
+    const assignedTo = await this.validateAssignee(input.assignedToUserId ?? null, ownerDivisionId);
     const task = await this.tasks.create({
       title,
       description: this.description(input.description),
@@ -36,7 +43,7 @@ export class TaskService {
       source_reference: null,
       created_by_user_id: actor.id,
       requesting_division_id: actor.divisionId,
-      owner_division_id: actor.divisionId,
+      owner_division_id: ownerDivisionId,
       assigned_to_user_id: assignedTo?.id ?? null,
       deadline: this.deadline(input.deadline),
       started_at: null,
@@ -45,7 +52,8 @@ export class TaskService {
     });
     await this.audit.append({
       actor_type: "USER", actor_user_id: actor.id, action: "TASK_CREATED", object_type: "TASK",
-      object_id: String(task.id), after_state: { status: task.status, priority: task.priority, owner_division_id: task.owner_division_id }, source: "task_api",
+      object_id: String(task.id), after_state: { status: task.status, priority: task.priority,
+        requesting_division_id: task.requesting_division_id, owner_division_id: task.owner_division_id }, source: "task_api",
     });
     if (assignedTo) await this.audit.append({
       actor_type: "USER", actor_user_id: actor.id, action: "TASK_ASSIGNED", object_type: "TASK",
@@ -57,7 +65,9 @@ export class TaskService {
   async get(actor: TaskActor, id: number): Promise<TaskReadModel> {
     const task = await this.required(id);
     this.authorization.assertCanView(actor, task);
-    return this.read(task);
+    const activities = await this.activities.findForTask(task.id);
+    const visible = actor.divisionId === task.owner_division_id ? activities : activities.filter((item) => item.visibility === "SHARED");
+    return this.read(task, visible);
   }
 
   async list(actor: TaskActor, filters: TaskFilters): Promise<TaskReadModel[]> {
@@ -202,5 +212,7 @@ export class TaskService {
     return this.activities.append({ task_id: taskId, actor_user_id: actor.id, activity_type: "EVIDENCE",
       note: note?.trim() || null, visibility: "SHARED", evidence_type: evidence.type, evidence_reference: evidence.reference });
   }
-  private read(task: Task): TaskReadModel { return { ...task, is_overdue: isTaskOverdue(task, this.now()) }; }
+  private read(task: Task, activities?: TaskReadModel["activities"]): TaskReadModel {
+    return { ...task, is_overdue: isTaskOverdue(task, this.now()), ...(activities ? { activities } : {}) };
+  }
 }

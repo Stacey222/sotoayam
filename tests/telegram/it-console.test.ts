@@ -85,7 +85,7 @@ function harness(options: { actor?: Partial<ManagedUser>; authority?: boolean; c
   const roleRepo = new Catalog(roles) as RolesRepository;
   const service = new UserManagementService(repository, divisionRepo, roleRepo);
   return { console: new TelegramItConsoleService(channels, authorities, service), repository, channels, authorities,
-    divisionRepo, roleRepo };
+    divisionRepo, roleRepo, service };
 }
 
 describe("Slice 3.1 Telegram IT console", () => {
@@ -256,5 +256,25 @@ describe("Slice 4 Telegram single-message navigation gate", () => {
   it("16. normal callback navigation never stacks messages", async () => {
     const test = navigationBot(); await callback(test.bot, "ac:u"); await callback(test.bot, "ac:l:p:0"); await callback(test.bot, "ac:m");
     expect(test.sender.editMessage).toHaveBeenCalledTimes(3); expect(test.sender.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("17. Collaboration Rules menu edits the existing message", async () => {
+    const test = navigationBot(); await callback(test.bot, "ac:g");
+    expect(test.sender.editMessage).toHaveBeenCalledWith(7001, 77, "Collaboration Rules", expect.anything());
+    expect(test.sender.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("18. collaboration listing is safe and uses the same message", async () => {
+    const state = harness();
+    const collaboration = { list: vi.fn().mockResolvedValue([{
+      id: 1, source_division_id: 1, target_division_id: 2, task_scope: "ALL", allowed: true,
+      requires_approval: false, active: true, created_at: now, updated_at: now,
+      source_division: { ...divisions[0], code: "ONPAGE_B2C" },
+      target_division: { ...divisions[1], code: "CONTENT_CREATOR" },
+    }]) };
+    const consoleService = new TelegramItConsoleService(state.channels, state.authorities, state.service, collaboration);
+    const test = navigationBot(consoleService); await callback(test.bot, "ac:gv");
+    expect(test.sender.editMessage).toHaveBeenCalledWith(7001, 77, expect.stringContaining("ONPAGE_B2C → CONTENT_CREATOR"), expect.anything());
+    expect(test.sender.sendMessage).not.toHaveBeenCalled();
   });
 });

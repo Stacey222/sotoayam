@@ -7,7 +7,7 @@ Repository migration files:
 1. `202608260001_create_telegram_users.sql`
 2. `202608270001_add_missing_telegram_users_division.sql`
 3. `202608290001_create_governance_foundation.sql` (applied live on 2026-08-29)
-4. `202608290002_create_normalized_identity.sql` (local Slice 2; pending deployment)
+4. `202608290002_create_normalized_identity.sql` (applied live on 2026-08-29)
 
 Safe diagnostics prove the application-required `telegram_users` table/columns and reversible server write currently work. On 2026-08-29, authenticated Supabase CLI tooling linked to the project matching the application's configured hostname and authoritatively read the remote migration registry. The registry initially contained none of the three local versions even though the legacy schema existed live.
 
@@ -20,8 +20,11 @@ Current authoritative registry mapping:
 | `202608260001` | present | present | `MATCH` |
 | `202608270001` | present | present | `MATCH` |
 | `202608290001` | present | present | `MATCH` |
+| `202608290002` | present | present | `MATCH` |
 
 Catalog evidence proved the two historical migrations were effectively applied: columns, types, defaults, nullability, identity, constraints, indexes, trigger/function, RLS, and table comment matched. The official CLI repair workflow marked only those two versions applied, then linked `db push` applied only `202608290001`. A post-deployment registry read verified all three versions match. `npm run check:governance-schema` validates the local migration contract; live state is verified separately through authorized tooling.
+
+Slice 2 dry-run found four legacy onboarding users, zero invalid mappings, and zero duplicate Telegram identities. Linked `db push` applied only `202608290002`; post-backfill reconciliation reported four matches and zero missing, mismatch, or duplicate records. `telegram_users` remains the legacy read authority while Telegram registration uses the atomic normalized compatibility write.
 
 ## Forward-only rules
 

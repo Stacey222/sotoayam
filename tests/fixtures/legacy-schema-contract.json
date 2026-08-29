@@ -1,0 +1,39 @@
+{
+  "contract": "GWENS_LEGACY_SCHEMA_V1",
+  "table": "telegram_users",
+  "evidence_levels": {
+    "migration_defined": "Declared by repository SQL migrations",
+    "live_verified": "Verified through safe Supabase REST projection without returning rows",
+    "application_required": "Read or written by the current application"
+  },
+  "column_evidence_note": "live_verified on a column proves safe projection availability only; type, nullability, and default remain migration-defined unless catalog inspection is added later",
+  "columns": [
+    { "name": "id", "type": "bigint identity", "nullable": false, "default": "identity", "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "telegram_chat_id", "type": "bigint", "nullable": false, "default": null, "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "telegram_username", "type": "text", "nullable": true, "default": null, "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "telegram_first_name", "type": "text", "nullable": true, "default": null, "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "name", "type": "text", "nullable": true, "default": null, "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "division", "type": "text", "nullable": false, "default": "UNASSIGNED", "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "role", "type": "text", "nullable": false, "default": "UNASSIGNED", "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "active", "type": "boolean", "nullable": false, "default": false, "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "stock_alert", "type": "boolean", "nullable": false, "default": false, "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "purchase_alert", "type": "boolean", "nullable": false, "default": false, "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "sales_alert", "type": "boolean", "nullable": false, "default": false, "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "marketing_alert", "type": "boolean", "nullable": false, "default": false, "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "content_alert", "type": "boolean", "nullable": false, "default": false, "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "owner_report", "type": "boolean", "nullable": false, "default": false, "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "system_error", "type": "boolean", "nullable": false, "default": false, "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "created_at", "type": "timestamptz", "nullable": false, "default": "now()", "evidence": ["migration_defined", "live_verified", "application_required"] },
+    { "name": "updated_at", "type": "timestamptz", "nullable": false, "default": "now()", "evidence": ["migration_defined", "live_verified", "application_required"] }
+  ],
+  "constraints": [
+    { "kind": "primary_key", "columns": ["id"], "migration_defined": true, "live_status": "NOT_VERIFIED", "application_required": true },
+    { "kind": "unique", "columns": ["telegram_chat_id"], "migration_defined": true, "live_status": "NOT_VERIFIED", "application_required": true }
+  ],
+  "indexes": [
+    { "name": "telegram_users_active_idx", "columns": ["active"], "migration_defined": true, "live_status": "NOT_VERIFIED" },
+    { "name": "telegram_users_division_idx", "columns": ["division"], "migration_defined": true, "live_status": "NOT_VERIFIED" }
+  ],
+  "rls": { "migration_defined": "ENABLED", "live_status": "NOT_VERIFIED" },
+  "trigger": { "name": "set_telegram_users_updated_at", "migration_defined": true, "live_status": "NOT_VERIFIED" }
+}

@@ -1,0 +1,27 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { loadConfig } from "../src/config/env.js";
+
+describe("Supabase server credential validation", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("rejects a publishable key used as the service-role credential", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_publishable_test-only");
+    vi.stubEnv("SUPABASE_SERVICE_KEY", "");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+
+    expect(() => loadConfig()).toThrow(
+      "Invalid server credential: SUPABASE_SERVICE_ROLE_KEY must be a service role or secret key",
+    );
+  });
+
+  it("accepts a Supabase secret key without exposing it", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+
+    expect(loadConfig().supabaseServiceRoleKey).toBe("sb_secret_test-only");
+  });
+});

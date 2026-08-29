@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gwens Automation Control</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">GWENS GROSIR</p>
+        <h1>Automation Control</h1>
+        <p class="subtitle">Kelola pengguna Telegram dan preferensi notifikasi.</p>
+      </div>
+      <button id="admin-key-button" class="secondary" type="button">Admin Key</button>
+    </header>
+
+    <main>
+      <section class="toolbar" aria-label="Filter pengguna">
+        <div class="filters" role="group">
+          <button class="filter active" data-status="all" type="button">All</button>
+          <button class="filter" data-status="pending" type="button">Pending</button>
+          <button class="filter" data-status="active" type="button">Active</button>
+          <button class="filter" data-status="inactive" type="button">Inactive</button>
+        </div>
+        <button id="refresh" class="secondary" type="button">Muat Ulang</button>
+      </section>
+
+      <p id="notice" class="notice" hidden></p>
+      <section class="table-card">
+        <table>
+          <thead><tr><th>Nama</th><th>Telegram</th><th>Divisi</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody id="user-rows"></tbody>
+        </table>
+        <div id="empty" class="empty" hidden>Belum ada pengguna pada filter ini.</div>
+      </section>
+    </main>
+
+    <dialog id="editor">
+      <form id="edit-form">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">EDIT USER</p><h2>Pengaturan Telegram</h2></div>
+          <button id="close-dialog" class="icon-button" type="button" aria-label="Tutup">×</button>
+        </div>
+        <input id="user-id" type="hidden" />
+        <label>Telegram User<input id="telegram-user" readonly /></label>
+        <label>Nama<input id="name" maxlength="100" required /></label>
+        <div class="form-grid">
+          <label>Divisi<select id="division" required></select></label>
+          <label>Role<select id="role" required></select></label>
+        </div>
+        <label class="switch-row"><input id="active" type="checkbox" /><span>Status Aktif</span></label>
+        <fieldset>
+          <legend>Jenis Notifikasi</legend>
+          <div id="preferences" class="checks"></div>
+        </fieldset>
+        <div class="actions"><button id="cancel" class="secondary" type="button">Batal</button><button type="submit">Simpan</button></div>
+      </form>
+    </dialog>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

@@ -14,6 +14,7 @@ import { SupabaseRolesRepository } from "./repositories/roles.repository.js";
 import { SupabaseSystemAuthorityRepository } from "./repositories/system-authority.repository.js";
 import { SupabaseUserManagementRepository } from "./repositories/user-management.repository.js";
 import { SupabaseUsersRepository } from "./repositories/users.repository.js";
+import { SupabaseUserAccessStateRepository } from "./repositories/user-access-state.repository.js";
 import { adminUserManagementRoutes } from "./routes/admin-user-management.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
@@ -24,6 +25,8 @@ import { RecipientResolverService } from "./services/recipient-resolver.service.
 import { TelegramService, type TelegramSender } from "./services/telegram.service.js";
 import { UserManagementService } from "./services/user-management.service.js";
 import { SystemAuthorityService } from "./services/system-authority.service.js";
+import { UserAccessStateService, type UserAccessStateResolver } from "./services/user-access-state.service.js";
+import { resolveUserAccessState } from "./identity/user-access-state.js";
 import {
   TelegramRegistrationService,
   type TelegramRegistrationWriter,
@@ -34,6 +37,7 @@ export interface BuildAppOptions {
   config: AppConfig;
   repository?: TelegramUsersRepository;
   registrationWriter?: TelegramRegistrationWriter;
+  accessStateResolver?: UserAccessStateResolver;
   telegramSender?: TelegramSender;
   logger?: boolean;
 }
@@ -51,9 +55,25 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     ?? (options.repository ? options.repository : new SupabaseNormalizedRegistrationRepository(client!));
   const registrationService = new TelegramRegistrationService(registrationWriter);
   const telegramSender = options.telegramSender ?? new TelegramService(options.config.telegramBotToken, app.log);
+  const accessStateResolver = options.accessStateResolver
+    ?? (client
+      ? new UserAccessStateService(new SupabaseUserAccessStateRepository(client))
+      : {
+          resolveByLegacyTelegramUserId: async (legacyUserId: number) => {
+            const legacyUser = await repository.findById(legacyUserId);
+            if (!legacyUser) throw new AppError(404, "NORMALIZED_USER_NOT_FOUND", "Injected user access state not found");
+            return resolveUserAccessState({
+              active: legacyUser.active,
+              divisionId: legacyUser.division === "UNASSIGNED" ? null : 1,
+              roleId: legacyUser.role === "UNASSIGNED" ? null : 1,
+              divisionCode: legacyUser.division === "UNASSIGNED" ? null : legacyUser.division,
+              roleCode: legacyUser.role === "UNASSIGNED" ? null : legacyUser.role.toUpperCase(),
+            });
+          },
+        });
   const resolver = new RecipientResolverService(repository);
   const notificationService = new NotificationService(resolver, telegramSender, app.log);
-  const bot = new TelegramBot(options.config.telegramBotToken, registrationService, telegramSender, app.log);
+  const bot = new TelegramBot(options.config.telegramBotToken, registrationService, accessStateResolver, telegramSender, app.log);
   const userManagementService = client ? new UserManagementService(
     new SupabaseUserManagementRepository(client),
     new SupabaseDivisionsRepository(client),

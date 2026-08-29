@@ -179,7 +179,11 @@ describe("Telegram behavior", () => {
     const configured = user({ division: "Management", role: "Owner", active: true, owner_report: true });
     const repository = new MemoryRepository([configured]);
     const sender = { sendMessage: vi.fn().mockResolvedValue(undefined) };
-    const bot = new TelegramBot("token", new TelegramRegistrationService(repository), sender, silentLogger);
+    const accessStateResolver = { resolveByLegacyTelegramUserId: vi.fn().mockResolvedValue({
+      status: "ACTIVE" as const, active: true, divisionId: 1, roleId: 1,
+      divisionCode: "MANAGEMENT", roleCode: "OWNER",
+    }) };
+    const bot = new TelegramBot("token", new TelegramRegistrationService(repository), accessStateResolver, sender, silentLogger);
     await bot.handleUpdate({ update_id: 1, message: { text: "/start", chat: { id: 1001 }, from: { username: "andi_baru", first_name: "Andi" } } });
     await bot.handleUpdate({ update_id: 2, message: { text: "/start", chat: { id: 1001 }, from: { username: "andi_baru", first_name: "Andi" } } });
     expect(repository.users).toHaveLength(1);
@@ -196,7 +200,8 @@ describe("Telegram behavior", () => {
       }),
     );
     const sender = { sendMessage: vi.fn().mockResolvedValue(undefined) };
-    const bot = new TelegramBot("token", new TelegramRegistrationService(repository), sender, silentLogger);
+    const accessStateResolver = { resolveByLegacyTelegramUserId: vi.fn() };
+    const bot = new TelegramBot("token", new TelegramRegistrationService(repository), accessStateResolver, sender, silentLogger);
 
     await bot.handleUpdate({
       update_id: 3,

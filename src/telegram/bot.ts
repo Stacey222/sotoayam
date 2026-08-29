@@ -2,6 +2,8 @@ import type { FastifyBaseLogger } from "fastify";
 import { DatabaseError } from "../errors.js";
 import type { TelegramRegistrationService } from "../services/telegram-registration.service.js";
 import type { TelegramSender } from "../services/telegram.service.js";
+import type { UserAccessStateResolver } from "../services/user-access-state.service.js";
+import type { TelegramUser } from "../types/index.js";
 
 interface TelegramUpdate {
   update_id: number;
@@ -38,6 +40,7 @@ export class TelegramBot {
   constructor(
     private readonly token: string,
     private readonly registrationService: TelegramRegistrationService,
+    private readonly accessStateResolver: UserAccessStateResolver,
     private readonly sender: TelegramSender,
     private readonly logger: Pick<FastifyBaseLogger, "info" | "warn" | "error">,
   ) {}
@@ -48,8 +51,9 @@ export class TelegramBot {
     this.logger.info({ updateId: update.update_id }, "Telegram /start received");
     const username = message.from?.username ?? message.chat.username ?? null;
     const firstName = message.from?.first_name ?? message.chat.first_name ?? null;
+    let registeredUser: TelegramUser;
     try {
-      await this.registrationService.register({
+      registeredUser = await this.registrationService.register({
         telegram_chat_id: message.chat.id,
         telegram_username: username,
         telegram_first_name: firstName,
@@ -88,18 +92,40 @@ export class TelegramBot {
       return;
     }
     this.logger.info({ updateId: update.update_id }, "Telegram registration succeeded");
-    const usernameLine = username ? `\nUsername: @${username}` : "";
-    await this.sender.sendMessage(
-      message.chat.id,
-      `Registrasi Telegram Gwens berhasil.\n\nNama: ${firstName ?? "-"}${usernameLine}\n\nStatus: Menunggu aktivasi Admin.\n\nSilakan hubungi Admin Gwens untuk menentukan Divisi dan Role Anda.`,
-    );
+    try {
+      const accessState = await this.accessStateResolver.resolveByLegacyTelegramUserId(registeredUser.id);
+      this.logger.info(
+        { updateId: update.update_id, accessStatus: accessState.status, division: accessState.divisionCode, role: accessState.roleCode },
+        "Telegram final normalized access state resolved",
+      );
+      const response = accessState.status === "ACTIVE"
+        ? `Akun Gwens aktif.\n\nDivisi: ${accessState.divisionCode}\nRole: ${accessState.roleCode}\nStatus: Aktif`
+        : "Registrasi Telegram Gwens berhasil.\n\nStatus: Menunggu aktivasi Admin.\n\nSilakan hubungi Admin Gwens untuk menentukan Divisi dan Role Anda.";
+      await this.sender.sendMessage(message.chat.id, response);
+    } catch (error) {
+      this.logger.error(
+        { errorType: error instanceof Error ? error.name : "UnknownError", updateId: update.update_id },
+        "Telegram final access state resolution or response failed",
+      );
+      try {
+        await this.sender.sendMessage(
+          message.chat.id,
+          "Status akun Gwens belum dapat dimuat. Silakan coba lagi beberapa saat atau hubungi Admin Gwens.",
+        );
+      } catch (sendError) {
+        this.logger.error(
+          { errorType: sendError instanceof Error ? sendError.name : "UnknownError", updateId: update.update_id },
+          "Telegram access state failure message could not be sent",
+        );
+      }
+    }
   }
 
   async start(): Promise<void> {
     this.stopped = false;
     this.logger.info("Telegram bot initialization started");
-    const me = await this.callTelegram<{ username?: string }>("getMe");
-    this.logger.info({ botUsername: me.username ?? null }, "Telegram getMe succeeded");
+    await this.callTelegram<{ username?: string }>("getMe");
+    this.logger.info("Telegram getMe succeeded");
     this.logger.info("Telegram polling started");
     while (!this.stopped) {
       this.controller = new AbortController();

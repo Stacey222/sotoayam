@@ -18,8 +18,8 @@ export class TelegramService implements TelegramSender {
       body: JSON.stringify({ chat_id: chatId, text: message }),
     });
     if (!response.ok) {
-      throw new AppError(502, "TELEGRAM_SEND_FAILED", `Telegram rejected message for chat ${chatId}`);
+      throw new AppError(502, "TELEGRAM_SEND_FAILED", "Telegram rejected sendMessage request");
     }
-    this.logger?.info({ telegramChatId: chatId }, "Telegram sendMessage succeeded");
+    this.logger?.info("Telegram sendMessage succeeded");
   }
 }

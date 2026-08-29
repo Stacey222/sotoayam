@@ -117,7 +117,10 @@ describe("LEGACY COMPATIBILITY CONTRACT — Telegram registration", () => {
   it("registers a new /start user and sends the established success response", async () => {
     const repository = new ContractRepository();
     const sender = { sendMessage: vi.fn().mockResolvedValue(undefined) };
-    const bot = new TelegramBot("contract-token", new TelegramRegistrationService(repository), sender, logger());
+    const accessStateResolver = { resolveByLegacyTelegramUserId: vi.fn().mockResolvedValue({
+      status: "PENDING" as const, active: false, divisionId: null, roleId: null, divisionCode: null, roleCode: null,
+    }) };
+    const bot = new TelegramBot("contract-token", new TelegramRegistrationService(repository), accessStateResolver, sender, logger());
 
     await bot.handleUpdate({
       update_id: 10,
@@ -151,7 +154,10 @@ describe("LEGACY COMPATIBILITY CONTRACT — Telegram registration", () => {
     });
     const repository = new ContractRepository([existing]);
     const sender = { sendMessage: vi.fn().mockResolvedValue(undefined) };
-    const bot = new TelegramBot("contract-token", new TelegramRegistrationService(repository), sender, logger());
+    const accessStateResolver = { resolveByLegacyTelegramUserId: vi.fn().mockResolvedValue({
+      status: "ACTIVE" as const, active: true, divisionId: 1, roleId: 1, divisionCode: "MANAGEMENT", roleCode: "OWNER",
+    }) };
+    const bot = new TelegramBot("contract-token", new TelegramRegistrationService(repository), accessStateResolver, sender, logger());
     const update = {
       message: { text: "/start", chat: { id: 2002 }, from: { username: "renamed", first_name: "Owner" } },
     };
@@ -185,7 +191,8 @@ describe("LEGACY COMPATIBILITY CONTRACT — Telegram registration", () => {
     );
     const sender = { sendMessage: vi.fn().mockResolvedValue(undefined) };
     const testLogger = logger();
-    const bot = new TelegramBot(botToken, new TelegramRegistrationService(repository), sender, testLogger);
+    const accessStateResolver = { resolveByLegacyTelegramUserId: vi.fn() };
+    const bot = new TelegramBot(botToken, new TelegramRegistrationService(repository), accessStateResolver, sender, testLogger);
 
     await bot.handleUpdate({
       update_id: 13,

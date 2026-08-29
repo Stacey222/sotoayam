@@ -6,9 +6,9 @@ Repository migration files:
 
 1. `202608260001_create_telegram_users.sql`
 2. `202608270001_add_missing_telegram_users_division.sql`
-3. `202608290001_create_governance_foundation.sql` (local Slice 1 only; not applied live by this task)
+3. `202608290001_create_governance_foundation.sql` (applied live on 2026-08-29)
 
-Safe diagnostics prove the application-required `telegram_users` table/columns and reversible server write currently work. On 2026-08-29, authenticated Supabase CLI tooling linked to the project matching the application's configured hostname and authoritatively read the remote migration registry. The registry contained none of the three local versions even though the legacy schema exists live.
+Safe diagnostics prove the application-required `telegram_users` table/columns and reversible server write currently work. On 2026-08-29, authenticated Supabase CLI tooling linked to the project matching the application's configured hostname and authoritatively read the remote migration registry. The registry initially contained none of the three local versions even though the legacy schema existed live.
 
 This verification recorded version presence only; it did not read business rows or expose credentials.
 
@@ -16,11 +16,11 @@ Current authoritative registry mapping:
 
 | Version | Local | Remote registry | Reconciliation status |
 | --- | --- | --- | --- |
-| `202608260001` | present | absent | `DIVERGED` |
-| `202608270001` | present | absent | `DIVERGED` |
-| `202608290001` | present | absent | `PENDING`, blocked by historical divergence |
+| `202608260001` | present | present | `MATCH` |
+| `202608270001` | present | present | `MATCH` |
+| `202608290001` | present | present | `MATCH` |
 
-Live Slice 1 deployment is blocked. Do not run `db push` or migration repair until the two historical files are reviewed against the live schema and an explicit reconciliation plan is approved. `npm run check:governance-schema` validates the local migration contract only; it does not claim a live schema change.
+Catalog evidence proved the two historical migrations were effectively applied: columns, types, defaults, nullability, identity, constraints, indexes, trigger/function, RLS, and table comment matched. The official CLI repair workflow marked only those two versions applied, then linked `db push` applied only `202608290001`. A post-deployment registry read verified all three versions match. `npm run check:governance-schema` validates the local migration contract; live state is verified separately through authorized tooling.
 
 ## Forward-only rules
 

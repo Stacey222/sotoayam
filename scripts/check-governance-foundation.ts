@@ -63,7 +63,8 @@ async function main(): Promise<void> {
 
   for (const [name, passed] of Object.entries(checks)) console.log(`${name} = ${passed ? "PASS" : "FAIL"}`);
   const passed = Object.values(checks).every(Boolean);
-  console.log("LIVE_MIGRATION_STATUS = NOT_APPLIED_BY_THIS_TASK");
+  console.log("VALIDATION_SCOPE = LOCAL_MIGRATION_CONTRACT");
+  console.log("LIVE_MIGRATION_STATUS = VERIFY_WITH_AUTHORIZED_TOOLING");
   console.log(`\nRESULT = ${passed ? "PASS" : "FAIL"}`);
   if (!passed) process.exitCode = 1;
 }

@@ -8,19 +8,19 @@ Repository migration files:
 2. `202608270001_add_missing_telegram_users_division.sql`
 3. `202608290001_create_governance_foundation.sql` (local Slice 1 only; not applied live by this task)
 
-Safe diagnostics prove the application-required table/columns and reversible server write currently work. They do not prove entries in Supabase's migration-history catalog. The repository has no linked Supabase CLI configuration or checked-in deployment record, so both files are **assumed applied based on resulting schema**, not independently registry-verified.
+Safe diagnostics prove the application-required `telegram_users` table/columns and reversible server write currently work. On 2026-08-29, authenticated Supabase CLI tooling linked to the project matching the application's configured hostname and authoritatively read the remote migration registry. The registry contained none of the three local versions even though the legacy schema exists live.
 
-Before Slice 1 deployment, an authorized operator should use Supabase CLI/management tooling to read migration history and record migration version/checksum—without exposing credentials or business rows.
+This verification recorded version presence only; it did not read business rows or expose credentials.
 
 Current authoritative registry mapping:
 
-| Version | Live status |
-| --- | --- |
-| `202608260001` | `UNKNOWN` |
-| `202608270001` | `UNKNOWN` |
-| `202608290001` | `NOT_APPLIED_BY_THIS_TASK` |
+| Version | Local | Remote registry | Reconciliation status |
+| --- | --- | --- | --- |
+| `202608260001` | present | absent | `DIVERGED` |
+| `202608270001` | present | absent | `DIVERGED` |
+| `202608290001` | present | absent | `PENDING`, blocked by historical divergence |
 
-Until an authorized read of `supabase_migrations.schema_migrations` succeeds, live Slice 1 deployment is blocked. `npm run check:governance-schema` validates the local migration contract only; it does not claim a live schema change.
+Live Slice 1 deployment is blocked. Do not run `db push` or migration repair until the two historical files are reviewed against the live schema and an explicit reconciliation plan is approved. `npm run check:governance-schema` validates the local migration contract only; it does not claim a live schema change.
 
 ## Forward-only rules
 

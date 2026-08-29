@@ -20,6 +20,7 @@ export interface SystemAuthorityAssignment {
   revoked_at: string | null;
   revoked_by_user_id: number | null;
   reason: string | null;
+  revocation_reason?: string | null;
   created_at: string;
   updated_at: string;
 }

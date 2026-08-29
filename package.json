@@ -12,6 +12,7 @@
     "check:schema": "tsx scripts/check-schema.ts",
     "check:governance-schema": "tsx scripts/check-governance-foundation.ts",
     "check:identity-schema": "tsx scripts/check-identity-schema.ts",
+    "check:user-management": "tsx scripts/check-user-management.ts",
     "check:secrets": "tsx scripts/check-secrets.ts",
     "check:reconciliation": "tsx scripts/reconcile-legacy.ts",
     "check:migration-baseline": "tsx scripts/check-migration-baseline.ts",

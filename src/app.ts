@@ -9,12 +9,21 @@ import {
   type TelegramUsersRepository,
 } from "./repositories/telegram-users.repository.js";
 import { SupabaseNormalizedRegistrationRepository } from "./repositories/normalized-registration.repository.js";
+import { SupabaseDivisionsRepository } from "./repositories/divisions.repository.js";
+import { SupabaseRolesRepository } from "./repositories/roles.repository.js";
+import { SupabaseSystemAuthorityRepository } from "./repositories/system-authority.repository.js";
+import { SupabaseUserManagementRepository } from "./repositories/user-management.repository.js";
+import { SupabaseUsersRepository } from "./repositories/users.repository.js";
+import { adminUserManagementRoutes } from "./routes/admin-user-management.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
 import { usersRoutes } from "./routes/users.routes.js";
+import { systemAuthorityRoutes } from "./routes/system-authority.routes.js";
 import { NotificationService } from "./services/notification.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
 import { TelegramService, type TelegramSender } from "./services/telegram.service.js";
+import { UserManagementService } from "./services/user-management.service.js";
+import { SystemAuthorityService } from "./services/system-authority.service.js";
 import {
   TelegramRegistrationService,
   type TelegramRegistrationWriter,
@@ -45,6 +54,14 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const resolver = new RecipientResolverService(repository);
   const notificationService = new NotificationService(resolver, telegramSender, app.log);
   const bot = new TelegramBot(options.config.telegramBotToken, registrationService, telegramSender, app.log);
+  const userManagementService = client ? new UserManagementService(
+    new SupabaseUserManagementRepository(client),
+    new SupabaseDivisionsRepository(client),
+    new SupabaseRolesRepository(client),
+  ) : undefined;
+  const systemAuthorityService = client ? new SystemAuthorityService(
+    new SupabaseUsersRepository(client), new SupabaseSystemAuthorityRepository(client),
+  ) : undefined;
 
   app.setErrorHandler((error, request, reply) => {
     const appError = error instanceof AppError ? error : null;
@@ -77,6 +94,17 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   await app.register(usersRoutes, {
     prefix: "/api/users",
     repository,
+    adminApiKey: options.config.adminApiKey,
+    accessService: userManagementService,
+  });
+  if (userManagementService) await app.register(adminUserManagementRoutes, {
+    prefix: "/api/admin/users",
+    service: userManagementService,
+    adminApiKey: options.config.adminApiKey,
+  });
+  if (systemAuthorityService) await app.register(systemAuthorityRoutes, {
+    prefix: "/api/admin/system-authority",
+    service: systemAuthorityService,
     adminApiKey: options.config.adminApiKey,
   });
   await app.register(notificationRoutes, {

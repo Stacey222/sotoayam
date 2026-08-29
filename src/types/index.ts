@@ -7,6 +7,7 @@ export const DIVISIONS = [
   "Live Shopee",
   "Gudang",
   "Management",
+  "IT",
 ] as const;
 
 export const ROLES = ["Staff", "Admin", "PIC", "Supervisor", "Manager", "Owner"] as const;

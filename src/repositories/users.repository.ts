@@ -24,6 +24,7 @@ export class SupabaseUsersRepository implements UsersRepository {
     const { count, error } = await this.client
       .from("users")
       .select("id, divisions!inner(code)", { count: "exact", head: true })
+      .eq("active", true)
       .eq("divisions.code", "IT");
     if (error) throw governanceDatabaseError("Unable to count system authority candidates", error);
     return count ?? 0;

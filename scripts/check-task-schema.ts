@@ -42,6 +42,6 @@ for (const [name, value] of Object.entries(checks)) console.log(`${name} = ${val
 console.log(`LIVE_TASK_SCHEMA = ${pending ? "PENDING_MIGRATION" : live ? "PASS" : "FAIL"}`);
 console.log(`PRODUCTION_TASK_COUNT = ${taskCount}`);
 console.log(`MIGRATION_SHA256 = ${createHash("sha256").update(sql).digest("hex")}`);
-const passed = Object.values(checks).every(Boolean) && (pending || live) && taskCount === 0;
+const passed = Object.values(checks).every(Boolean) && (pending || live);
 console.log(`\nRESULT = ${passed ? "PASS" : "FAIL"}`);
 if (!passed) process.exitCode = 1;

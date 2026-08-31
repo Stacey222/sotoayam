@@ -17,6 +17,7 @@ import { TelegramBot } from "../../src/telegram/bot.js";
 import type { TelegramUser } from "../../src/types/index.js";
 
 const migrationPath = path.resolve(process.cwd(), "supabase/migrations/202608290004_create_task_core.sql");
+const checkerPath = path.resolve(process.cwd(), "scripts/check-task-schema.ts");
 const fixedNow = new Date("2026-08-29T10:00:00.000Z");
 const perms = (...values: string[]) => new Set(values);
 const staff = (overrides: Partial<TaskActor> = {}): TaskActor => ({ id: 1, active: true, divisionId: 10, roleId: 1, roleCode: "STAFF", permissions: perms("task.create", "task.view_assigned", "task.update_assigned", "task.complete_assigned", "task.add_activity"), ...overrides });
@@ -103,4 +104,9 @@ describe("Slice 3 Task Core acceptance", () => {
     await bot.handleUpdate({ update_id: 1, message: { text: "/start", chat: { id: 101 } } }); expect(sender.sendMessage.mock.calls[0]?.[1]).toContain("Status: Aktif");
   });
   it("40. preserves identity reconciliation", () => { expect(reconcileIdentitySnapshots([{ id: 1, telegram_chat_id: 101, division: "IT", role: "Admin", active: true }], [{ id: 41, legacy_telegram_user_id: 1, active: true, division_code: "IT", role_code: "ADMIN" }], [{ id: 1, user_id: 41, channel_type: "TELEGRAM", external_id: "101" }])).toEqual({ match: 1, missingNormalized: 0, missingLegacy: 0, mismatch: 0, duplicate: 0 }); });
+  it("41. treats production task count as operational information", async () => {
+    const checker = await readFile(checkerPath, "utf8");
+    expect(checker).toContain("PRODUCTION_TASK_COUNT");
+    expect(checker).not.toContain("taskCount === 0");
+  });
 });

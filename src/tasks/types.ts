@@ -38,6 +38,7 @@ export interface TaskReadModel extends Task { is_overdue: boolean; activities?: 
 
 export interface TaskUser {
   id: number;
+  displayName?: string | null;
   active: boolean;
   divisionId: number | null;
   roleId: number | null;

@@ -37,7 +37,7 @@ import { UserManagementService } from "./services/user-management.service.js";
 import { SystemAuthorityService } from "./services/system-authority.service.js";
 import { UserAccessStateService, type UserAccessStateResolver } from "./services/user-access-state.service.js";
 import { resolveUserAccessState } from "./identity/user-access-state.js";
-import { TrustedTaskActorService } from "./services/task-actor.service.js";
+import { TelegramTaskActorService, TrustedTaskActorService } from "./services/task-actor.service.js";
 import { TaskAuthorizationService } from "./services/task-authorization.service.js";
 import { TaskService } from "./services/task.service.js";
 import { DivisionCollaborationService } from "./services/division-collaboration.service.js";
@@ -48,6 +48,7 @@ import {
 } from "./services/telegram-registration.service.js";
 import { TelegramBot } from "./telegram/bot.js";
 import { TelegramItConsoleService } from "./telegram/it-console.js";
+import { TelegramTaskConsoleService } from "./telegram/task-console.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -99,6 +100,13 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   ) : undefined;
   const taskUsers = client ? new SupabaseTaskUsersRepository(client) : undefined;
   const collaborationRepository = client ? new SupabaseDivisionCollaborationRepository(client) : undefined;
+  const permissionsRepository = client ? new SupabasePermissionsRepository(client) : undefined;
+  const divisionsRepository = client ? new SupabaseDivisionsRepository(client) : undefined;
+  const taskService = client && taskUsers && collaborationRepository ? new TaskService(
+    new SupabaseTasksRepository(client), taskUsers, new SupabaseTaskActivitiesRepository(client),
+    new SupabaseTaskRelationshipsRepository(client), new SupabaseAuditRepository(client), new TaskAuthorizationService(),
+    undefined, new DivisionCollaborationService(collaborationRepository),
+  ) : undefined;
   const collaborationManagementService = client && userManagementService && taskUsers && collaborationRepository
     ? new CollaborationRuleManagementService(
         collaborationRepository,
@@ -115,6 +123,15 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     userManagementService,
     collaborationManagementService,
   ) : undefined;
+  const taskConsole = client && taskService && taskUsers && permissionsRepository && divisionsRepository && collaborationRepository
+    ? new TelegramTaskConsoleService(
+        taskService,
+        new TelegramTaskActorService(new SupabaseUserChannelsRepository(client), taskUsers, permissionsRepository),
+        taskUsers,
+        divisionsRepository,
+        collaborationRepository,
+      )
+    : undefined;
   const bot = new TelegramBot(
     options.config.telegramBotToken,
     registrationService,
@@ -122,6 +139,7 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     telegramSender,
     app.log,
     itConsole,
+    taskConsole,
   );
 
   app.setErrorHandler((error, request, reply) => {
@@ -173,16 +191,11 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     service: collaborationManagementService,
     adminApiKey: options.config.adminApiKey,
   });
-  if (client && taskUsers && collaborationRepository) {
-    const taskService = new TaskService(
-      new SupabaseTasksRepository(client), taskUsers, new SupabaseTaskActivitiesRepository(client),
-      new SupabaseTaskRelationshipsRepository(client), new SupabaseAuditRepository(client), new TaskAuthorizationService(),
-      undefined, new DivisionCollaborationService(collaborationRepository),
-    );
+  if (taskService && taskUsers && permissionsRepository) {
     await app.register(tasksRoutes, {
       prefix: "/api/tasks",
       service: taskService,
-      actorResolver: new TrustedTaskActorService(taskUsers, new SupabasePermissionsRepository(client)),
+      actorResolver: new TrustedTaskActorService(taskUsers, permissionsRepository),
       adminApiKey: options.config.adminApiKey,
     });
   }

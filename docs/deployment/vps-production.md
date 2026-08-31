@@ -47,6 +47,10 @@ Production must set `HOST=127.0.0.1`, keeping port 3000 private to the VPS. The 
 
 Ordinary laptop development should keep Gwens polling disabled whenever VPS production polling is active.
 
+## Telegram Task Console State
+
+The `/tasks` creation wizard, comment input, and block-reason input use bounded in-memory state. State is isolated by Telegram user, re-authorized on every callback or text input, expires after 15 minutes, and can be cancelled from the UI or with `/cancel`. A service restart intentionally clears unfinished input state; users can safely restart the wizard afterward. No task is created until the review confirmation callback succeeds.
+
 ## Service Operations
 
 ```bash

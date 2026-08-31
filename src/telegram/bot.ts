@@ -5,19 +5,20 @@ import type { TelegramSender } from "../services/telegram.service.js";
 import type { UserAccessStateResolver } from "../services/user-access-state.service.js";
 import type { TelegramUser } from "../types/index.js";
 import type { TelegramItConsole } from "./it-console.js";
+import type { TelegramTaskConsole } from "./task-console.js";
 
 interface TelegramUpdate {
   update_id: number;
   message?: {
     text?: string;
-    chat: { id: number; username?: string; first_name?: string };
+    chat: { id: number; type?: string; username?: string; first_name?: string };
     from?: { id?: number; username?: string; first_name?: string };
   };
   callback_query?: {
     id: string;
     from: { id: number };
     data?: string;
-    message?: { message_id: number; chat: { id: number } };
+    message?: { message_id: number; chat: { id: number; type?: string } };
   };
 }
 
@@ -51,6 +52,7 @@ export class TelegramBot {
     private readonly sender: TelegramSender,
     private readonly logger: Pick<FastifyBaseLogger, "info" | "warn" | "error">,
     private readonly itConsole?: TelegramItConsole,
+    private readonly taskConsole?: TelegramTaskConsole,
   ) {}
 
   async handleUpdate(update: TelegramUpdate): Promise<void> {
@@ -60,12 +62,36 @@ export class TelegramBot {
     }
     const message = update.message;
     if (!message) return;
+    if (/^\/tasks(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) {
+      this.logger.info({ updateId: update.update_id }, "Telegram /tasks received");
+      if (message.from?.id === undefined || !this.isPrivateChat(message.chat, message.from.id)) {
+        await this.sender.sendMessage(message.chat.id, "Task Console hanya tersedia melalui private chat.");
+        return;
+      }
+      await this.sendConsoleResponse(message.chat.id, await this.openTaskConsole(message.from?.id));
+      return;
+    }
     if (/^\/admin(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) {
       this.logger.info({ updateId: update.update_id }, "Telegram /admin received");
       await this.sendConsoleResponse(message.chat.id, await this.openConsole(message.from?.id));
       return;
     }
-    if (!/^\/start(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) return;
+    if (!/^\/start(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) {
+      if (this.taskConsole && message.from?.id !== undefined && message.text !== undefined) {
+        if (!this.isPrivateChat(message.chat, message.from.id)) return;
+        try {
+          const response = await this.taskConsole.handleText(message.from.id, message.text);
+          if (response) await this.sendConsoleResponse(message.chat.id, response);
+        } catch (error) {
+          this.logger.error(
+            { errorType: error instanceof Error ? error.name : "UnknownError", updateId: update.update_id },
+            "Telegram task input failed",
+          );
+          await this.sender.sendMessage(message.chat.id, "Permintaan belum dapat diproses. Silakan coba lagi.");
+        }
+      }
+      return;
+    }
     this.logger.info({ updateId: update.update_id }, "Telegram /start received");
     const username = message.from?.username ?? message.chat.username ?? null;
     const firstName = message.from?.first_name ?? message.chat.first_name ?? null;
@@ -153,9 +179,12 @@ export class TelegramBot {
     try {
       const message = query.message;
       if (!message) return;
-      const response = this.itConsole
-        ? await this.itConsole.handleCallback(query.from.id, query.data ?? "")
-        : { text: "Perintah tidak tersedia." };
+      const data = query.data ?? "";
+      const response = data.startsWith("tc:")
+        ? this.isPrivateChat(message.chat, query.from.id) && this.taskConsole
+          ? await this.taskConsole.handleCallback(query.from.id, data)
+          : { text: "Perintah tidak tersedia." }
+        : this.itConsole ? await this.itConsole.handleCallback(query.from.id, data) : { text: "Perintah tidak tersedia." };
       await this.editConsoleResponse(message.chat.id, message.message_id, response);
     } catch (error) {
       this.logger.error(
@@ -175,6 +204,20 @@ export class TelegramBot {
       this.logger.error({ errorType: error instanceof Error ? error.name : "UnknownError" }, "Telegram console authorization failed");
       return { text: "Permintaan belum dapat diproses. Silakan coba lagi." };
     }
+  }
+
+  private async openTaskConsole(externalTelegramId: number | undefined) {
+    if (!this.taskConsole || externalTelegramId === undefined) return { text: "Perintah tidak tersedia." };
+    try {
+      return await this.taskConsole.open(externalTelegramId);
+    } catch (error) {
+      this.logger.error({ errorType: error instanceof Error ? error.name : "UnknownError" }, "Telegram task console authorization failed");
+      return { text: "Permintaan belum dapat diproses. Silakan coba lagi." };
+    }
+  }
+
+  private isPrivateChat(chat: { id: number; type?: string }, externalTelegramId: number): boolean {
+    return chat.type === "private" || (chat.type === undefined && chat.id === externalTelegramId);
   }
 
   private sendConsoleResponse(chatId: number, response: { text: string; inlineKeyboard?: import("../services/telegram.service.js").TelegramInlineButton[][] }): Promise<void> {

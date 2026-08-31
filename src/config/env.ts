@@ -9,9 +9,18 @@ export interface AppConfig extends SupabaseConfig {
   telegramBotToken: string;
   internalApiKey: string;
   adminApiKey?: string;
+  host?: string;
   port: number;
   telegramPollingEnabled: boolean;
   logLevel: string;
+}
+
+function parseHost(value: string | undefined): string {
+  const host = value?.trim() || "0.0.0.0";
+  if (host.length > 253 || !/^[A-Za-z0-9.:-]+$/.test(host)) {
+    throw new Error("Invalid environment variable: HOST");
+  }
+  return host;
 }
 
 function requireEnv(name: string, aliases: string[] = []): string {
@@ -56,6 +65,7 @@ export function loadConfig(): AppConfig {
     telegramBotToken: requireEnv("TELEGRAM_BOT_TOKEN"),
     internalApiKey: requireEnv("INTERNAL_API_KEY"),
     adminApiKey: process.env.ADMIN_API_KEY?.trim() || undefined,
+    host: parseHost(process.env.HOST),
     port: parsePort(process.env.PORT),
     telegramPollingEnabled: process.env.TELEGRAM_POLLING_ENABLED !== "false",
     logLevel: process.env.LOG_LEVEL?.trim() || "info",

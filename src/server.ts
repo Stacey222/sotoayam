@@ -4,6 +4,7 @@ import { loadConfig } from "./config/env.js";
 async function main(): Promise<void> {
   const config = loadConfig();
   const { app, bot } = await buildApp({ config });
+  const host = config.host ?? "0.0.0.0";
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, "Shutting down");
@@ -13,9 +14,14 @@ async function main(): Promise<void> {
   process.once("SIGINT", () => void shutdown("SIGINT"));
   process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
-  await app.listen({ host: "0.0.0.0", port: config.port });
+  await app.listen({ host, port: config.port });
   app.log.info(
-    { port: config.port, telegramPolling: config.telegramPollingEnabled, adminProtected: Boolean(config.adminApiKey) },
+    {
+      host,
+      port: config.port,
+      telegramPolling: config.telegramPollingEnabled,
+      adminProtected: Boolean(config.adminApiKey),
+    },
     "Gwens Automation Control started",
   );
   if (config.telegramPollingEnabled) {

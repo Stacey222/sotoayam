@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TARGET="/opt/gwens-automation/shared/.env"
+NEXT="${TARGET}.next"
+REQUIRED=(
+  SUPABASE_URL
+  SUPABASE_SERVICE_ROLE_KEY
+  TELEGRAM_BOT_TOKEN
+  INTERNAL_API_KEY
+  ADMIN_API_KEY
+  HOST
+  PORT
+  TELEGRAM_POLLING_ENABLED
+  LOG_LEVEL
+)
+
+umask 0027
+tr -d '\r' >"${NEXT}"
+test -s "${NEXT}"
+for name in "${REQUIRED[@]}"; do
+  grep -q "^${name}=" "${NEXT}"
+done
+grep -q '^TELEGRAM_POLLING_ENABLED="false"$' "${NEXT}"
+grep -q '^HOST="127.0.0.1"$' "${NEXT}"
+chmod 0640 "${NEXT}"
+mv "${NEXT}" "${TARGET}"
+echo "REQUIRED_ENV_NAMES=PASS"
+echo "VPS_TELEGRAM_POLLING=OFF_CONFIGURED"
+echo "VPS_HOST=LOCALHOST_CONFIGURED"

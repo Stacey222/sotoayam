@@ -24,4 +24,34 @@ describe("Supabase server credential validation", () => {
 
     expect(loadConfig().supabaseServiceRoleKey).toBe("sb_secret_test-only");
   });
+
+  it("uses the compatible default host when HOST is absent", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("HOST", "");
+
+    expect(loadConfig().host).toBe("0.0.0.0");
+  });
+
+  it("accepts an explicit localhost bind address", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("HOST", "127.0.0.1");
+
+    expect(loadConfig().host).toBe("127.0.0.1");
+  });
+
+  it("rejects an unsafe host value", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("HOST", "127.0.0.1 / unsafe");
+
+    expect(() => loadConfig()).toThrow("Invalid environment variable: HOST");
+  });
 });

@@ -8,6 +8,7 @@ export type TaskUpdateRecord = Partial<Pick<Task, "title" | "description" | "pri
 
 export interface TasksRepository {
   create(input: NewTaskRecord): Promise<Task>;
+  findByExternalReference(input: { source: Task["source"]; sourceReference: string; createdByUserId?: number; integrationId?: number }): Promise<Task | null>;
   findById(id: number): Promise<Task | null>;
   findAll(filters?: TaskFilters): Promise<TaskReadModel[]>;
   update(id: number, input: TaskUpdateRecord): Promise<Task>;
@@ -20,6 +21,16 @@ export class SupabaseTasksRepository implements TasksRepository {
     const { data, error } = await this.client.from("tasks").insert(input).select("*").single();
     if (error) throw governanceDatabaseError("Unable to create task", error);
     return data as Task;
+  }
+
+  async findByExternalReference(input: { source: Task["source"]; sourceReference: string; createdByUserId?: number; integrationId?: number }): Promise<Task | null> {
+    let query = this.client.from("tasks").select("*").eq("source", input.source).eq("source_reference", input.sourceReference);
+    query = input.createdByUserId === undefined
+      ? query.eq("integration_id", input.integrationId!)
+      : query.eq("created_by_user_id", input.createdByUserId);
+    const { data, error } = await query.maybeSingle();
+    if (error) throw governanceDatabaseError("Unable to check task external reference", error);
+    return data as Task | null;
   }
 
   async findById(id: number): Promise<Task | null> {

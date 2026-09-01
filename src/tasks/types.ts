@@ -22,7 +22,9 @@ export interface Task {
   priority: TaskPriority;
   source: TaskSource;
   source_reference: string | null;
-  created_by_user_id: number;
+  created_by_user_id: number | null;
+  integration_id: number | null;
+  import_batch_id: number | null;
   requesting_division_id: number;
   owner_division_id: number;
   assigned_to_user_id: number | null;

@@ -46,6 +46,7 @@ function main(): void {
     { name: "SCHEMA_COMPATIBILITY", passed: run(npm, ["run", "check:schema"]) },
     { name: "GOVERNANCE_FOUNDATION", passed: run(npm, ["run", "check:governance-schema"]) },
     { name: "IDENTITY_FOUNDATION", passed: run(npm, ["run", "check:identity-schema"]) },
+    { name: "INGESTION_FOUNDATION", passed: run(npm, ["run", "check:ingestion-schema"]) },
     { name: "SUPABASE_CONNECTION", passed: run(npm, ["run", "check:supabase"]) },
     { name: "RECONCILIATION_HARNESS", passed: run(npm, ["run", "check:reconciliation"]) },
     { name: "SECRET_SCAN", passed: run(npm, ["run", "check:secrets"]) },

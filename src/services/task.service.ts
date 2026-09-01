@@ -1,4 +1,4 @@
-import { AppError } from "../errors.js";
+import { AppError, DatabaseError } from "../errors.js";
 import type { AuditRepository } from "../repositories/audit.repository.js";
 import type { TaskActivitiesRepository } from "../repositories/task-activities.repository.js";
 import type { TaskRelationshipsRepository } from "../repositories/task-relationships.repository.js";
@@ -9,6 +9,7 @@ import type {
   AddTaskActivityInput, CreateTaskInput, EvidenceInput, Task, TaskActor, TaskFilters,
   TaskReadModel, TaskRelationshipType, TransitionTaskInput, UpdateTaskInput,
 } from "../tasks/types.js";
+import type { TaskIntakeContext, TaskIntakeOutcome, TaskIntakeRequest } from "../ingestion/types.js";
 import { TaskAuthorizationService } from "./task-authorization.service.js";
 import type { CollaborationPolicyResolver } from "./division-collaboration.service.js";
 
@@ -42,6 +43,8 @@ export class TaskService {
       source: "MANUAL",
       source_reference: null,
       created_by_user_id: actor.id,
+      integration_id: null,
+      import_batch_id: null,
       requesting_division_id: actor.divisionId,
       owner_division_id: ownerDivisionId,
       assigned_to_user_id: assignedTo?.id ?? null,
@@ -60,6 +63,87 @@ export class TaskService {
       object_id: String(task.id), before_state: { assigned_to_user_id: null }, after_state: { assigned_to_user_id: assignedTo.id }, source: "task_api",
     });
     return this.read(task);
+  }
+
+  async createFromIntake(
+    context: TaskIntakeContext,
+    input: TaskIntakeRequest & { ownerDivisionId: number; assignedToUserId?: number | null },
+    actor?: TaskActor,
+  ): Promise<TaskIntakeOutcome> {
+    await this.validateIntake(context, input, actor);
+    const externalReference = this.externalReference(input.externalReference);
+    const origin = context.kind === "HUMAN_IMPORT"
+      ? { createdByUserId: context.actorUserId }
+      : { integrationId: context.integrationId };
+    if (externalReference) {
+      const existing = await this.tasks.findByExternalReference({ source: input.source, sourceReference: externalReference, ...origin });
+      if (existing) return { status: "DUPLICATE", taskId: existing.id };
+    }
+    const assignedTo = await this.validateAssignee(input.assignedToUserId ?? null, input.ownerDivisionId);
+    let task: Task;
+    try { task = await this.tasks.create({
+      title: this.title(input.title), description: this.description(input.description), status: "OPEN",
+      priority: input.priority ?? "NORMAL", source: input.source, source_reference: externalReference,
+      created_by_user_id: context.kind === "HUMAN_IMPORT" ? context.actorUserId : null,
+      integration_id: context.kind === "HUMAN_IMPORT" ? null : context.integrationId,
+      import_batch_id: context.batchId,
+      requesting_division_id: context.requestingDivisionId, owner_division_id: input.ownerDivisionId,
+      assigned_to_user_id: assignedTo?.id ?? null, deadline: this.deadline(input.deadline),
+      started_at: null, completed_at: null, cancelled_at: null,
+    }); } catch (error) {
+      if (externalReference && error instanceof DatabaseError && error.diagnostic.code === "23505") {
+        const existing = await this.tasks.findByExternalReference({ source: input.source, sourceReference: externalReference, ...origin });
+        if (existing) return { status: "DUPLICATE", taskId: existing.id };
+      }
+      throw error;
+    }
+    const auditActor = context.kind === "HUMAN_IMPORT"
+      ? { actor_type: "USER" as const, actor_user_id: context.actorUserId }
+      : { actor_type: "SYSTEM" as const, actor_user_id: null };
+    await this.audit.append({
+      ...auditActor, action: "TASK_CREATED", object_type: "TASK", object_id: String(task.id),
+      after_state: { status: task.status, priority: task.priority, source: task.source,
+        requesting_division_id: task.requesting_division_id, owner_division_id: task.owner_division_id,
+        import_batch_id: task.import_batch_id }, source: "task_ingestion",
+    });
+    if (assignedTo) await this.audit.append({
+      ...auditActor, action: "TASK_ASSIGNED", object_type: "TASK", object_id: String(task.id),
+      before_state: { assigned_to_user_id: null }, after_state: { assigned_to_user_id: assignedTo.id }, source: "task_ingestion",
+    });
+    return { status: "CREATED", task: this.read(task) };
+  }
+
+  async validateIntake(
+    context: TaskIntakeContext,
+    input: TaskIntakeRequest & { ownerDivisionId: number; assignedToUserId?: number | null },
+    actor?: TaskActor,
+  ): Promise<{ duplicateTaskId: number | null }> {
+    if (context.kind === "HUMAN_IMPORT") {
+      if (!actor || actor.id !== context.actorUserId) throw new AppError(403, "TASK_FORBIDDEN", "Authenticated import actor is required");
+      this.authorization.assertCanCreate(actor);
+      if (!actor.permissions.has("task.import")) throw new AppError(403, "TASK_FORBIDDEN", "Task import permission is required");
+      if (actor.divisionId !== context.requestingDivisionId) throw new AppError(403, "TASK_FORBIDDEN", "Import requesting Divisi must be server-derived");
+    }
+    if (input.source === "CSV_IMPORT" && context.kind !== "HUMAN_IMPORT") throw new AppError(400, "INVALID_SOURCE_CONTEXT", "CSV import requires a human import context");
+    if (input.source === "AUTOMATION" && context.kind !== "INTERNAL_AUTOMATION") throw new AppError(400, "INVALID_SOURCE_CONTEXT", "Automation source requires an automation context");
+    if (input.source === "ERP" && context.kind !== "ERP_ADAPTER") throw new AppError(400, "INVALID_SOURCE_CONTEXT", "ERP source requires an ERP adapter context");
+    if (input.ownerDivisionId !== context.requestingDivisionId) {
+      if (!this.collaboration) throw new AppError(409, "TASK_CROSS_DIVISION_NOT_ALLOWED", "Cross-Divisi task collaboration is not allowed");
+      await this.collaboration.assertTaskCollaborationAllowed(context.requestingDivisionId, input.ownerDivisionId, "ALL");
+    }
+    this.title(input.title);
+    this.description(input.description);
+    this.deadline(input.deadline);
+    await this.validateAssignee(input.assignedToUserId ?? null, input.ownerDivisionId);
+    const externalReference = this.externalReference(input.externalReference);
+    const origin = context.kind === "HUMAN_IMPORT"
+      ? { createdByUserId: context.actorUserId }
+      : { integrationId: context.integrationId };
+    if (externalReference) {
+      const existing = await this.tasks.findByExternalReference({ source: input.source, sourceReference: externalReference, ...origin });
+      if (existing) return { duplicateTaskId: existing.id };
+    }
+    return { duplicateTaskId: null };
   }
 
   async get(actor: TaskActor, id: number): Promise<TaskReadModel> {
@@ -193,6 +277,12 @@ export class TaskService {
     const parsed = new Date(value);
     if (!Number.isFinite(parsed.getTime())) throw new AppError(400, "TASK_INVALID_DEADLINE", "Task deadline is invalid");
     return parsed.toISOString();
+  }
+  private externalReference(value: string | null | undefined): string | null {
+    if (value === undefined || value === null || value.trim() === "") return null;
+    const normalized = value.trim();
+    if (normalized.length > 500) throw new AppError(400, "INVALID_EXTERNAL_REFERENCE", "External reference is too long");
+    return normalized;
   }
   private evidence(input: EvidenceInput): EvidenceInput {
     const reference = input.reference.trim();

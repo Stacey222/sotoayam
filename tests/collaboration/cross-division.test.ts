@@ -54,6 +54,7 @@ class Rules implements DivisionCollaborationRepository {
 class Tasks implements TasksRepository {
   rows: Task[] = [];
   async create(input: NewTaskRecord) { const row = { ...input, id: this.rows.length + 1, created_at: now, updated_at: now }; this.rows.push(row); return row; }
+  async findByExternalReference(input: { source: Task["source"]; sourceReference: string; createdByUserId?: number; integrationId?: number }) { return this.rows.find((row) => row.source === input.source && row.source_reference === input.sourceReference && (input.createdByUserId === undefined ? row.integration_id === input.integrationId : row.created_by_user_id === input.createdByUserId)) ?? null; }
   async findById(id: number) { return this.rows.find((r) => r.id === id) ?? null; }
   async findAll(_filters: TaskFilters = {}): Promise<TaskReadModel[]> { return this.rows.map((r) => ({ ...r, is_overdue: false })); }
   async update(id: number, input: TaskUpdateRecord) { const row = (await this.findById(id))!; Object.assign(row, input); return row; }

@@ -25,6 +25,7 @@ const admin = (overrides: Partial<TaskActor> = {}): TaskActor => ({ ...staff(), 
 const task = (overrides: Partial<Task> = {}): Task => ({
   id: 1, title: "Task", description: null, status: "OPEN", priority: "NORMAL", source: "MANUAL", source_reference: null,
   created_by_user_id: 1, requesting_division_id: 10, owner_division_id: 10, assigned_to_user_id: 1,
+  integration_id: null, import_batch_id: null,
   deadline: null, started_at: null, completed_at: null, cancelled_at: null,
   created_at: fixedNow.toISOString(), updated_at: fixedNow.toISOString(), ...overrides,
 });
@@ -32,6 +33,7 @@ const task = (overrides: Partial<Task> = {}): Task => ({
 class MemoryTasks implements TasksRepository {
   rows: Task[] = [];
   async create(input: NewTaskRecord) { const row = { ...input, id: this.rows.length + 1, created_at: fixedNow.toISOString(), updated_at: fixedNow.toISOString() }; this.rows.push(row); return row; }
+  async findByExternalReference(input: { source: Task["source"]; sourceReference: string; createdByUserId?: number; integrationId?: number }) { return this.rows.find((row) => row.source === input.source && row.source_reference === input.sourceReference && (input.createdByUserId === undefined ? row.integration_id === input.integrationId : row.created_by_user_id === input.createdByUserId)) ?? null; }
   async findById(id: number) { return this.rows.find((row) => row.id === id) ?? null; }
   async findAll(_filters: TaskFilters = {}): Promise<TaskReadModel[]> { return this.rows.map((row) => ({ ...row, is_overdue: isTaskOverdue(row, fixedNow) })); }
   async update(id: number, input: TaskUpdateRecord) { const row = await this.findById(id); if (!row) throw new Error("missing"); Object.assign(row, input); return row; }

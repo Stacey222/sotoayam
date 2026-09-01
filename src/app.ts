@@ -23,6 +23,7 @@ import { SupabaseTaskRelationshipsRepository } from "./repositories/task-relatio
 import { SupabasePermissionsRepository } from "./repositories/permissions.repository.js";
 import { SupabaseAuditRepository } from "./repositories/audit.repository.js";
 import { SupabaseDivisionCollaborationRepository } from "./repositories/division-collaboration.repository.js";
+import { SupabaseImportBatchRepository, SupabaseTaskSourceIntegrationsRepository } from "./repositories/task-ingestion.repository.js";
 import { adminUserManagementRoutes } from "./routes/admin-user-management.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
@@ -30,6 +31,7 @@ import { usersRoutes } from "./routes/users.routes.js";
 import { systemAuthorityRoutes } from "./routes/system-authority.routes.js";
 import { tasksRoutes } from "./routes/tasks.routes.js";
 import { collaborationRulesRoutes } from "./routes/collaboration-rules.routes.js";
+import { csvImportRoutes, internalTaskIngestionRoutes } from "./routes/task-ingestion.routes.js";
 import { NotificationService } from "./services/notification.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
 import { TelegramService, type TelegramSender } from "./services/telegram.service.js";
@@ -41,6 +43,7 @@ import { TelegramTaskActorService, TrustedTaskActorService } from "./services/ta
 import { TaskAuthorizationService } from "./services/task-authorization.service.js";
 import { TaskService } from "./services/task.service.js";
 import { DivisionCollaborationService } from "./services/division-collaboration.service.js";
+import { TaskIngestionService } from "./services/task-ingestion.service.js";
 import { CollaborationRuleManagementService } from "./services/collaboration-rule-management.service.js";
 import {
   TelegramRegistrationService,
@@ -106,6 +109,9 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     new SupabaseTasksRepository(client), taskUsers, new SupabaseTaskActivitiesRepository(client),
     new SupabaseTaskRelationshipsRepository(client), new SupabaseAuditRepository(client), new TaskAuthorizationService(),
     undefined, new DivisionCollaborationService(collaborationRepository),
+  ) : undefined;
+  const taskIngestionService = client && taskService && divisionsRepository ? new TaskIngestionService(
+    taskService, divisionsRepository, new SupabaseImportBatchRepository(client), new SupabaseAuditRepository(client),
   ) : undefined;
   const collaborationManagementService = client && userManagementService && taskUsers && collaborationRepository
     ? new CollaborationRuleManagementService(
@@ -197,6 +203,16 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
       service: taskService,
       actorResolver: new TrustedTaskActorService(taskUsers, permissionsRepository),
       adminApiKey: options.config.adminApiKey,
+    });
+  }
+  if (taskIngestionService && taskUsers && permissionsRepository) {
+    const actorResolver = new TrustedTaskActorService(taskUsers, permissionsRepository);
+    await app.register(csvImportRoutes, {
+      prefix: "/api/tasks/import", service: taskIngestionService, actorResolver, adminApiKey: options.config.adminApiKey,
+    });
+    await app.register(internalTaskIngestionRoutes, {
+      prefix: "/api/internal", service: taskIngestionService,
+      integrations: new SupabaseTaskSourceIntegrationsRepository(client!), internalApiKey: options.config.internalApiKey,
     });
   }
   await app.register(notificationRoutes, {

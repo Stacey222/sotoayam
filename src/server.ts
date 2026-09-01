@@ -3,12 +3,13 @@ import { loadConfig } from "./config/env.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
-  const { app, bot } = await buildApp({ config });
+  const { app, bot, reminderScheduler } = await buildApp({ config });
   const host = config.host ?? "0.0.0.0";
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, "Shutting down");
     bot.stop();
+    await reminderScheduler?.stop();
     await app.close();
   };
   process.once("SIGINT", () => void shutdown("SIGINT"));
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
       );
     });
   }
+  reminderScheduler?.start();
 }
 
 main().catch((error: unknown) => {

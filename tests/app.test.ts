@@ -24,6 +24,8 @@ const config: AppConfig = {
   adminApiKey: undefined,
   port: 3000,
   telegramPollingEnabled: false,
+  reminderSchedulerEnabled: false,
+  reminderSchedulerIntervalSeconds: 300,
   logLevel: "silent",
 };
 

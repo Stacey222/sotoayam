@@ -24,6 +24,7 @@ import { SupabasePermissionsRepository } from "./repositories/permissions.reposi
 import { SupabaseAuditRepository } from "./repositories/audit.repository.js";
 import { SupabaseDivisionCollaborationRepository } from "./repositories/division-collaboration.repository.js";
 import { SupabaseImportBatchRepository, SupabaseTaskSourceIntegrationsRepository } from "./repositories/task-ingestion.repository.js";
+import { SupabaseReminderChannelsRepository, SupabaseReminderNotificationsRepository, SupabaseReminderRoutingRepository, SupabaseReminderSchedulerRepository, SupabaseReminderStateRepository, SupabaseReminderTasksRepository } from "./repositories/reminders.repository.js";
 import { adminUserManagementRoutes } from "./routes/admin-user-management.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
@@ -32,6 +33,7 @@ import { systemAuthorityRoutes } from "./routes/system-authority.routes.js";
 import { tasksRoutes } from "./routes/tasks.routes.js";
 import { collaborationRulesRoutes } from "./routes/collaboration-rules.routes.js";
 import { csvImportRoutes, internalTaskIngestionRoutes } from "./routes/task-ingestion.routes.js";
+import { adminNotificationsRoutes } from "./routes/admin-notifications.routes.js";
 import { NotificationService } from "./services/notification.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
 import { TelegramService, type TelegramSender } from "./services/telegram.service.js";
@@ -44,6 +46,11 @@ import { TaskAuthorizationService } from "./services/task-authorization.service.
 import { TaskService } from "./services/task.service.js";
 import { DivisionCollaborationService } from "./services/division-collaboration.service.js";
 import { TaskIngestionService } from "./services/task-ingestion.service.js";
+import { NotificationDeliveryService, TelegramNotificationAdapter } from "./services/notification-delivery.service.js";
+import { ReminderRoutingService } from "./services/reminder-routing.service.js";
+import { ReminderEvaluatorService } from "./services/reminder-evaluator.service.js";
+import { ReminderSchedulerService } from "./services/reminder-scheduler.service.js";
+import { NotificationOperationsService } from "./services/notification-operations.service.js";
 import { CollaborationRuleManagementService } from "./services/collaboration-rule-management.service.js";
 import {
   TelegramRegistrationService,
@@ -65,6 +72,7 @@ export interface BuildAppOptions {
 export interface AppRuntime {
   app: FastifyInstance;
   bot: TelegramBot;
+  reminderScheduler?: ReminderSchedulerService;
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
@@ -113,6 +121,20 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const taskIngestionService = client && taskService && divisionsRepository ? new TaskIngestionService(
     taskService, divisionsRepository, new SupabaseImportBatchRepository(client), new SupabaseAuditRepository(client),
   ) : undefined;
+  const reminderNotifications = client ? new SupabaseReminderNotificationsRepository(client) : undefined;
+  const reminderSchedulerRepository = client ? new SupabaseReminderSchedulerRepository(client) : undefined;
+  const reminderEvaluator = client && taskUsers && reminderNotifications && reminderSchedulerRepository ? new ReminderEvaluatorService(
+    new SupabaseReminderTasksRepository(client), new SupabaseReminderStateRepository(client), reminderNotifications,
+    new ReminderRoutingService(taskUsers, new SupabaseReminderChannelsRepository(client), new SupabaseReminderRoutingRepository(client)),
+    new NotificationDeliveryService(reminderNotifications, taskUsers, new SupabaseReminderChannelsRepository(client), new TelegramNotificationAdapter(telegramSender)),
+    reminderSchedulerRepository,
+  ) : undefined;
+  const reminderScheduler = reminderEvaluator ? new ReminderSchedulerService(reminderEvaluator,
+    options.config.reminderSchedulerEnabled, options.config.reminderSchedulerIntervalSeconds * 1000, app.log) : undefined;
+  const notificationOperations = reminderEvaluator && reminderNotifications && reminderSchedulerRepository
+    ? new NotificationOperationsService(reminderNotifications, reminderSchedulerRepository, reminderEvaluator,
+        options.config.reminderSchedulerEnabled, options.config.reminderSchedulerIntervalSeconds)
+    : undefined;
   const collaborationManagementService = client && userManagementService && taskUsers && collaborationRepository
     ? new CollaborationRuleManagementService(
         collaborationRepository,
@@ -215,6 +237,10 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
       integrations: new SupabaseTaskSourceIntegrationsRepository(client!), internalApiKey: options.config.internalApiKey,
     });
   }
+  if (notificationOperations && taskUsers && permissionsRepository) {
+    await app.register(adminNotificationsRoutes, { prefix: "/api/admin/notifications", service: notificationOperations,
+      actorResolver: new TrustedTaskActorService(taskUsers, permissionsRepository), adminApiKey: options.config.adminApiKey });
+  }
   await app.register(notificationRoutes, {
     prefix: "/api/notifications",
     notificationService,
@@ -227,5 +253,5 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     wildcard: false,
   });
 
-  return { app, bot };
+  return { app, bot, reminderScheduler };
 }

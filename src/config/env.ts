@@ -12,6 +12,8 @@ export interface AppConfig extends SupabaseConfig {
   host?: string;
   port: number;
   telegramPollingEnabled: boolean;
+  reminderSchedulerEnabled: boolean;
+  reminderSchedulerIntervalSeconds: number;
   logLevel: string;
 }
 
@@ -58,6 +60,14 @@ function parsePort(value: string | undefined): number {
   return port;
 }
 
+function parseSchedulerInterval(value: string | undefined): number {
+  const seconds = Number(value?.trim() || "300");
+  if (!Number.isInteger(seconds) || seconds < 60 || seconds > 3600) {
+    throw new Error("Invalid environment variable: REMINDER_SCHEDULER_INTERVAL_SECONDS");
+  }
+  return seconds;
+}
+
 export function loadConfig(): AppConfig {
   const supabase = loadSupabaseConfig();
   return {
@@ -68,6 +78,8 @@ export function loadConfig(): AppConfig {
     host: parseHost(process.env.HOST),
     port: parsePort(process.env.PORT),
     telegramPollingEnabled: process.env.TELEGRAM_POLLING_ENABLED !== "false",
+    reminderSchedulerEnabled: process.env.REMINDER_SCHEDULER_ENABLED === "true",
+    reminderSchedulerIntervalSeconds: parseSchedulerInterval(process.env.REMINDER_SCHEDULER_INTERVAL_SECONDS),
     logLevel: process.env.LOG_LEVEL?.trim() || "info",
   };
 }

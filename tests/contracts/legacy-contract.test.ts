@@ -25,6 +25,8 @@ const config: AppConfig = {
   adminApiKey: "contract-admin-key",
   port: 3000,
   telegramPollingEnabled: false,
+  reminderSchedulerEnabled: false,
+  reminderSchedulerIntervalSeconds: 300,
   logLevel: "silent",
 };
 

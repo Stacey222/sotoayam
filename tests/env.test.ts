@@ -54,4 +54,23 @@ describe("Supabase server credential validation", () => {
 
     expect(() => loadConfig()).toThrow("Invalid environment variable: HOST");
   });
+
+  it("keeps the reminder scheduler disabled by default", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("REMINDER_SCHEDULER_ENABLED", "");
+    vi.stubEnv("REMINDER_SCHEDULER_INTERVAL_SECONDS", "");
+    expect(loadConfig()).toMatchObject({ reminderSchedulerEnabled: false, reminderSchedulerIntervalSeconds: 300 });
+  });
+
+  it("rejects an unsafe reminder scheduler interval", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("REMINDER_SCHEDULER_INTERVAL_SECONDS", "5");
+    expect(() => loadConfig()).toThrow("Invalid environment variable: REMINDER_SCHEDULER_INTERVAL_SECONDS");
+  });
 });

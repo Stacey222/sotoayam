@@ -65,6 +65,16 @@ describe("Supabase server credential validation", () => {
     expect(loadConfig()).toMatchObject({ reminderSchedulerEnabled: false, reminderSchedulerIntervalSeconds: 300 });
   });
 
+  it("keeps Telegram polling disabled by default", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("TELEGRAM_POLLING_ENABLED", "");
+
+    expect(loadConfig().telegramPollingEnabled).toBe(false);
+  });
+
   it("rejects an unsafe reminder scheduler interval", () => {
     vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");

@@ -77,7 +77,7 @@ export function loadConfig(): AppConfig {
     adminApiKey: process.env.ADMIN_API_KEY?.trim() || undefined,
     host: parseHost(process.env.HOST),
     port: parsePort(process.env.PORT),
-    telegramPollingEnabled: process.env.TELEGRAM_POLLING_ENABLED !== "false",
+    telegramPollingEnabled: process.env.TELEGRAM_POLLING_ENABLED === "true",
     reminderSchedulerEnabled: process.env.REMINDER_SCHEDULER_ENABLED === "true",
     reminderSchedulerIntervalSeconds: parseSchedulerInterval(process.env.REMINDER_SCHEDULER_INTERVAL_SECONDS),
     logLevel: process.env.LOG_LEVEL?.trim() || "info",

@@ -29,12 +29,15 @@ PORT
 TELEGRAM_POLLING_ENABLED
 REMINDER_SCHEDULER_ENABLED
 REMINDER_SCHEDULER_INTERVAL_SECONDS
+BUSINESS_TIME_ZONE
 LOG_LEVEL
 ```
 
 Use the Gwens Automation bot token, never the Hermes token. Permissions must be `0640`; ownership is the deployment user with group `gwens`, so only the deployment account and service group can read it. Verify variable names without printing values.
 
 Keep `REMINDER_SCHEDULER_ENABLED=false` on laptops. For a production cutover, deploy with the scheduler disabled, verify health and a reminder dry-run, then set it to `true` on the VPS and restart the single service process. The bounded interval defaults to 300 seconds.
+
+Reporting uses `BUSINESS_TIME_ZONE=Asia/Jakarta` for deterministic business-date boundaries while database timestamps remain UTC.
 
 Production must set `HOST=127.0.0.1`, keeping port 3000 private to the VPS. The default `0.0.0.0` remains available for compatible local development only.
 

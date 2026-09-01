@@ -23,7 +23,7 @@ const perms = (...values: string[]) => new Set(values);
 const staff = (overrides: Partial<TaskActor> = {}): TaskActor => ({ id: 1, active: true, divisionId: 10, roleId: 1, roleCode: "STAFF", permissions: perms("task.create", "task.view_assigned", "task.update_assigned", "task.complete_assigned", "task.add_activity"), ...overrides });
 const admin = (overrides: Partial<TaskActor> = {}): TaskActor => ({ ...staff(), id: 40, roleId: 2, roleCode: "ADMIN", permissions: perms(...staff().permissions, "task.view_division"), ...overrides });
 const task = (overrides: Partial<Task> = {}): Task => ({
-  id: 1, title: "Task", description: null, status: "OPEN", priority: "NORMAL", source: "MANUAL", source_reference: null,
+  id: 1, title: "Task", description: null, status: "OPEN", priority: "NORMAL", source: "MANUAL", source_reference: null, task_category: null,
   created_by_user_id: 1, requesting_division_id: 10, owner_division_id: 10, assigned_to_user_id: 1,
   integration_id: null, import_batch_id: null,
   deadline: null, started_at: null, completed_at: null, cancelled_at: null,
@@ -63,6 +63,9 @@ describe("Slice 3 Task Core acceptance", () => {
   beforeEach(() => { tasks = new MemoryTasks(); users = new MemoryUsers(); activities = new MemoryActivities(); relationships = new MemoryRelationships(); audit = new MemoryAudit(); service = new TaskService(tasks, users, activities, relationships, audit, new TaskAuthorizationService(), () => fixedNow); });
 
   it("1. creates a valid manual task", async () => { const result = await service.createManual(staff(), { title: "Manual" }); expect(result).toMatchObject({ title: "Manual", source: "MANUAL", status: "OPEN" }); });
+  it("writes AFFILIATE only through canonical TaskService", async () => { expect((await service.createManual(staff(), { title: "Affiliate", taskCategory: "AFFILIATE" })).task_category).toBe("AFFILIATE"); });
+  it("keeps ordinary existing task creation unclassified", async () => { expect((await service.createManual(staff(), { title: "Ordinary" })).task_category).toBeNull(); });
+  it("rejects a speculative task category", async () => { await expect(service.createManual(staff(), { title: "Unknown", taskCategory: "SPECULATIVE" as never })).rejects.toMatchObject({ code: "TASK_INVALID_CATEGORY" }); });
   it("2. requires a title", async () => { await expect(service.createManual(staff(), { title: "  " })).rejects.toMatchObject({ code: "VALIDATION_ERROR" }); });
   it("3. requires an active creator", async () => { await expect(service.createManual(staff({ active: false }), { title: "No" })).rejects.toMatchObject({ code: "TASK_FORBIDDEN" }); });
   it("4. derives requesting division from creator", async () => { expect((await service.createManual(staff(), { title: "Derived" })).requesting_division_id).toBe(10); });

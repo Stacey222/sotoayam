@@ -6,6 +6,7 @@ import type { TaskActor } from "../tasks/types.js";
 
 export interface TaskActorResolver { resolveTrustedActor(): Promise<TaskActor> }
 export interface TelegramTaskActorResolver { resolveTelegramActor(externalTelegramId: number): Promise<TaskActor> }
+export interface OwnerActorResolver { resolveOwnerActor(): Promise<TaskActor> }
 
 export class TrustedTaskActorService implements TaskActorResolver {
   constructor(private readonly users: TaskUsersRepository, private readonly permissions: PermissionsRepository) {}
@@ -17,6 +18,18 @@ export class TrustedTaskActorService implements TaskActorResolver {
     }
     const permissions = await this.permissions.findForRoleCode(user.roleCode);
     return { ...user, permissions: new Set(permissions.filter((item) => item.active).map((item) => item.code)) };
+  }
+}
+
+export class TrustedOwnerActorService implements OwnerActorResolver {
+  constructor(private readonly users: TaskUsersRepository) {}
+  async resolveOwnerActor(): Promise<TaskActor> {
+    if (!this.users.findTrustedOwnerActorUser) throw new AppError(503, "OWNER_ACTOR_UNAVAILABLE", "Owner actor resolver is unavailable");
+    const user = await this.users.findTrustedOwnerActorUser();
+    if (!user.active || user.divisionId === null || user.roleId === null || user.roleCode !== "OWNER") {
+      throw new AppError(503, "OWNER_ACTOR_UNAVAILABLE", "Active normalized OWNER authority is unavailable");
+    }
+    return { ...user, permissions: new Set() };
   }
 }
 

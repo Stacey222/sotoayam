@@ -83,4 +83,15 @@ describe("Supabase server credential validation", () => {
     vi.stubEnv("REMINDER_SCHEDULER_INTERVAL_SECONDS", "5");
     expect(() => loadConfig()).toThrow("Invalid environment variable: REMINDER_SCHEDULER_INTERVAL_SECONDS");
   });
+
+  it("uses and validates the canonical business timezone", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("BUSINESS_TIME_ZONE", "Asia/Jakarta");
+    expect(loadConfig().businessTimeZone).toBe("Asia/Jakarta");
+    vi.stubEnv("BUSINESS_TIME_ZONE", "Not/A-Time-Zone");
+    expect(() => loadConfig()).toThrow("Invalid environment variable: BUSINESS_TIME_ZONE");
+  });
 });

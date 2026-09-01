@@ -17,6 +17,7 @@
     "check:collaboration-schema": "tsx scripts/check-collaboration-schema.ts",
     "check:ingestion-schema": "tsx scripts/check-ingestion-schema.ts",
     "check:notification-schema": "tsx scripts/check-notification-schema.ts",
+    "check:reporting-schema": "tsx scripts/check-reporting-schema.ts",
     "check:secrets": "tsx scripts/check-secrets.ts",
     "check:reconciliation": "tsx scripts/reconcile-legacy.ts",
     "check:migration-baseline": "tsx scripts/check-migration-baseline.ts",

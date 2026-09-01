@@ -4,7 +4,7 @@ import { isTaskOverdue } from "../tasks/task-lifecycle.js";
 import { governanceDatabaseError } from "./governance-database-error.js";
 
 export type NewTaskRecord = Omit<Task, "id" | "created_at" | "updated_at">;
-export type TaskUpdateRecord = Partial<Pick<Task, "title" | "description" | "priority" | "deadline" | "assigned_to_user_id" | "status" | "started_at" | "completed_at" | "cancelled_at">>;
+export type TaskUpdateRecord = Partial<Pick<Task, "title" | "description" | "priority" | "deadline" | "assigned_to_user_id" | "task_category" | "status" | "started_at" | "completed_at" | "cancelled_at">>;
 
 export interface TasksRepository {
   create(input: NewTaskRecord): Promise<Task>;

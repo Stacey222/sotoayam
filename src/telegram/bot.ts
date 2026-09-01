@@ -6,6 +6,7 @@ import type { UserAccessStateResolver } from "../services/user-access-state.serv
 import type { TelegramUser } from "../types/index.js";
 import type { TelegramItConsole } from "./it-console.js";
 import type { TelegramTaskConsole } from "./task-console.js";
+import type { TelegramOwnerConsole } from "./owner-console.js";
 
 interface TelegramUpdate {
   update_id: number;
@@ -53,6 +54,7 @@ export class TelegramBot {
     private readonly logger: Pick<FastifyBaseLogger, "info" | "warn" | "error">,
     private readonly itConsole?: TelegramItConsole,
     private readonly taskConsole?: TelegramTaskConsole,
+    private readonly ownerConsole?: TelegramOwnerConsole,
   ) {}
 
   async handleUpdate(update: TelegramUpdate): Promise<void> {
@@ -74,6 +76,15 @@ export class TelegramBot {
     if (/^\/admin(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) {
       this.logger.info({ updateId: update.update_id }, "Telegram /admin received");
       await this.sendConsoleResponse(message.chat.id, await this.openConsole(message.from?.id));
+      return;
+    }
+    if (/^\/owner(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) {
+      this.logger.info({ updateId: update.update_id }, "Telegram /owner received");
+      if (message.from?.id === undefined || !this.isPrivateChat(message.chat, message.from.id)) {
+        await this.sender.sendMessage(message.chat.id, "Owner Console hanya tersedia melalui private chat.");
+        return;
+      }
+      await this.sendConsoleResponse(message.chat.id, await this.openOwnerConsole(message.from.id));
       return;
     }
     if (!/^\/start(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) {
@@ -184,7 +195,11 @@ export class TelegramBot {
         ? this.isPrivateChat(message.chat, query.from.id) && this.taskConsole
           ? await this.taskConsole.handleCallback(query.from.id, data)
           : { text: "Perintah tidak tersedia." }
-        : this.itConsole ? await this.itConsole.handleCallback(query.from.id, data) : { text: "Perintah tidak tersedia." };
+        : data.startsWith("oc:")
+          ? this.isPrivateChat(message.chat, query.from.id) && this.ownerConsole
+            ? await this.ownerConsole.handleCallback(query.from.id, data)
+            : { text: "Perintah tidak tersedia." }
+          : this.itConsole ? await this.itConsole.handleCallback(query.from.id, data) : { text: "Perintah tidak tersedia." };
       await this.editConsoleResponse(message.chat.id, message.message_id, response);
     } catch (error) {
       this.logger.error(
@@ -212,6 +227,16 @@ export class TelegramBot {
       return await this.taskConsole.open(externalTelegramId);
     } catch (error) {
       this.logger.error({ errorType: error instanceof Error ? error.name : "UnknownError" }, "Telegram task console authorization failed");
+      return { text: "Permintaan belum dapat diproses. Silakan coba lagi." };
+    }
+  }
+
+  private async openOwnerConsole(externalTelegramId: number | undefined) {
+    if (!this.ownerConsole || externalTelegramId === undefined) return { text: "Perintah tidak tersedia." };
+    try {
+      return await this.ownerConsole.open(externalTelegramId);
+    } catch (error) {
+      this.logger.error({ errorType: error instanceof Error ? error.name : "UnknownError" }, "Telegram Owner console authorization failed");
       return { text: "Permintaan belum dapat diproses. Silakan coba lagi." };
     }
   }

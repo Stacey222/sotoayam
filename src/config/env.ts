@@ -14,6 +14,7 @@ export interface AppConfig extends SupabaseConfig {
   telegramPollingEnabled: boolean;
   reminderSchedulerEnabled: boolean;
   reminderSchedulerIntervalSeconds: number;
+  businessTimeZone: string;
   logLevel: string;
 }
 
@@ -68,6 +69,16 @@ function parseSchedulerInterval(value: string | undefined): number {
   return seconds;
 }
 
+function parseBusinessTimeZone(value: string | undefined): string {
+  const timeZone = value?.trim() || "Asia/Jakarta";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date(0));
+  } catch {
+    throw new Error("Invalid environment variable: BUSINESS_TIME_ZONE");
+  }
+  return timeZone;
+}
+
 export function loadConfig(): AppConfig {
   const supabase = loadSupabaseConfig();
   return {
@@ -80,6 +91,7 @@ export function loadConfig(): AppConfig {
     telegramPollingEnabled: process.env.TELEGRAM_POLLING_ENABLED === "true",
     reminderSchedulerEnabled: process.env.REMINDER_SCHEDULER_ENABLED === "true",
     reminderSchedulerIntervalSeconds: parseSchedulerInterval(process.env.REMINDER_SCHEDULER_INTERVAL_SECONDS),
+    businessTimeZone: parseBusinessTimeZone(process.env.BUSINESS_TIME_ZONE),
     logLevel: process.env.LOG_LEVEL?.trim() || "info",
   };
 }

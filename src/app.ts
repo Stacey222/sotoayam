@@ -25,6 +25,7 @@ import { SupabaseAuditRepository } from "./repositories/audit.repository.js";
 import { SupabaseDivisionCollaborationRepository } from "./repositories/division-collaboration.repository.js";
 import { SupabaseImportBatchRepository, SupabaseTaskSourceIntegrationsRepository } from "./repositories/task-ingestion.repository.js";
 import { SupabaseReminderChannelsRepository, SupabaseReminderNotificationsRepository, SupabaseReminderRoutingRepository, SupabaseReminderSchedulerRepository, SupabaseReminderStateRepository, SupabaseReminderTasksRepository } from "./repositories/reminders.repository.js";
+import { SupabaseReportingRepository } from "./repositories/reporting.repository.js";
 import { adminUserManagementRoutes } from "./routes/admin-user-management.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
@@ -34,6 +35,7 @@ import { tasksRoutes } from "./routes/tasks.routes.js";
 import { collaborationRulesRoutes } from "./routes/collaboration-rules.routes.js";
 import { csvImportRoutes, internalTaskIngestionRoutes } from "./routes/task-ingestion.routes.js";
 import { adminNotificationsRoutes } from "./routes/admin-notifications.routes.js";
+import { reportsRoutes } from "./routes/reports.routes.js";
 import { NotificationService } from "./services/notification.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
 import { TelegramService, type TelegramSender } from "./services/telegram.service.js";
@@ -41,7 +43,7 @@ import { UserManagementService } from "./services/user-management.service.js";
 import { SystemAuthorityService } from "./services/system-authority.service.js";
 import { UserAccessStateService, type UserAccessStateResolver } from "./services/user-access-state.service.js";
 import { resolveUserAccessState } from "./identity/user-access-state.js";
-import { TelegramTaskActorService, TrustedTaskActorService } from "./services/task-actor.service.js";
+import { TelegramTaskActorService, TrustedOwnerActorService, TrustedTaskActorService } from "./services/task-actor.service.js";
 import { TaskAuthorizationService } from "./services/task-authorization.service.js";
 import { TaskService } from "./services/task.service.js";
 import { DivisionCollaborationService } from "./services/division-collaboration.service.js";
@@ -52,6 +54,7 @@ import { ReminderEvaluatorService } from "./services/reminder-evaluator.service.
 import { ReminderSchedulerService } from "./services/reminder-scheduler.service.js";
 import { NotificationOperationsService } from "./services/notification-operations.service.js";
 import { CollaborationRuleManagementService } from "./services/collaboration-rule-management.service.js";
+import { ReportingService } from "./services/reporting.service.js";
 import {
   TelegramRegistrationService,
   type TelegramRegistrationWriter,
@@ -59,6 +62,7 @@ import {
 import { TelegramBot } from "./telegram/bot.js";
 import { TelegramItConsoleService } from "./telegram/it-console.js";
 import { TelegramTaskConsoleService } from "./telegram/task-console.js";
+import { TelegramOwnerConsoleService } from "./telegram/owner-console.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -121,6 +125,7 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const taskIngestionService = client && taskService && divisionsRepository ? new TaskIngestionService(
     taskService, divisionsRepository, new SupabaseImportBatchRepository(client), new SupabaseAuditRepository(client),
   ) : undefined;
+  const reportingService = client ? new ReportingService(new SupabaseReportingRepository(client), options.config.businessTimeZone) : undefined;
   const reminderNotifications = client ? new SupabaseReminderNotificationsRepository(client) : undefined;
   const reminderSchedulerRepository = client ? new SupabaseReminderSchedulerRepository(client) : undefined;
   const reminderEvaluator = client && taskUsers && reminderNotifications && reminderSchedulerRepository ? new ReminderEvaluatorService(
@@ -151,14 +156,20 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     userManagementService,
     collaborationManagementService,
   ) : undefined;
-  const taskConsole = client && taskService && taskUsers && permissionsRepository && divisionsRepository && collaborationRepository
+  const telegramTaskActor = client && taskUsers && permissionsRepository
+    ? new TelegramTaskActorService(new SupabaseUserChannelsRepository(client), taskUsers, permissionsRepository)
+    : undefined;
+  const taskConsole = client && taskService && taskUsers && telegramTaskActor && divisionsRepository && collaborationRepository
     ? new TelegramTaskConsoleService(
         taskService,
-        new TelegramTaskActorService(new SupabaseUserChannelsRepository(client), taskUsers, permissionsRepository),
+        telegramTaskActor,
         taskUsers,
         divisionsRepository,
         collaborationRepository,
-      )
+    )
+    : undefined;
+  const ownerConsole = telegramTaskActor && reportingService
+    ? new TelegramOwnerConsoleService(telegramTaskActor, reportingService)
     : undefined;
   const bot = new TelegramBot(
     options.config.telegramBotToken,
@@ -168,6 +179,7 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     app.log,
     itConsole,
     taskConsole,
+    ownerConsole,
   );
 
   app.setErrorHandler((error, request, reply) => {
@@ -240,6 +252,10 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   if (notificationOperations && taskUsers && permissionsRepository) {
     await app.register(adminNotificationsRoutes, { prefix: "/api/admin/notifications", service: notificationOperations,
       actorResolver: new TrustedTaskActorService(taskUsers, permissionsRepository), adminApiKey: options.config.adminApiKey });
+  }
+  if (reportingService && taskUsers) {
+    await app.register(reportsRoutes, { prefix: "/api/reports", service: reportingService,
+      actorResolver: new TrustedOwnerActorService(taskUsers), adminApiKey: options.config.adminApiKey });
   }
   await app.register(notificationRoutes, {
     prefix: "/api/notifications",

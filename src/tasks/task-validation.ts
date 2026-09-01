@@ -2,7 +2,7 @@ import { AppError } from "../errors.js";
 import { parsePositiveId } from "../validation.js";
 import {
   TASK_ACTIVITY_TYPES, TASK_EVIDENCE_TYPES, TASK_PRIORITIES, TASK_RELATIONSHIP_TYPES,
-  TASK_STATUSES, TASK_VISIBILITIES, type AddTaskActivityInput, type CreateTaskInput,
+  TASK_STATUSES, TASK_VISIBILITIES, TASK_CATEGORIES, type AddTaskActivityInput, type CreateTaskInput,
   type EvidenceInput, type TaskFilters, type TaskPriority, type TaskRelationshipType,
   type TaskStatus, type TransitionTaskInput, type UpdateTaskInput,
 } from "./types.js";
@@ -35,21 +35,31 @@ function evidence(value: unknown): EvidenceInput | null | undefined {
 }
 
 export function parseCreateTask(bodyValue: unknown): CreateTaskInput {
-  const body = object(bodyValue); unknownField(body, ["title", "description", "priority", "deadline", "assigned_to", "owner_division_id"]);
+  const body = object(bodyValue); unknownField(body, ["title", "description", "priority", "deadline", "assigned_to", "owner_division_id", "task_category"]);
   if (typeof body.title !== "string") throw new AppError(400, "VALIDATION_ERROR", "Task title is required");
   if (body.priority !== undefined && (typeof body.priority !== "string" || !TASK_PRIORITIES.includes(body.priority as never))) throw new AppError(400, "VALIDATION_ERROR", "Invalid task priority");
   return { title: body.title, description: optionalString(body.description, "description"), priority: body.priority as TaskPriority | undefined,
     deadline: optionalString(body.deadline, "deadline"), assignedToUserId: optionalId(body.assigned_to, "assigned_to"),
-    ownerDivisionId: optionalId(body.owner_division_id, "owner_division_id") ?? undefined };
+    ownerDivisionId: optionalId(body.owner_division_id, "owner_division_id") ?? undefined,
+    taskCategory: category(body.task_category) };
 }
 
 export function parseUpdateTask(bodyValue: unknown): UpdateTaskInput {
-  const body = object(bodyValue); unknownField(body, ["title", "description", "priority", "deadline", "assigned_to"]);
+  const body = object(bodyValue); unknownField(body, ["title", "description", "priority", "deadline", "assigned_to", "task_category"]);
   if (Object.keys(body).length === 0) throw new AppError(400, "VALIDATION_ERROR", "At least one task field is required");
   if (body.title !== undefined && typeof body.title !== "string") throw new AppError(400, "VALIDATION_ERROR", "Task title must be a string");
   if (body.priority !== undefined && (typeof body.priority !== "string" || !TASK_PRIORITIES.includes(body.priority as never))) throw new AppError(400, "VALIDATION_ERROR", "Invalid task priority");
   return { title: body.title as string | undefined, description: optionalString(body.description, "description"), priority: body.priority as TaskPriority | undefined,
-    deadline: optionalString(body.deadline, "deadline"), assignedToUserId: optionalId(body.assigned_to, "assigned_to") };
+    deadline: optionalString(body.deadline, "deadline"), assignedToUserId: optionalId(body.assigned_to, "assigned_to"),
+    taskCategory: category(body.task_category) };
+}
+
+function category(value: unknown): CreateTaskInput["taskCategory"] {
+  if (value === undefined || value === null) return value as null | undefined;
+  if (typeof value !== "string" || !TASK_CATEGORIES.includes(value as never)) {
+    throw new AppError(400, "TASK_INVALID_CATEGORY", "Task category is not supported");
+  }
+  return value as CreateTaskInput["taskCategory"];
 }
 
 export function parseTransition(bodyValue: unknown): TransitionTaskInput {

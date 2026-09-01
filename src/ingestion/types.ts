@@ -1,4 +1,4 @@
-import type { TaskPriority, TaskReadModel, TaskSource } from "../tasks/types.js";
+import type { TaskCategory, TaskPriority, TaskReadModel, TaskSource } from "../tasks/types.js";
 
 export const TASK_INTAKE_CONTEXTS = ["HUMAN_IMPORT", "INTERNAL_AUTOMATION", "ERP_ADAPTER"] as const;
 export type TaskIntakeContextKind = typeof TASK_INTAKE_CONTEXTS[number];
@@ -9,6 +9,7 @@ export interface TaskIntakeRequest {
   description?: string | null;
   priority?: TaskPriority;
   source: Extract<TaskSource, "CSV_IMPORT" | "AUTOMATION" | "ERP">;
+  taskCategory?: TaskCategory | null;
   ownerDivision: string;
   assignee?: string | null;
   deadline?: string | null;

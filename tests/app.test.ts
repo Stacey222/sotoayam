@@ -26,6 +26,7 @@ const config: AppConfig = {
   telegramPollingEnabled: false,
   reminderSchedulerEnabled: false,
   reminderSchedulerIntervalSeconds: 300,
+  businessTimeZone: "Asia/Jakarta",
   logLevel: "silent",
 };
 

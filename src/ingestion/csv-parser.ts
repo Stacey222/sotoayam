@@ -2,7 +2,7 @@ import { AppError } from "../errors.js";
 
 export const CSV_MAX_BYTES = 256 * 1024;
 export const CSV_MAX_ROWS = 500;
-export const CSV_HEADERS = ["title", "owner_division", "description", "priority", "assignee", "deadline", "external_reference"] as const;
+export const CSV_HEADERS = ["title", "owner_division", "description", "priority", "assignee", "deadline", "external_reference", "task_category"] as const;
 
 export type CsvTaskRow = Record<typeof CSV_HEADERS[number], string>;
 

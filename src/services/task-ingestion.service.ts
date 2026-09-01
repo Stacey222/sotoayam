@@ -4,8 +4,8 @@ import type { TaskImportResponse, TaskImportRowResult, TaskIntakeContext, TaskIn
 import type { AuditRepository } from "../repositories/audit.repository.js";
 import type { DivisionsRepository } from "../repositories/divisions.repository.js";
 import type { ImportBatchRepository, TaskSourceIntegration } from "../repositories/task-ingestion.repository.js";
-import type { TaskActor, TaskPriority } from "../tasks/types.js";
-import { TASK_PRIORITIES } from "../tasks/types.js";
+import type { TaskActor, TaskCategory, TaskPriority } from "../tasks/types.js";
+import { TASK_CATEGORIES, TASK_PRIORITIES } from "../tasks/types.js";
 import type { TaskService } from "./task.service.js";
 
 export class TaskIngestionService {
@@ -106,10 +106,13 @@ export class TaskIngestionService {
     const priority = (row.priority || "NORMAL").toUpperCase();
     if (!TASK_PRIORITIES.includes(priority as TaskPriority)) throw new AppError(400, "INVALID_PRIORITY", "Task priority is invalid");
     if (row.deadline && !isStrictDate(row.deadline)) throw new AppError(400, "INVALID_DEADLINE", "Deadline must use YYYY-MM-DD");
+    const taskCategory = row.task_category ? row.task_category.toUpperCase() : null;
+    if (taskCategory && !TASK_CATEGORIES.includes(taskCategory as never)) throw new AppError(400, "TASK_INVALID_CATEGORY", "Task category is not supported");
     return {
       title: row.title, ownerDivision: row.owner_division, description: row.description || null,
       priority: priority as TaskPriority, assignee: row.assignee || null,
       deadline: row.deadline || null, externalReference: row.external_reference || null, source: "CSV_IMPORT",
+      taskCategory: taskCategory as TaskCategory | null,
     };
   }
 }

@@ -32,7 +32,7 @@ const actor = (overrides: Partial<TaskActor> = {}): TaskActor => ({
 });
 const task = (overrides: Partial<Task> = {}): Task => ({
   id: 1, title: "Produce affiliate video", description: "Five short videos", status: "OPEN", priority: "HIGH", source: "MANUAL",
-  source_reference: null, created_by_user_id: 1, requesting_division_id: 10, owner_division_id: 10,
+  source_reference: null, task_category: null, created_by_user_id: 1, requesting_division_id: 10, owner_division_id: 10,
   integration_id: null, import_batch_id: null,
   assigned_to_user_id: 1, deadline: "2026-08-30T23:59:59.999Z", started_at: null, completed_at: null,
   cancelled_at: null, created_at: now, updated_at: now, ...overrides,

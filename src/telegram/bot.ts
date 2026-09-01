@@ -7,6 +7,7 @@ import type { TelegramUser } from "../types/index.js";
 import type { TelegramItConsole } from "./it-console.js";
 import type { TelegramTaskConsole } from "./task-console.js";
 import type { TelegramOwnerConsole } from "./owner-console.js";
+import type { RuntimeHealthState } from "../runtime/health-state.js";
 
 interface TelegramUpdate {
   update_id: number;
@@ -55,6 +56,7 @@ export class TelegramBot {
     private readonly itConsole?: TelegramItConsole,
     private readonly taskConsole?: TelegramTaskConsole,
     private readonly ownerConsole?: TelegramOwnerConsole,
+    private readonly runtimeHealth?: RuntimeHealthState,
   ) {}
 
   async handleUpdate(update: TelegramUpdate): Promise<void> {
@@ -282,6 +284,7 @@ export class TelegramBot {
     this.logger.info("Telegram bot initialization started");
     await this.callTelegram<{ username?: string }>("getMe");
     this.logger.info("Telegram getMe succeeded");
+    if (this.runtimeHealth) this.runtimeHealth.telegramPollingActive = true;
     this.logger.info("Telegram polling started");
     while (!this.stopped) {
       this.controller = new AbortController();
@@ -334,6 +337,7 @@ export class TelegramBot {
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
+    if (this.runtimeHealth) this.runtimeHealth.telegramPollingActive = false;
   }
 
   private async callTelegram<T>(method: string): Promise<T> {
@@ -360,6 +364,7 @@ export class TelegramBot {
 
   stop(): void {
     this.stopped = true;
+    if (this.runtimeHealth) this.runtimeHealth.telegramPollingActive = false;
     this.controller?.abort();
   }
 }

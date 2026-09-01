@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { parseCriticalAlertPolicy, type CriticalAlertPolicy } from "../alerts/policy.js";
 
 export interface SupabaseConfig {
   supabaseUrl: string;
@@ -15,6 +16,8 @@ export interface AppConfig extends SupabaseConfig {
   reminderSchedulerEnabled: boolean;
   reminderSchedulerIntervalSeconds: number;
   businessTimeZone: string;
+  criticalAlertEvaluatorEnabled: boolean;
+  criticalAlertPolicy: CriticalAlertPolicy;
   logLevel: string;
 }
 
@@ -81,7 +84,7 @@ function parseBusinessTimeZone(value: string | undefined): string {
 
 export function loadConfig(): AppConfig {
   const supabase = loadSupabaseConfig();
-  return {
+  const config: AppConfig = {
     ...supabase,
     telegramBotToken: requireEnv("TELEGRAM_BOT_TOKEN"),
     internalApiKey: requireEnv("INTERNAL_API_KEY"),
@@ -92,8 +95,14 @@ export function loadConfig(): AppConfig {
     reminderSchedulerEnabled: process.env.REMINDER_SCHEDULER_ENABLED === "true",
     reminderSchedulerIntervalSeconds: parseSchedulerInterval(process.env.REMINDER_SCHEDULER_INTERVAL_SECONDS),
     businessTimeZone: parseBusinessTimeZone(process.env.BUSINESS_TIME_ZONE),
+    criticalAlertEvaluatorEnabled: process.env.CRITICAL_ALERT_EVALUATOR_ENABLED === "true",
+    criticalAlertPolicy: parseCriticalAlertPolicy(process.env.CRITICAL_ALERT_POLICY_JSON),
     logLevel: process.env.LOG_LEVEL?.trim() || "info",
   };
+  if (config.criticalAlertEvaluatorEnabled && !config.reminderSchedulerEnabled) {
+    throw new Error("Invalid environment: CRITICAL_ALERT_EVALUATOR_ENABLED requires REMINDER_SCHEDULER_ENABLED");
+  }
+  return config;
 }
 
 export function loadSupabaseConfig(): SupabaseConfig {

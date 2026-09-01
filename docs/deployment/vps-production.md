@@ -30,6 +30,8 @@ TELEGRAM_POLLING_ENABLED
 REMINDER_SCHEDULER_ENABLED
 REMINDER_SCHEDULER_INTERVAL_SECONDS
 BUSINESS_TIME_ZONE
+CRITICAL_ALERT_EVALUATOR_ENABLED
+# CRITICAL_ALERT_POLICY_JSON (optional validated override)
 LOG_LEVEL
 ```
 
@@ -38,6 +40,8 @@ Use the Gwens Automation bot token, never the Hermes token. Permissions must be 
 Keep `REMINDER_SCHEDULER_ENABLED=false` on laptops. For a production cutover, deploy with the scheduler disabled, verify health and a reminder dry-run, then set it to `true` on the VPS and restart the single service process. The bounded interval defaults to 300 seconds.
 
 Reporting uses `BUSINESS_TIME_ZONE=Asia/Jakarta` for deterministic business-date boundaries while database timestamps remain UTC.
+
+Keep `CRITICAL_ALERT_EVALUATOR_ENABLED=false` on laptops and during the first production cutover. Run the protected IT dry-run, verify zero unintended candidates and mutations, then enable it on the VPS. It runs under the existing reminder scheduler timer with its own durable overlap lease; it does not create a second scheduler timer or send OWNER push broadcasts.
 
 Production must set `HOST=127.0.0.1`, keeping port 3000 private to the VPS. The default `0.0.0.0` remains available for compatible local development only.
 

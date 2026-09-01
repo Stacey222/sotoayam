@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { loadSupabaseConfig, type AppConfig } from "../../src/config/env.js";
+import { DEFAULT_CRITICAL_ALERT_POLICY } from "../../src/alerts/policy.js";
 import { DatabaseError } from "../../src/errors.js";
 import type { TelegramUsersRepository } from "../../src/repositories/telegram-users.repository.js";
 import { NotificationService } from "../../src/services/notification.service.js";
@@ -28,6 +29,8 @@ const config: AppConfig = {
   reminderSchedulerEnabled: false,
   reminderSchedulerIntervalSeconds: 300,
   businessTimeZone: "Asia/Jakarta",
+  criticalAlertEvaluatorEnabled: false,
+  criticalAlertPolicy: DEFAULT_CRITICAL_ALERT_POLICY,
   logLevel: "silent",
 };
 

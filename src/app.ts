@@ -26,6 +26,7 @@ import { SupabaseDivisionCollaborationRepository } from "./repositories/division
 import { SupabaseImportBatchRepository, SupabaseTaskSourceIntegrationsRepository } from "./repositories/task-ingestion.repository.js";
 import { SupabaseReminderChannelsRepository, SupabaseReminderNotificationsRepository, SupabaseReminderRoutingRepository, SupabaseReminderSchedulerRepository, SupabaseReminderStateRepository, SupabaseReminderTasksRepository } from "./repositories/reminders.repository.js";
 import { SupabaseReportingRepository } from "./repositories/reporting.repository.js";
+import { SupabaseCriticalAlertsRepository, SupabaseCriticalAlertSignalsRepository } from "./repositories/critical-alerts.repository.js";
 import { adminUserManagementRoutes } from "./routes/admin-user-management.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
@@ -36,6 +37,7 @@ import { collaborationRulesRoutes } from "./routes/collaboration-rules.routes.js
 import { csvImportRoutes, internalTaskIngestionRoutes } from "./routes/task-ingestion.routes.js";
 import { adminNotificationsRoutes } from "./routes/admin-notifications.routes.js";
 import { reportsRoutes } from "./routes/reports.routes.js";
+import { adminCriticalAlertRoutes, criticalAlertsRoutes } from "./routes/critical-alerts.routes.js";
 import { NotificationService } from "./services/notification.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
 import { TelegramService, type TelegramSender } from "./services/telegram.service.js";
@@ -55,6 +57,8 @@ import { ReminderSchedulerService } from "./services/reminder-scheduler.service.
 import { NotificationOperationsService } from "./services/notification-operations.service.js";
 import { CollaborationRuleManagementService } from "./services/collaboration-rule-management.service.js";
 import { ReportingService } from "./services/reporting.service.js";
+import { CriticalAlertEvaluatorService } from "./services/critical-alert-evaluator.service.js";
+import { CriticalAlertService } from "./services/critical-alert.service.js";
 import {
   TelegramRegistrationService,
   type TelegramRegistrationWriter,
@@ -63,6 +67,7 @@ import { TelegramBot } from "./telegram/bot.js";
 import { TelegramItConsoleService } from "./telegram/it-console.js";
 import { TelegramTaskConsoleService } from "./telegram/task-console.js";
 import { TelegramOwnerConsoleService } from "./telegram/owner-console.js";
+import { RuntimeHealthState } from "./runtime/health-state.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -81,6 +86,7 @@ export interface AppRuntime {
 
 export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const app = Fastify({ logger: options.logger === false ? false : { level: options.config.logLevel } });
+  const runtimeHealth = new RuntimeHealthState();
   const client = options.repository ? null : createSupabaseClient(options.config);
   const repository = options.repository ?? new SupabaseTelegramUsersRepository(client!);
   const registrationWriter = options.registrationWriter
@@ -126,6 +132,17 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     taskService, divisionsRepository, new SupabaseImportBatchRepository(client), new SupabaseAuditRepository(client),
   ) : undefined;
   const reportingService = client ? new ReportingService(new SupabaseReportingRepository(client), options.config.businessTimeZone) : undefined;
+  const criticalAlertSignals = client ? new SupabaseCriticalAlertSignalsRepository(client) : undefined;
+  const criticalAlertsRepository = client ? new SupabaseCriticalAlertsRepository(client) : undefined;
+  const criticalAlertEvaluator = criticalAlertSignals && criticalAlertsRepository ? new CriticalAlertEvaluatorService(
+    criticalAlertSignals, criticalAlertsRepository, options.config.criticalAlertPolicy, options.config.reminderSchedulerEnabled,
+  ) : undefined;
+  const criticalAlertService = criticalAlertSignals && criticalAlertsRepository ? new CriticalAlertService(
+    criticalAlertsRepository, criticalAlertSignals, options.config.criticalAlertPolicy,
+    { telegramPollingEnabled: options.config.telegramPollingEnabled, telegramPollingActive: () => runtimeHealth.telegramPollingActive,
+      reminderSchedulerEnabled: options.config.reminderSchedulerEnabled,
+      alertEvaluatorEnabled: options.config.criticalAlertEvaluatorEnabled },
+  ) : undefined;
   const reminderNotifications = client ? new SupabaseReminderNotificationsRepository(client) : undefined;
   const reminderSchedulerRepository = client ? new SupabaseReminderSchedulerRepository(client) : undefined;
   const reminderEvaluator = client && taskUsers && reminderNotifications && reminderSchedulerRepository ? new ReminderEvaluatorService(
@@ -135,7 +152,8 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     reminderSchedulerRepository,
   ) : undefined;
   const reminderScheduler = reminderEvaluator ? new ReminderSchedulerService(reminderEvaluator,
-    options.config.reminderSchedulerEnabled, options.config.reminderSchedulerIntervalSeconds * 1000, app.log) : undefined;
+    options.config.reminderSchedulerEnabled, options.config.reminderSchedulerIntervalSeconds * 1000, app.log,
+    criticalAlertEvaluator, options.config.criticalAlertEvaluatorEnabled) : undefined;
   const notificationOperations = reminderEvaluator && reminderNotifications && reminderSchedulerRepository
     ? new NotificationOperationsService(reminderNotifications, reminderSchedulerRepository, reminderEvaluator,
         options.config.reminderSchedulerEnabled, options.config.reminderSchedulerIntervalSeconds)
@@ -169,7 +187,7 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     )
     : undefined;
   const ownerConsole = telegramTaskActor && reportingService
-    ? new TelegramOwnerConsoleService(telegramTaskActor, reportingService)
+    ? new TelegramOwnerConsoleService(telegramTaskActor, reportingService, criticalAlertService)
     : undefined;
   const bot = new TelegramBot(
     options.config.telegramBotToken,
@@ -180,6 +198,7 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     itConsole,
     taskConsole,
     ownerConsole,
+    runtimeHealth,
   );
 
   app.setErrorHandler((error, request, reply) => {
@@ -256,6 +275,14 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   if (reportingService && taskUsers) {
     await app.register(reportsRoutes, { prefix: "/api/reports", service: reportingService,
       actorResolver: new TrustedOwnerActorService(taskUsers), adminApiKey: options.config.adminApiKey });
+  }
+  if (criticalAlertService && taskUsers) {
+    await app.register(criticalAlertsRoutes, { prefix: "/api/alerts", service: criticalAlertService,
+      actorResolver: new TrustedOwnerActorService(taskUsers), adminApiKey: options.config.adminApiKey });
+  }
+  if (criticalAlertEvaluator && taskUsers && permissionsRepository) {
+    await app.register(adminCriticalAlertRoutes, { prefix: "/api/admin/alerts", evaluator: criticalAlertEvaluator,
+      actorResolver: new TrustedTaskActorService(taskUsers, permissionsRepository), adminApiKey: options.config.adminApiKey });
   }
   await app.register(notificationRoutes, {
     prefix: "/api/notifications",

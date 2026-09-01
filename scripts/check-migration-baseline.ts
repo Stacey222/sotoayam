@@ -49,6 +49,7 @@ function main(): void {
     { name: "INGESTION_FOUNDATION", passed: run(npm, ["run", "check:ingestion-schema"]) },
     { name: "NOTIFICATION_FOUNDATION", passed: run(npm, ["run", "check:notification-schema"]) },
     { name: "REPORTING_FOUNDATION", passed: run(npm, ["run", "check:reporting-schema"]) },
+    { name: "CRITICAL_ALERT_FOUNDATION", passed: run(npm, ["run", "check:critical-alert-schema"]) },
     { name: "SUPABASE_CONNECTION", passed: run(npm, ["run", "check:supabase"]) },
     { name: "RECONCILIATION_HARNESS", passed: run(npm, ["run", "check:reconciliation"]) },
     { name: "SECRET_SCAN", passed: run(npm, ["run", "check:secrets"]) },

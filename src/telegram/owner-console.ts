@@ -2,6 +2,8 @@ import { AppError } from "../errors.js";
 import { parseReportWindow } from "../reporting/time-window.js";
 import type { AffiliateTaskStatusReport, ReportDrillDown, ReportDrillDownResult, ReportWindow } from "../reporting/types.js";
 import type { ReportingService } from "../services/reporting.service.js";
+import type { CriticalAlertService } from "../services/critical-alert.service.js";
+import type { PersistedAlertSeverity } from "../alerts/types.js";
 import type { TelegramTaskActorResolver } from "../services/task-actor.service.js";
 import type { TelegramInlineButton } from "../services/telegram.service.js";
 import type { TelegramConsoleResponse } from "./it-console.js";
@@ -15,7 +17,7 @@ const button = (text: string, callback_data: string): TelegramInlineButton => ({
 const unavailable = (): TelegramConsoleResponse => ({ text: "Perintah tidak tersedia." });
 
 export class TelegramOwnerConsoleService implements TelegramOwnerConsole {
-  constructor(private readonly actors: TelegramTaskActorResolver, private readonly reports: ReportingService) {}
+  constructor(private readonly actors: TelegramTaskActorResolver, private readonly reports: ReportingService, private readonly alerts?: CriticalAlertService) {}
 
   async open(externalTelegramId: number): Promise<TelegramConsoleResponse> {
     const actor = await this.owner(externalTelegramId);
@@ -29,7 +31,15 @@ export class TelegramOwnerConsoleService implements TelegramOwnerConsole {
     if (data === "oc:r") return this.divisionMenu();
     if (data === "oc:d") return this.reportMenu();
     if (data === "oc:w") return this.windowMenu();
-    if (["oc:c", "oc:a", "oc:s"].includes(data)) return this.placeholder();
+    if (data === "oc:c") return this.alertMenu();
+    if (data === "oc:s") return await this.automationStatus(actor);
+    if (data === "oc:a") return this.placeholder();
+    let alertMatch = /^oc:cf:(c|h|w|a)$/.exec(data);
+    if (alertMatch) return await this.alertList(actor, alertMatch[1]!);
+    alertMatch = /^oc:cd:(\d+)$/.exec(data);
+    if (alertMatch) return await this.alertDetail(actor, Number(alertMatch[1]));
+    alertMatch = /^oc:ca:(\d+)$/.exec(data);
+    if (alertMatch) return await this.acknowledge(actor, Number(alertMatch[1]));
     let match = /^oc:v:(t|7|30)$/.exec(data);
     if (match) return this.result(await this.reports.affiliateTaskStatus(actor, this.window(match[1]!)));
     match = /^oc:l:(b|o|u):(t|7|30):(\d+)$/.exec(data);
@@ -68,8 +78,46 @@ export class TelegramOwnerConsoleService implements TelegramOwnerConsole {
     ] };
   }
   private placeholder(): TelegramConsoleResponse {
-    return { text: "Fitur belum tersedia pada Slice 8.", inlineKeyboard: [[button("Back", "oc:m")]] };
+    return { text: "Fitur belum tersedia.", inlineKeyboard: [[button("Back", "oc:m")]] };
   }
+
+  private alertMenu(): TelegramConsoleResponse {
+    return { text: "Critical Alerts\n\nPilih severity:", inlineKeyboard: [
+      [button("CRITICAL", "oc:cf:c"), button("HIGH", "oc:cf:h")],
+      [button("WARNING", "oc:cf:w"), button("ALL ACTIVE", "oc:cf:a")], [button("Back", "oc:m")],
+    ] };
+  }
+  private async alertList(actor: Awaited<ReturnType<TelegramTaskActorResolver["resolveTelegramActor"]>>, code: string): Promise<TelegramConsoleResponse> {
+    if (!this.alerts) return this.unavailableFeature();
+    const severity = code === "c" ? "CRITICAL" : code === "h" ? "HIGH" : code === "w" ? "WARNING" : undefined;
+    const rows = await this.alerts.list(actor, severity as PersistedAlertSeverity | undefined);
+    if (!rows.length) return { text: `Critical Alerts — ${severity ?? "ALL ACTIVE"}\n\nTidak ada alert aktif.`, inlineKeyboard: [[button("Back", "oc:c")]] };
+    const keyboard = rows.slice(0, 8).map((item) => [button(`${item.severity} · ${this.compact(item.summary, 35)}`, `oc:cd:${item.id}`)]);
+    keyboard.push([button("Refresh", `oc:cf:${code}`), button("Back", "oc:c")]);
+    return { text: `Critical Alerts — ${severity ?? "ALL ACTIVE"}\n\n${rows.length} alert aktif.`, inlineKeyboard: keyboard };
+  }
+  private async alertDetail(actor: Awaited<ReturnType<TelegramTaskActorResolver["resolveTelegramActor"]>>, id: number): Promise<TelegramConsoleResponse> {
+    if (!this.alerts) return this.unavailableFeature();
+    const item = await this.alerts.get(actor, id);
+    const keyboard = item.status === "OPEN" ? [[button("Acknowledge", `oc:ca:${id}`)], [button("Back", "oc:cf:a")]] : [[button("Back", "oc:cf:a")]];
+    return { text: ["Critical Alert", "", `Type: ${item.type}`, `Severity: ${item.severity}`, `Status: ${item.status}`,
+      `Affected: ${item.affectedReference}`, `First detected: ${item.firstDetectedAt}`, `Last detected: ${item.lastDetectedAt}`,
+      `Occurrences: ${item.occurrenceCount}`, "", this.compact(item.summary, 500)].join("\n"), inlineKeyboard: keyboard };
+  }
+  private async acknowledge(actor: Awaited<ReturnType<TelegramTaskActorResolver["resolveTelegramActor"]>>, id: number): Promise<TelegramConsoleResponse> {
+    if (!this.alerts) return this.unavailableFeature();
+    await this.alerts.acknowledge(actor, id);
+    return this.alertDetail(actor, id);
+  }
+  private async automationStatus(actor: Awaited<ReturnType<TelegramTaskActorResolver["resolveTelegramActor"]>>): Promise<TelegramConsoleResponse> {
+    if (!this.alerts) return this.unavailableFeature();
+    const status = await this.alerts.automationStatus(actor);
+    return { text: ["Automation Status", "", `Overall: ${status.overall}`, `Gwens runtime: ${status.runtime}`,
+      `Telegram polling: ${status.telegramPolling}`, `Reminder scheduler: ${status.reminderScheduler}`,
+      `Critical Alert evaluator: ${status.criticalAlertEvaluator}`, `Notification delivery: ${status.notificationDelivery}`,
+      `Active integrations: ${status.activeIntegrations}`].join("\n"), inlineKeyboard: [[button("Refresh", "oc:s"), button("Back", "oc:m")]] };
+  }
+  private unavailableFeature(): TelegramConsoleResponse { return { text: "Fitur belum tersedia.", inlineKeyboard: [[button("Back", "oc:m")]] }; }
 
   private result(report: AffiliateTaskStatusReport): TelegramConsoleResponse {
     const rate = report.completionRate === null ? "Tidak tersedia" : `${report.completionRate.toFixed(1)}%`;

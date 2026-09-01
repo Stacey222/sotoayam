@@ -75,6 +75,36 @@ describe("Supabase server credential validation", () => {
     expect(loadConfig().telegramPollingEnabled).toBe(false);
   });
 
+  it("keeps the critical alert evaluator disabled by default", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("CRITICAL_ALERT_EVALUATOR_ENABLED", "");
+    expect(loadConfig().criticalAlertEvaluatorEnabled).toBe(false);
+  });
+
+  it("validates one normalized critical alert policy override", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("CRITICAL_ALERT_POLICY_JSON", '{"overdue":{"warningHours":2,"highHours":24,"criticalHours":72}}');
+    expect(loadConfig().criticalAlertPolicy.overdue.warningHours).toBe(2);
+    vi.stubEnv("CRITICAL_ALERT_POLICY_JSON", '{"overdue":{"warningHours":24,"highHours":2,"criticalHours":72}}');
+    expect(() => loadConfig()).toThrow("Invalid critical alert policy ordering: overdue");
+  });
+
+  it("requires the existing scheduler when critical alert evaluation is enabled", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("CRITICAL_ALERT_EVALUATOR_ENABLED", "true");
+    vi.stubEnv("REMINDER_SCHEDULER_ENABLED", "false");
+    expect(() => loadConfig()).toThrow("CRITICAL_ALERT_EVALUATOR_ENABLED requires REMINDER_SCHEDULER_ENABLED");
+  });
+
   it("rejects an unsafe reminder scheduler interval", () => {
     vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");

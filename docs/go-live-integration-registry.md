@@ -1,0 +1,26 @@
+# Go-Live Integration Registry
+
+Production currently has zero integration identities and zero active integrations. The entries below are planning records only; none exists in or is activated in production. Machine identities must never be represented by fake human users.
+
+## Capability contract
+
+Conceptual least-privilege capabilities are `TASK_CREATE`, `TASK_READ`, `EVENT_SUBMIT`, `REPORT_DATA_SUBMIT`, and `INTEGRATION_STATUS_UPDATE`. No integration may receive `USER_ADMIN`, `ROLE_ADMIN`, `SYSTEM_ADMIN`, `OWNER`, or `COLLABORATION_RULE_ADMIN` through internal API access.
+
+The current `task_source_integrations` identity contains code, source (`AUTOMATION` or `ERP`), requesting Divisi, and active status. The internal automation endpoint authenticates a shared internal key plus an active integration code, then permits canonical task intake. It has no per-integration capability assignment or enforcement.
+
+`INTEGRATION_CAPABILITY_GAP = true`
+
+Smallest proposed extension: an additive `integration_capabilities` table keyed by integration identity and validated capability code, with a unique pair constraint, RLS enabled, no public policies, and no default grants. Endpoint/service authorization must require the exact capability before invoking canonical services. This is `PROPOSED`, not implemented in Stage 1.
+
+## Planned registry
+
+| Planned code | Purpose / source | Direction | Authentication concept | Allowed capabilities to approve | Always forbidden | Expected domain | Task create | Report input | Alert input | Production status | Information required |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `N8N_MAIN` | Controlled orchestration | Bidirectional transport through Gwens API | Dedicated machine credential plus integration identity; secret outside Git | Per-workflow subset | All administration/authority capabilities | Canonical intake and approved events | Proposed | Proposed | Proposed | `PLANNED` | Hosting, owner, workflows, retry and credential lifecycle |
+| `ERP_GWENS` | Actual ERP adapter | ERP to Gwens initially | ERP-supported machine auth plus Gwens integration identity | To be derived from discovery | All administration/authority capabilities | Products, inventory, warehouse, purchase and sales facts | `MISSING_INPUT` | `MISSING_INPUT` | `MISSING_INPUT` | `PLANNED` | Complete ERP discovery contract |
+| `BIGSELLER_MAIN` | Marketplace operations source | BigSeller to Gwens initially | Vendor-supported machine auth plus Gwens integration identity | To be derived from beta use cases | All administration/authority capabilities | Orders, inventory, sales, fulfillment, listings | `MISSING_INPUT` | `MISSING_INPUT` | `MISSING_INPUT` | `PLANNED` | API availability, account scope, identifiers, rate limits |
+| `META_MARKETING` | Marketing/ad performance source | Meta to Gwens | Vendor-supported OAuth/service mechanism | `REPORT_DATA_SUBMIT` only if approved | All task/admin capabilities unless separately approved | Aggregated campaign performance | No | Proposed | No | `PLANNED` | Product/API eligibility, metrics, account ownership, consent |
+| `SHOPEE_SOURCE` | Legitimate marketplace data source | Shopee to Gwens | Supported partner/app mechanism | Workflow-specific, not yet approved | All administration/authority capabilities | Approved marketplace facts | `MISSING_INPUT` | Proposed | `MISSING_INPUT` | Supported API/data access and allowed use cases |
+| `HERMES_AI` | Structured reasoning assistant | Gwens request/response | Dedicated machine credential | No canonical write by default | All authority and direct lifecycle capabilities | Structured recommendations | No | No | No | `PLANNED` | Schema, privacy, model governance, failure behavior |
+
+Planned codes are documentation labels, not production seeds or credentials.

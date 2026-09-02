@@ -5,6 +5,7 @@ import type { UserManagementService } from "../services/user-management.service.
 import type { TelegramInlineButton } from "../services/telegram.service.js";
 import type { ManagedUser, UserManagementStatus } from "../user-management/types.js";
 import type { CollaborationRuleReader } from "../services/collaboration-rule-management.service.js";
+import { normalizeBusinessUserCode } from "../identity/business-user-code.js";
 
 export interface TelegramConsoleResponse {
   text: string;
@@ -14,10 +15,18 @@ export interface TelegramConsoleResponse {
 export interface TelegramItConsole {
   open(externalTelegramId: number): Promise<TelegramConsoleResponse>;
   handleCallback(externalTelegramId: number, data: string): Promise<TelegramConsoleResponse>;
+  handleText(externalTelegramId: number, text: string): Promise<TelegramConsoleResponse | null>;
 }
 
 interface AuthorizedActor {
   userId: number;
+}
+
+interface BusinessCodeState {
+  actorUserId: number;
+  targetUserId: number;
+  proposedCode: string | null | undefined;
+  expiresAt: number;
 }
 
 const unavailable = (): TelegramConsoleResponse => ({ text: "Perintah tidak tersedia." });
@@ -25,6 +34,7 @@ const button = (text: string, callback_data: string): TelegramInlineButton => ({
 const PAGE_SIZE = 5;
 
 export class TelegramItConsoleService implements TelegramItConsole {
+  private readonly businessCodeStates = new Map<number, BusinessCodeState>();
   constructor(
     private readonly channels: UserChannelsRepository,
     private readonly authorities: SystemAuthorityRepository,
@@ -60,7 +70,37 @@ export class TelegramItConsoleService implements TelegramItConsole {
     if (match) return this.activePreview(match[1]!, Number(match[2]));
     match = /^ac:c:(a|z):(\d+)$/.exec(data);
     if (match) return this.setActive(actor, match[1]!, Number(match[2]));
+    match = /^ac:kb:(\d+)$/.exec(data);
+    if (match) return this.beginBusinessCode(externalTelegramId, actor, Number(match[1]));
+    match = /^ac:kc:(\d+)$/.exec(data);
+    if (match) return this.confirmBusinessCode(externalTelegramId, actor, Number(match[1]));
     return unavailable();
+  }
+
+  async handleText(externalTelegramId: number, rawText: string): Promise<TelegramConsoleResponse | null> {
+    const state = this.businessCodeStates.get(externalTelegramId);
+    if (!state) return null;
+    const actor = await this.authorize(externalTelegramId);
+    if (!actor || actor.userId !== state.actorUserId || state.expiresAt < Date.now()) {
+      this.businessCodeStates.delete(externalTelegramId);
+      return null;
+    }
+    const value = rawText.trim();
+    if (/^\/cancel$/i.test(value)) {
+      this.businessCodeStates.delete(externalTelegramId);
+      return { text: "Perubahan business user code dibatalkan.", inlineKeyboard: [[button("Back", `ac:d:${state.targetUserId}:a:0`)]] };
+    }
+    try {
+      state.proposedCode = /^NONE$/i.test(value) ? null : normalizeBusinessUserCode(value);
+      state.expiresAt = Date.now() + 5 * 60_000;
+      return { text: `Konfirmasi Business User Code\n\nNilai baru: ${state.proposedCode ?? "Belum ditetapkan"}\n\nPerubahan kode yang sudah ada dapat memengaruhi integrasi.`,
+        inlineKeyboard: [[button("Confirm", `ac:kc:${state.targetUserId}`), button("Cancel", `ac:d:${state.targetUserId}:a:0`)]] };
+    } catch (error) {
+      if (error instanceof AppError && error.code === "BUSINESS_USER_CODE_INVALID") {
+        return { text: `${error.message}\n\nKirim kode yang valid, NONE untuk menghapus, atau /cancel.` };
+      }
+      throw error;
+    }
   }
 
   private async authorize(externalTelegramId: number): Promise<AuthorizedActor | null> {
@@ -136,10 +176,29 @@ export class TelegramItConsoleService implements TelegramItConsole {
     const id = user.id;
     const actions: TelegramInlineButton[][] = [
       [button("Assign Division", `ac:x:d:${id}`), button("Assign Role", `ac:x:r:${id}`)],
+      [button("Business User Code", `ac:kb:${id}`)],
       [user.active ? button("Deactivate", `ac:v:z:${id}`) : button("Activate", `ac:v:a:${id}`)],
       [button("Back", `ac:l:${this.statusCode(status)}:${page}`)],
     ];
     return { text: `${notice ? `${notice}\n\n` : ""}User Detail\n\n${this.userDetailText(user)}`, inlineKeyboard: actions };
+  }
+
+  private async beginBusinessCode(externalTelegramId: number, actor: AuthorizedActor, id: number): Promise<TelegramConsoleResponse> {
+    const user = await this.safeUser(id);
+    if (!user) return unavailable();
+    this.businessCodeStates.set(externalTelegramId, { actorUserId: actor.userId, targetUserId: id, proposedCode: undefined, expiresAt: Date.now() + 5 * 60_000 });
+    return { text: `Business User Code\n\nUser: ${this.safeName(user)}\nCurrent: ${user.business_user_code ?? "Belum ditetapkan"}\n\nKirim kode baru (3-40 karakter, huruf/angka/hyphen, diawali huruf). Kirim NONE untuk menghapus atau /cancel.` };
+  }
+
+  private async confirmBusinessCode(externalTelegramId: number, actor: AuthorizedActor, id: number): Promise<TelegramConsoleResponse> {
+    const state = this.businessCodeStates.get(externalTelegramId);
+    if (!state || state.actorUserId !== actor.userId || state.targetUserId !== id || state.proposedCode === undefined || state.expiresAt < Date.now()) {
+      this.businessCodeStates.delete(externalTelegramId);
+      return unavailable();
+    }
+    const updated = await this.users.updateBusinessUserCode(id, { business_user_code: state.proposedCode, confirm_change: true }, "telegram_it_console", actor.userId);
+    this.businessCodeStates.delete(externalTelegramId);
+    return this.userDetailResponse(updated, this.category(updated), 0, "Business user code berhasil diperbarui.");
   }
 
   private async catalog(kind: string, id: number): Promise<TelegramConsoleResponse> {
@@ -229,7 +288,7 @@ export class TelegramItConsoleService implements TelegramItConsole {
   }
 
   private userDetailText(user: ManagedUser): string {
-    return `Name: ${this.safeName(user)}\nTelegram Connected: ${user.telegram_connected ? "Yes" : "No"}\nDivision: ${user.division?.code ?? "Belum ditetapkan"}\nRole: ${user.role?.code ?? "Belum ditetapkan"}\nStatus: ${user.active ? "Aktif" : "Tidak aktif"}`;
+    return `Name: ${this.safeName(user)}\nBusiness User Code: ${user.business_user_code ?? "Belum ditetapkan"}\nTelegram Connected: ${user.telegram_connected ? "Yes" : "No"}\nDivision: ${user.division?.code ?? "Belum ditetapkan"}\nRole: ${user.role?.code ?? "Belum ditetapkan"}\nStatus: ${user.active ? "Aktif" : "Tidak aktif"}`;
   }
 
   private safeName(user: ManagedUser): string {

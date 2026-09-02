@@ -4,6 +4,8 @@ import type { TaskImportResponse, TaskImportRowResult, TaskIntakeContext, TaskIn
 import type { AuditRepository } from "../repositories/audit.repository.js";
 import type { DivisionsRepository } from "../repositories/divisions.repository.js";
 import type { ImportBatchRepository, TaskSourceIntegration } from "../repositories/task-ingestion.repository.js";
+import type { TaskDirectoryRepository } from "../repositories/task-users.repository.js";
+import { normalizeBusinessUserCode } from "../identity/business-user-code.js";
 import type { TaskActor, TaskCategory, TaskPriority } from "../tasks/types.js";
 import { TASK_CATEGORIES, TASK_PRIORITIES } from "../tasks/types.js";
 import type { TaskService } from "./task.service.js";
@@ -14,6 +16,7 @@ export class TaskIngestionService {
     private readonly divisions: DivisionsRepository,
     private readonly batches: ImportBatchRepository,
     private readonly audit: AuditRepository,
+    private readonly users: TaskDirectoryRepository,
   ) {}
 
   async importCsv(actor: TaskActor, csv: string, options: { dryRun: boolean; safeLabel: string | null }): Promise<TaskImportResponse> {
@@ -86,17 +89,21 @@ export class TaskIngestionService {
       created_rows: created, failed_rows: failed, results };
   }
 
-  private async resolve(input: TaskIntakeRequest): Promise<TaskIntakeRequest & { ownerDivisionId: number; assignedToUserId: null }> {
+  private async resolve(input: TaskIntakeRequest): Promise<TaskIntakeRequest & { ownerDivisionId: number; assignedToUserId: number | null }> {
     const divisionCode = input.ownerDivision.trim().toUpperCase();
     if (!divisionCode || divisionCode.length > 100 || !/^[A-Z][A-Z0-9_]*$/.test(divisionCode)) {
       throw new AppError(400, "INVALID_DIVISION", "Owner Divisi code is invalid");
     }
     const division = await this.divisions.findByCode(divisionCode);
     if (!division?.active) throw new AppError(400, "INVALID_DIVISION", "Owner Divisi is unknown or inactive");
+    let assignedToUserId: number | null = null;
     if (input.assignee?.trim()) {
-      throw new AppError(400, "INVALID_ASSIGNEE", "Assignee import is unavailable until a unique business identifier exists");
+      const code = normalizeBusinessUserCode(input.assignee);
+      const user = await this.users.findByBusinessUserCode(code);
+      if (!user) throw new AppError(400, "BUSINESS_USER_NOT_FOUND", "Business user code was not found");
+      assignedToUserId = user.id;
     }
-    return { ...input, ownerDivision: divisionCode, ownerDivisionId: division.id, assignedToUserId: null };
+    return { ...input, ownerDivision: divisionCode, ownerDivisionId: division.id, assignedToUserId };
   }
 
   private fromCsv(row: CsvTaskRow): TaskIntakeRequest {

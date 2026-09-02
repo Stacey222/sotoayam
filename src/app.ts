@@ -27,6 +27,7 @@ import { SupabaseImportBatchRepository, SupabaseTaskSourceIntegrationsRepository
 import { SupabaseReminderChannelsRepository, SupabaseReminderNotificationsRepository, SupabaseReminderRoutingRepository, SupabaseReminderSchedulerRepository, SupabaseReminderStateRepository, SupabaseReminderTasksRepository } from "./repositories/reminders.repository.js";
 import { SupabaseReportingRepository } from "./repositories/reporting.repository.js";
 import { SupabaseCriticalAlertsRepository, SupabaseCriticalAlertSignalsRepository } from "./repositories/critical-alerts.repository.js";
+import { SupabaseIntegrationAdministrationRepository } from "./repositories/integration-administration.repository.js";
 import { adminUserManagementRoutes } from "./routes/admin-user-management.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
@@ -38,6 +39,7 @@ import { csvImportRoutes, internalTaskIngestionRoutes } from "./routes/task-inge
 import { adminNotificationsRoutes } from "./routes/admin-notifications.routes.js";
 import { reportsRoutes } from "./routes/reports.routes.js";
 import { adminCriticalAlertRoutes, criticalAlertsRoutes } from "./routes/critical-alerts.routes.js";
+import { integrationAdministrationRoutes } from "./routes/integration-administration.routes.js";
 import { NotificationService } from "./services/notification.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
 import { TelegramService, type TelegramSender } from "./services/telegram.service.js";
@@ -59,6 +61,7 @@ import { CollaborationRuleManagementService } from "./services/collaboration-rul
 import { ReportingService } from "./services/reporting.service.js";
 import { CriticalAlertEvaluatorService } from "./services/critical-alert-evaluator.service.js";
 import { CriticalAlertService } from "./services/critical-alert.service.js";
+import { IntegrationAdministrationService } from "./services/integration-administration.service.js";
 import {
   TelegramRegistrationService,
   type TelegramRegistrationWriter,
@@ -129,7 +132,7 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     undefined, new DivisionCollaborationService(collaborationRepository),
   ) : undefined;
   const taskIngestionService = client && taskService && divisionsRepository ? new TaskIngestionService(
-    taskService, divisionsRepository, new SupabaseImportBatchRepository(client), new SupabaseAuditRepository(client),
+    taskService, divisionsRepository, new SupabaseImportBatchRepository(client), new SupabaseAuditRepository(client), taskUsers!,
   ) : undefined;
   const reportingService = client ? new ReportingService(new SupabaseReportingRepository(client), options.config.businessTimeZone) : undefined;
   const criticalAlertSignals = client ? new SupabaseCriticalAlertSignalsRepository(client) : undefined;
@@ -166,6 +169,12 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
         userManagementService,
         new SupabaseSystemAuthorityRepository(client),
         new SupabaseAuditRepository(client),
+      )
+    : undefined;
+  const integrationAdministrationService = client && userManagementService && taskUsers && divisionsRepository
+    ? new IntegrationAdministrationService(
+        new SupabaseIntegrationAdministrationRepository(client), divisionsRepository, taskUsers,
+        userManagementService, new SupabaseSystemAuthorityRepository(client),
       )
     : undefined;
   const itConsole = client && userManagementService ? new TelegramItConsoleService(
@@ -239,6 +248,7 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     prefix: "/api/admin/users",
     service: userManagementService,
     adminApiKey: options.config.adminApiKey,
+    actorResolver: taskUsers && permissionsRepository ? new TrustedTaskActorService(taskUsers, permissionsRepository) : undefined,
   });
   if (systemAuthorityService) await app.register(systemAuthorityRoutes, {
     prefix: "/api/admin/system-authority",
@@ -249,6 +259,9 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     prefix: "/api/admin/collaboration-rules",
     service: collaborationManagementService,
     adminApiKey: options.config.adminApiKey,
+  });
+  if (integrationAdministrationService) await app.register(integrationAdministrationRoutes, {
+    prefix: "/api/admin/integrations", service: integrationAdministrationService, adminApiKey: options.config.adminApiKey,
   });
   if (taskService && taskUsers && permissionsRepository) {
     await app.register(tasksRoutes, {

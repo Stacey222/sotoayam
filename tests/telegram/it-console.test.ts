@@ -11,7 +11,7 @@ import { TelegramRegistrationService } from "../../src/services/telegram-registr
 import { UserManagementService } from "../../src/services/user-management.service.js";
 import { TelegramBot } from "../../src/telegram/bot.js";
 import { TelegramItConsoleService } from "../../src/telegram/it-console.js";
-import type { AccessUpdate, ManagedUser, UserManagementStatus } from "../../src/user-management/types.js";
+import type { AccessUpdate, BusinessUserCodeUpdate, ManagedUser, UserManagementStatus } from "../../src/user-management/types.js";
 
 const now = "2026-08-29T00:00:00.000Z";
 const divisions: Division[] = [
@@ -24,7 +24,7 @@ const roles: Role[] = [
   { id: 50, code: "OWNER", name: "Owner", active: true, created_at: now, updated_at: now },
 ];
 const managed = (overrides: Partial<ManagedUser> = {}): ManagedUser => ({
-  id: 1, display_name: "IT Operator", division: divisions[0]!, role: roles[1]!, active: true,
+  id: 1, display_name: "IT Operator", business_user_code: null, division: divisions[0]!, role: roles[1]!, active: true,
   telegram_connected: true, created_at: now, updated_at: now, ...overrides,
 });
 
@@ -60,6 +60,10 @@ class MemoryUsers implements UserManagementRepository {
     this.updates.push({ id, update, source, actor });
     this.legacy.set(id, { division: next.division?.code ?? "UNASSIGNED", role: next.role?.code ?? "UNASSIGNED", active: next.active });
     return next;
+  }
+  async updateBusinessUserCode(id: number, update: BusinessUserCodeUpdate) {
+    const user = await this.findById(id); if (!user) throw new AppError(404, "NOT_FOUND", "not found");
+    user.business_user_code = update.business_user_code; return user;
   }
 }
 
@@ -171,6 +175,15 @@ describe("Slice 3.1 Telegram IT console", () => {
       { resolveByLegacyTelegramUserId: vi.fn().mockResolvedValue({ status: "ACTIVE", active: true, divisionId: 10, roleId: 40, divisionCode: "IT", roleCode: "ADMIN" }) }, sender, { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, harness().console);
     await bot.handleUpdate({ update_id: 1, message: { text: "/start", chat: { id: 7001 }, from: { id: 9001, first_name: "IT" } } });
     expect(sender.sendMessage).toHaveBeenCalledWith(7001, "Akun Gwens aktif.\n\nDivisi: IT\nRole: ADMIN\nStatus: Aktif");
+  });
+  it("24. assigns business user code only after text input and explicit confirmation", async () => {
+    const test = harness(); await test.console.handleCallback(9001, "ac:kb:2"); const preview = await test.console.handleText(9001, "gw-cc-001");
+    expect(preview?.text).toContain("GW-CC-001"); expect(test.repository.values[1]?.business_user_code).toBeNull();
+    await test.console.handleCallback(9001, "ac:kc:2"); expect(test.repository.values[1]?.business_user_code).toBe("GW-CC-001");
+  });
+  it("25. rejects numeric Telegram/database identifiers as business user code", async () => {
+    const test = harness(); await test.console.handleCallback(9001, "ac:kb:2"); const response = await test.console.handleText(9001, "9001");
+    expect(response?.text).toContain("start with a letter"); expect(test.repository.values[1]?.business_user_code).toBeNull();
   });
 });
 

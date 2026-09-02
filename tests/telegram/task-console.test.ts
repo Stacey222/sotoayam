@@ -71,6 +71,7 @@ class MemoryDirectory implements TaskUsersRepository, TaskDirectoryRepository {
   ];
   async findById(id: number) { return this.rows.find((row) => row.id === id) ?? null; }
   async findTrustedAdminActorUser() { return this.rows[0]!; }
+  async findByBusinessUserCode() { return null; }
   async findActiveByDivision(id: number) { return this.rows.filter((row) => row.divisionId === id); }
 }
 class MemoryDivisions implements DivisionsRepository {

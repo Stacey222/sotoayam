@@ -1,9 +1,10 @@
 import { AppError } from "../errors.js";
 import { mapLegacyDivision, mapLegacyRole } from "../identity/legacy-mapping.js";
+import { normalizeBusinessUserCode } from "../identity/business-user-code.js";
 import type { DivisionsRepository } from "../repositories/divisions.repository.js";
 import type { RolesRepository } from "../repositories/roles.repository.js";
 import type { UserManagementRepository } from "../repositories/user-management.repository.js";
-import type { AccessUpdate, ManagedUser, UserManagementCatalogs, UserManagementStatus } from "../user-management/types.js";
+import type { AccessUpdate, BusinessUserCodeUpdate, ManagedUser, UserManagementCatalogs, UserManagementStatus } from "../user-management/types.js";
 import type { UserUpdate } from "../types/index.js";
 
 export class UserManagementService {
@@ -47,6 +48,18 @@ export class UserManagementService {
       throw new AppError(400, "VALIDATION_ERROR", "Active user requires a division and role");
     }
     return this.users.updateAccess(id, update, source, actorUserId);
+  }
+
+  async updateBusinessUserCode(id: number, update: BusinessUserCodeUpdate, source: string, actorUserId: number): Promise<ManagedUser> {
+    const current = await this.get(id);
+    const normalized = update.business_user_code === null ? null : normalizeBusinessUserCode(update.business_user_code);
+    if (current.business_user_code !== null && current.business_user_code !== normalized && !update.confirm_change) {
+      throw new AppError(409, "BUSINESS_USER_CODE_CONFIRMATION_REQUIRED", "Changing an existing business user code requires explicit confirmation");
+    }
+    return this.users.updateBusinessUserCode(id, {
+      business_user_code: normalized,
+      confirm_change: update.confirm_change,
+    }, source, actorUserId);
   }
 
   async updateLegacyAccess(legacyId: number, update: UserUpdate): Promise<void> {

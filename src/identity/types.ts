@@ -3,6 +3,7 @@ export type ChannelType = "TELEGRAM";
 export interface NormalizedUser {
   id: number;
   display_name: string | null;
+  business_user_code: string | null;
   division_id: number | null;
   role_id: number | null;
   active: boolean;

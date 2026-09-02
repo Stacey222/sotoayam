@@ -21,9 +21,9 @@ Snapshot date: 2026-09-02. Status values mean exactly `CONFIRMED`, `MISSING_INPU
 |---|---|---|
 | Active user roster | `MISSING_INPUT` | Confirm the two pending people and whether each should be onboarded; do not expose channel identifiers. |
 | Divisi and role per person | `MISSING_INPUT` | Business owner must approve each pending assignment. |
-| Business identifier | `PROPOSED` | Add nullable unique `users.business_user_code`, stable and business-controlled. Existing users remain valid. |
+| Business identifier | `CONFIRMED` | Nullable unique `users.business_user_code`, stable and business-controlled. Existing users remain valid without a code. |
 
-`BUSINESS_USER_IDENTIFIER_GAP = true`: `users` has no employee/business/external employee code. The proposed field needs a non-null partial unique index, canonical validation/assignment, audit, and no Telegram/email dependency. It is not implemented here.
+`BUSINESS_USER_IDENTIFIER_GAP = CLOSED`: the additive Stage 2 contract provides strict normalization, partial uniqueness, canonical resolution, protected IT administration, audit, and CSV/intake assignment without Telegram/email dependency. No production code is generated or backfilled automatically.
 
 ## B. Collaboration
 
@@ -73,7 +73,7 @@ No category may be inferred from free text and no speculative category is active
 | Shopee | `MISSING_INPUT` | Confirm supported API/data path and use case |
 | Hermes | `NOT_REQUIRED_FOR_BETA` | Revisit only after canonical data/routing is stable |
 
-`INTEGRATION_CAPABILITY_GAP = true`: current identities cannot enforce per-integration capabilities. An additive, default-deny capability mapping is `PROPOSED` before activation.
+`INTEGRATION_CAPABILITY_GAP = CLOSED`: the internal task endpoint now requires the shared internal key, an active registered integration identity, and active `TASK_CREATE`. Capability administration is restricted to active IT `SYSTEM_ADMIN`; revoked/missing capabilities deny immediately. No production identity or grant is seeded.
 
 ## G. Business reporting
 

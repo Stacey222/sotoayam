@@ -22,7 +22,11 @@ export interface ImportBatchRepository {
 
 export interface TaskSourceIntegrationsRepository {
   findActiveByCode(code: string): Promise<TaskSourceIntegration | null>;
+  hasActiveCapability(integrationId: number, capabilityCode: IntegrationCapabilityCode): Promise<boolean>;
 }
+
+export const INTEGRATION_CAPABILITIES = ["TASK_CREATE"] as const;
+export type IntegrationCapabilityCode = typeof INTEGRATION_CAPABILITIES[number];
 
 export class SupabaseImportBatchRepository implements ImportBatchRepository {
   constructor(private readonly client: SupabaseClient) {}
@@ -44,5 +48,15 @@ export class SupabaseTaskSourceIntegrationsRepository implements TaskSourceInteg
       .eq("code", code).eq("active", true).maybeSingle();
     if (error) throw governanceDatabaseError("Unable to resolve task source integration", error);
     return data as TaskSourceIntegration | null;
+  }
+
+  async hasActiveCapability(integrationId: number, capabilityCode: IntegrationCapabilityCode): Promise<boolean> {
+    const { count, error } = await this.client.from("integration_capabilities")
+      .select("id", { count: "exact", head: true })
+      .eq("integration_id", integrationId)
+      .eq("capability_code", capabilityCode)
+      .is("revoked_at", null);
+    if (error) throw governanceDatabaseError("Unable to verify integration capability", error);
+    return count === 1;
   }
 }

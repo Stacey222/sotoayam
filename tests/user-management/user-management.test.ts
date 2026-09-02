@@ -6,7 +6,7 @@ import { AppError } from "../../src/errors.js";
 import type { Division, Role } from "../../src/governance/types.js";
 import { adminUserManagementRoutes } from "../../src/routes/admin-user-management.routes.js";
 import { UserManagementService } from "../../src/services/user-management.service.js";
-import type { AccessUpdate, ManagedUser, UserManagementStatus } from "../../src/user-management/types.js";
+import type { AccessUpdate, BusinessUserCodeUpdate, ManagedUser, UserManagementStatus } from "../../src/user-management/types.js";
 
 const migrationPath = path.resolve(process.cwd(), "supabase/migrations/202608290003_create_it_user_management.sql");
 const governancePath = path.resolve(process.cwd(), "supabase/migrations/202608290001_create_governance_foundation.sql");
@@ -17,7 +17,7 @@ const role = (id: number, code: string, active = true): Role => ({ id, code, nam
 const divisions = [division(1, "IT"), division(2, "SALES_GROSIR"), division(3, "DISABLED", false)];
 const roles = [role(1, "STAFF"), role(2, "ADMIN"), role(3, "DISABLED", false)];
 const user = (overrides: Partial<ManagedUser> = {}): ManagedUser => ({
-  id: 1, display_name: "Safe User", division: null, role: null, active: false,
+  id: 1, display_name: "Safe User", business_user_code: null, division: null, role: null, active: false,
   telegram_connected: true, created_at: "now", updated_at: "now", ...overrides,
 });
 
@@ -34,6 +34,10 @@ class MemoryUsers {
     value.division = divisions.find((item) => item.id === update.division_id) ?? null;
     value.role = roles.find((item) => item.id === update.role_id) ?? null;
     value.active = update.active; this.updates.push({ id, update, source }); return value;
+  }
+  async updateBusinessUserCode(id: number, update: BusinessUserCodeUpdate) {
+    const value = await this.findById(id); if (!value) throw new AppError(404, "NOT_FOUND", "missing");
+    value.business_user_code = update.business_user_code; return value;
   }
 }
 
@@ -83,5 +87,18 @@ describe("Slice 2.5 user management acceptance", () => {
     const denied = await app.inject({ method: "GET", url: "/api/admin/users?status=pending" });
     const accepted = await app.inject({ method: "GET", url: "/api/admin/users?status=pending", headers: { "x-admin-api-key": "safe-key" } });
     expect(denied.statusCode).toBe(401); expect(accepted.statusCode).toBe(200); await app.close();
+  });
+  it("31. normalizes and assigns a business user code", async () => { users.values = [user()]; const updated = await service.updateBusinessUserCode(1, { business_user_code: " gw-it-001 ", confirm_change: false }, "test", 9); expect(updated.business_user_code).toBe("GW-IT-001"); });
+  it("32. rejects invalid and numeric-only business identifiers", async () => { users.values = [user()]; await expect(service.updateBusinessUserCode(1, { business_user_code: "12345", confirm_change: false }, "test", 9)).rejects.toMatchObject({ code: "BUSINESS_USER_CODE_INVALID" }); });
+  it("33. protects code administration with shared key plus active IT SYSTEM_ADMIN resolution", async () => {
+    users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service, adminApiKey: "safe-key",
+      actorResolver: { resolveTrustedActor: async () => ({ id: 9, displayName: "IT", active: true, divisionId: 1, divisionCode: "IT", roleId: 2, roleCode: "ADMIN", permissions: new Set() }) } });
+    const response = await app.inject({ method: "PATCH", url: "/api/admin/users/1/business-user-code", headers: { "x-admin-api-key": "safe-key" }, payload: { business_user_code: "GW-IT-001", confirm_change: false } });
+    expect(response.statusCode).toBe(200); expect(response.json().data.business_user_code).toBe("GW-IT-001"); await app.close();
+  });
+  it("34. denies code administration when normalized IT authority is unavailable", async () => {
+    users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service, adminApiKey: "safe-key" });
+    const response = await app.inject({ method: "PATCH", url: "/api/admin/users/1/business-user-code", headers: { "x-admin-api-key": "safe-key" }, payload: { business_user_code: "GW-IT-001", confirm_change: false } });
+    expect(response.statusCode).toBe(503); await app.close();
   });
 });

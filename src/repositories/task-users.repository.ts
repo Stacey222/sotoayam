@@ -21,6 +21,7 @@ export interface TaskUsersRepository {
 
 export interface TaskDirectoryRepository {
   findById(id: number): Promise<TaskUser | null>;
+  findByBusinessUserCode(code: string): Promise<TaskUser | null>;
   findActiveByDivision(divisionId: number): Promise<TaskUser[]>;
 }
 
@@ -55,6 +56,20 @@ export class SupabaseTaskUsersRepository implements TaskUsersRepository, TaskDir
       roleId: row.role_id,
       roleCode: row.roles?.code ?? null,
     }));
+  }
+
+  async findByBusinessUserCode(code: string): Promise<TaskUser | null> {
+    const { data, error } = await this.client
+      .from("users")
+      .select("id,display_name,active,division_id,role_id,divisions(code),roles(code)")
+      .eq("business_user_code", code)
+      .limit(2);
+    if (error) throw governanceDatabaseError("Unable to resolve business user code", error);
+    const rows = (data ?? []) as unknown as TaskUserRow[];
+    if (rows.length > 1) throw new AppError(409, "BUSINESS_USER_CODE_AMBIGUOUS", "Business user code resolves ambiguously");
+    const row = rows[0];
+    return row ? { id: row.id, displayName: row.display_name, active: row.active, divisionId: row.division_id,
+      divisionCode: row.divisions?.code ?? null, roleId: row.role_id, roleCode: row.roles?.code ?? null } : null;
   }
 
   async findTrustedAdminActorUser(): Promise<TaskUser> {

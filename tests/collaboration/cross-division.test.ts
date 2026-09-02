@@ -82,9 +82,10 @@ function taskHarness(ruleOverrides?: Partial<DivisionCollaborationRule>) {
 }
 
 class ManagedUsers implements UserManagementRepository {
-  value: ManagedUser = { id: 9, display_name: "Governance", division: itDivision, role: roles[1]!, active: true, telegram_connected: true, created_at: now, updated_at: now };
+  value: ManagedUser = { id: 9, display_name: "Governance", business_user_code: null, division: itDivision, role: roles[1]!, active: true, telegram_connected: true, created_at: now, updated_at: now };
   async findAll(_status?: UserManagementStatus) { return [this.value]; } async findById(id: number) { return id === this.value.id ? this.value : null; }
   async findNormalizedByLegacyId() { return this.value; } async updateAccess(_id: number, _update: AccessUpdate, _source: string) { return this.value; }
+  async updateBusinessUserCode() { return this.value; }
 }
 class Catalog<T extends Division | Role> { constructor(readonly rows: T[]) {} async findAll(options: { activeOnly?: boolean } = {}) { return options.activeOnly ? this.rows.filter((r) => r.active) : this.rows; } async findByCode(code: string) { return this.rows.find((r) => r.code === code) ?? null; } }
 function managementHarness(options: { authority?: boolean; normalized?: Partial<ManagedUser> } = {}) {

@@ -4,13 +4,13 @@ Production currently has zero integration identities and zero active integration
 
 ## Capability contract
 
-Conceptual least-privilege capabilities are `TASK_CREATE`, `TASK_READ`, `EVENT_SUBMIT`, `REPORT_DATA_SUBMIT`, and `INTEGRATION_STATUS_UPDATE`. No integration may receive `USER_ADMIN`, `ROLE_ADMIN`, `SYSTEM_ADMIN`, `OWNER`, or `COLLABORATION_RULE_ADMIN` through internal API access.
+The implemented least-privilege vocabulary currently contains only `TASK_CREATE`, because it is the only capability backed by a protected canonical machine endpoint. `TASK_READ`, `EVENT_SUBMIT`, `REPORT_DATA_SUBMIT`, and `INTEGRATION_STATUS_UPDATE` remain future unsupported concepts until corresponding canonical operations exist. No integration may receive `USER_ADMIN`, `ROLE_ADMIN`, `SYSTEM_ADMIN`, `OWNER`, or `COLLABORATION_RULE_ADMIN` through internal API access.
 
-The current `task_source_integrations` identity contains code, source (`AUTOMATION` or `ERP`), requesting Divisi, and active status. The internal automation endpoint authenticates a shared internal key plus an active integration code, then permits canonical task intake. It has no per-integration capability assignment or enforcement.
+The `task_source_integrations` identity contains code, source (`AUTOMATION` or `ERP`), requesting Divisi, and active status. The internal automation endpoint authenticates the shared internal key, resolves an active identity, and requires an active `TASK_CREATE` grant before canonical intake.
 
-`INTEGRATION_CAPABILITY_GAP = true`
+`INTEGRATION_CAPABILITY_GAP = CLOSED`
 
-Smallest proposed extension: an additive `integration_capabilities` table keyed by integration identity and validated capability code, with a unique pair constraint, RLS enabled, no public policies, and no default grants. Endpoint/service authorization must require the exact capability before invoking canonical services. This is `PROPOSED`, not implemented in Stage 1.
+Stage 2 implements the additive `integration_capabilities` table keyed by integration identity and capability code, with unique grants, revocation state, RLS, no public policies, and no default grants. Protected IT administration is audited. Capability never bypasses TaskService validation, collaboration, category, idempotency, or audit.
 
 ## Planned registry
 

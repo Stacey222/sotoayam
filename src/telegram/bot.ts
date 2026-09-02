@@ -94,6 +94,17 @@ export class TelegramBot {
       return;
     }
     if (!/^\/start(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) {
+      if (this.itConsole && message.from?.id !== undefined && message.text !== undefined) {
+        if (!this.isPrivateChat(message.chat, message.from.id)) return;
+        try {
+          const response = await this.itConsole.handleText(message.from.id, message.text);
+          if (response) { await this.sendConsoleResponse(message.chat.id, response); return; }
+        } catch (error) {
+          this.logger.error({ errorType: error instanceof Error ? error.name : "UnknownError", updateId: update.update_id }, "Telegram IT console text failed");
+          await this.sender.sendMessage(message.chat.id, "Permintaan belum dapat diproses. Silakan coba lagi.");
+          return;
+        }
+      }
       if (this.taskConsole && message.from?.id !== undefined && message.text !== undefined) {
         if (!this.isPrivateChat(message.chat, message.from.id)) return;
         try {

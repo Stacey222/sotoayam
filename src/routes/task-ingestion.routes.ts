@@ -39,6 +39,9 @@ export async function internalTaskIngestionRoutes(app: FastifyInstance, options:
     }
     const integration = await options.integrations.findActiveByCode(rawCode.trim().toUpperCase());
     if (!integration) throw new AppError(403, "INTEGRATION_FORBIDDEN", "Integration identity is unknown or inactive");
+    if (!await options.integrations.hasActiveCapability(integration.id, "TASK_CREATE")) {
+      throw new AppError(403, "INTEGRATION_CAPABILITY_REQUIRED", "Integration does not have TASK_CREATE capability");
+    }
     return { success: true, data: await options.service.ingestAutomation(integration, parseAutomationIntake(request.body), booleanQuery(request.query.dry_run)) };
   });
 }

@@ -19,6 +19,7 @@
     "check:notification-schema": "tsx scripts/check-notification-schema.ts",
     "check:reporting-schema": "tsx scripts/check-reporting-schema.ts",
     "check:critical-alert-schema": "tsx scripts/check-critical-alert-schema.ts",
+    "check:go-live-stage2-schema": "tsx scripts/check-go-live-stage2-schema.ts",
     "check:secrets": "tsx scripts/check-secrets.ts",
     "check:reconciliation": "tsx scripts/reconcile-legacy.ts",
     "check:migration-baseline": "tsx scripts/check-migration-baseline.ts",

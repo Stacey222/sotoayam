@@ -3,11 +3,13 @@ import { AppError } from "../errors.js";
 import { secureEqual } from "../security.js";
 import type { UserManagementService } from "../services/user-management.service.js";
 import type { UserManagementStatus } from "../user-management/types.js";
+import type { TaskActorResolver } from "../services/task-actor.service.js";
 import { parsePositiveId } from "../validation.js";
 
 export interface AdminUserManagementRoutesOptions {
   service: UserManagementService;
   adminApiKey?: string;
+  actorResolver?: TaskActorResolver;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -52,6 +54,25 @@ export async function adminUserManagementRoutes(app: FastifyInstance, options: A
       active: body.active === undefined ? current.active : body.active,
     });
     request.log.info({ userId: current.id }, "Normalized user access updated");
+    return { success: true, data };
+  });
+  app.patch<{ Params: { id: string } }>("/:id/business-user-code", async (request) => {
+    if (!options.actorResolver) throw new AppError(503, "BUSINESS_USER_CODE_ADMIN_UNAVAILABLE", "Business user code administration is unavailable");
+    const actor = await options.actorResolver.resolveTrustedActor();
+    if (!actor.active || actor.divisionCode !== "IT") {
+      throw new AppError(403, "BUSINESS_USER_CODE_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
+    }
+    const value = record(request.body);
+    if (Object.keys(value).some((key) => !["business_user_code", "confirm_change"].includes(key))
+      || !(value.business_user_code === null || typeof value.business_user_code === "string")
+      || typeof value.confirm_change !== "boolean") {
+      throw new AppError(400, "VALIDATION_ERROR", "business_user_code and confirm_change are required");
+    }
+    const data = await options.service.updateBusinessUserCode(parsePositiveId(request.params.id), {
+      business_user_code: value.business_user_code,
+      confirm_change: value.confirm_change,
+    }, "admin_user_management_api", actor.id);
+    request.log.info({ userId: data.id }, "Business user code updated");
     return { success: true, data };
   });
 }

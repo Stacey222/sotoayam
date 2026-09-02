@@ -35,9 +35,13 @@ class Tasks implements TasksRepository {
   async update(id: number, update: TaskUpdateRecord) { const row = (await this.findById(id))!; Object.assign(row, update); return row; }
 }
 class Users implements TaskUsersRepository {
-  rows: TaskUser[] = [actor()];
+  rows: TaskUser[] = [actor(), { ...actor({ id: 2 }), displayName: "Assignee" }, { ...actor({ id: 3, active: false }), displayName: "Inactive" },
+    { ...actor({ id: 4, roleId: null }), displayName: "Pending" }, { ...actor({ id: 5, divisionId: 20 }), displayName: "Other Divisi" }];
+  codes = new Map([["GW-IT-001", 2], ["GW-IT-INACTIVE", 3], ["GW-IT-PENDING", 4], ["GW-CC-001", 5]]);
   async findById(id: number) { return this.rows.find((row) => row.id === id) ?? null; }
   async findTrustedAdminActorUser() { return this.rows[0]!; }
+  async findByBusinessUserCode(code: string) { const id = this.codes.get(code); return id ? this.findById(id) : null; }
+  async findActiveByDivision(id: number) { return this.rows.filter((row) => row.active && row.divisionId === id); }
 }
 class Divisions implements DivisionsRepository {
   rows = [division(10, "IT"), division(20, "CONTENT_CREATOR"), division(30, "INACTIVE", false)];
@@ -69,7 +73,7 @@ function harness(options: { collaboration?: "allow" | "deny" | "approval" } = {}
     updateRule: async () => { throw new Error("unused"); }, deactivateRule: async () => { throw new Error("unused"); },
   });
   const core = new TaskService(tasks, users, activities, relationships, audit, new TaskAuthorizationService(), () => new Date(now), collaboration);
-  return { service: new TaskIngestionService(core, divisions, batches, audit), tasks, batches, audit, core };
+  return { service: new TaskIngestionService(core, divisions, batches, audit, users), tasks, batches, audit, core };
 }
 
 const header = "title,owner_division,description,priority,assignee,deadline,external_reference";
@@ -85,10 +89,15 @@ describe("Slice 6 task ingestion", () => {
   it.each([
     ["missing title", ",IT,,,,,", "VALIDATION_ERROR"], ["unknown division", "Task,UNKNOWN,,,,,", "INVALID_DIVISION"],
     ["inactive division", "Task,INACTIVE,,,,,", "INVALID_DIVISION"], ["invalid priority", "Task,IT,,EXTREME,,,", "INVALID_PRIORITY"],
-    ["invalid deadline", "Task,IT,,,,tomorrow,", "INVALID_DEADLINE"], ["invalid assignee", "Task,IT,,,someone,,", "INVALID_ASSIGNEE"],
+    ["invalid deadline", "Task,IT,,,,tomorrow,", "INVALID_DEADLINE"], ["invalid assignee", "Task,IT,,,123,,", "BUSINESS_USER_CODE_INVALID"],
   ])("rejects %s at row level", async (_label, row, code) => { const result = await harness().service.importCsv(actor(), csv(row), { dryRun: false, safeLabel: null }); expect(result.results[0]).toMatchObject({ status: "FAILED", code }); });
   it("supports partial success and preserves row order", async () => { const h = harness(); const result = await h.service.importCsv(actor(), csv("Good,IT,,,,,a", ",IT,,,,,b", "Also good,IT,,,,,c"), { dryRun: false, safeLabel: null }); expect(result).toMatchObject({ status: "PARTIAL", total_rows: 3, created_rows: 2, failed_rows: 1 }); expect(result.results.map((row) => [row.row, row.status])).toEqual([[2, "CREATED"], [3, "FAILED"], [4, "CREATED"]]); });
   it("dry-run fully validates and creates zero tasks", async () => { const h = harness(); const result = await h.service.importCsv(actor(), csv("Safe,IT,,,,,dry-1"), { dryRun: true, safeLabel: null }); expect(result.results[0]?.status).toBe("VALID"); expect(h.tasks.rows).toHaveLength(0); expect(h.audit.rows.at(-1)?.action).toBe("TASK_IMPORT_VALIDATED"); });
+  it("resolves a normalized business user code for CSV assignment", async () => { const h = harness(); const result = await h.service.importCsv(actor(), csv("Assigned,IT,,,gw-it-001,,assigned-1"), { dryRun: false, safeLabel: null }); expect(result.failed_rows).toBe(0); expect(h.tasks.rows[0]?.assigned_to_user_id).toBe(2); });
+  it("fails an unknown business user code without creating a task", async () => { const h = harness(); const result = await h.service.importCsv(actor(), csv("Unknown,IT,,,GW-IT-404,,"), { dryRun: false, safeLabel: null }); expect(result.results[0]).toMatchObject({ status: "FAILED", code: "BUSINESS_USER_NOT_FOUND" }); expect(h.tasks.rows).toHaveLength(0); });
+  it.each([["inactive", "GW-IT-INACTIVE", "TASK_INACTIVE_ASSIGNEE"], ["pending", "GW-IT-PENDING", "TASK_INVALID_ASSIGNEE"], ["wrong Divisi", "GW-CC-001", "TASK_CROSS_DIVISION_NOT_ALLOWED"]])
+  ("fails an %s assignee through canonical TaskService authorization", async (_label, code, expected) => { const h = harness(); const result = await h.service.importCsv(actor(), csv(`Rejected,IT,,,${code},,`), { dryRun: false, safeLabel: null }); expect(result.results[0]).toMatchObject({ status: "FAILED", code: expected }); expect(h.tasks.rows).toHaveLength(0); });
+  it("dry-run resolves a business user code identically without creating a task", async () => { const h = harness(); const result = await h.service.importCsv(actor(), csv("Dry assigned,IT,,,GW-IT-001,,dry-assigned"), { dryRun: true, safeLabel: null }); expect(result.results[0]?.status).toBe("VALID"); expect(h.tasks.rows).toHaveLength(0); });
   it("detects a repeated external reference without a second task", async () => { const h = harness(); await h.service.importCsv(actor(), csv("First,IT,,,,,same"), { dryRun: false, safeLabel: null }); const repeated = await h.service.importCsv(actor(), csv("Second,IT,,,,,same"), { dryRun: false, safeLabel: null }); expect(repeated.results[0]).toMatchObject({ status: "DUPLICATE", task_id: 1 }); expect(h.tasks.rows).toHaveLength(1); });
   it("requires active task.import authority", async () => { await expect(harness().service.importCsv(actor({ permissions: new Set(["task.create"]) }), csv("No,IT,,,,,"), { dryRun: false, safeLabel: null })).rejects.toMatchObject({ code: "TASK_FORBIDDEN" }); });
   it("records safe batch metadata and completion audit without CSV rows", async () => { const h = harness(); await h.service.importCsv(actor(), csv("Audited,IT,,,,,"), { dryRun: false, safeLabel: "safe.csv" }); expect(h.batches.rows[0]).toMatchObject({ initiated_by_user_id: 7, safe_label: "safe.csv", total_rows: 1 }); expect(JSON.stringify(h.audit.rows.at(-1))).not.toContain("Audited"); });
@@ -131,15 +140,29 @@ describe("ingestion HTTP boundaries", () => {
   it("requires both internal authorization and a registered integration identity", async () => {
     const app = Fastify();
     await app.register(internalTaskIngestionRoutes, { service: { ingestAutomation: async () => ({}) } as never,
-      integrations: { findActiveByCode: async () => null }, internalApiKey: "internal-test-key" });
+      integrations: { findActiveByCode: async () => null, hasActiveCapability: async () => false }, internalApiKey: "internal-test-key" });
     const unauthorized = await app.inject({ method: "POST", url: "/tasks", payload: { title: "Task", owner_division: "IT" } });
     const unknown = await app.inject({ method: "POST", url: "/tasks", headers: { "x-internal-api-key": "internal-test-key", "x-integration-code": "UNKNOWN" }, payload: { title: "Task", owner_division: "IT" } });
     expect(unauthorized.statusCode).toBe(401); expect(unknown.statusCode).toBe(403); expect(unknown.json().message).toContain("unknown or inactive"); await app.close();
   });
+  it("rejects an active integration without TASK_CREATE even when the shared key is valid", async () => {
+    const app = Fastify(); const integration: TaskSourceIntegration = { id: 55, code: "SYNC", name: "Sync", source: "AUTOMATION", requesting_division_id: 10, active: true };
+    await app.register(internalTaskIngestionRoutes, { service: { ingestAutomation: async () => ({}) } as never,
+      integrations: { findActiveByCode: async () => integration, hasActiveCapability: async () => false }, internalApiKey: "internal-test-key" });
+    const response = await app.inject({ method: "POST", url: "/tasks", headers: { "x-internal-api-key": "internal-test-key", "x-integration-code": "SYNC" }, payload: { title: "Task", owner_division: "IT" } });
+    expect(response.statusCode).toBe(403); expect(response.json().code).toBe("INTEGRATION_CAPABILITY_REQUIRED"); await app.close();
+  });
+  it("continues to canonical intake only with active TASK_CREATE", async () => {
+    const app = Fastify(); const integration: TaskSourceIntegration = { id: 55, code: "SYNC", name: "Sync", source: "AUTOMATION", requesting_division_id: 10, active: true }; let called = 0;
+    await app.register(internalTaskIngestionRoutes, { service: { ingestAutomation: async () => { called += 1; return {}; } } as never,
+      integrations: { findActiveByCode: async () => integration, hasActiveCapability: async (_id, capability) => capability === "TASK_CREATE" }, internalApiKey: "internal-test-key" });
+    const response = await app.inject({ method: "POST", url: "/tasks", headers: { "x-internal-api-key": "internal-test-key", "x-integration-code": "SYNC" }, payload: { title: "Task", owner_division: "IT" } });
+    expect(response.statusCode).toBe(200); expect(called).toBe(1); await app.close();
+  });
   it("does not accept caller-supplied human authority on automation intake", async () => {
     const app = Fastify(); const integration: TaskSourceIntegration = { id: 55, code: "SYNC", name: "Sync", source: "AUTOMATION", requesting_division_id: 10, active: true };
     await app.register(internalTaskIngestionRoutes, { service: { ingestAutomation: async () => ({}) } as never,
-      integrations: { findActiveByCode: async () => integration }, internalApiKey: "internal-test-key" });
+      integrations: { findActiveByCode: async () => integration, hasActiveCapability: async () => true }, internalApiKey: "internal-test-key" });
     const response = await app.inject({ method: "POST", url: "/tasks", headers: { "x-internal-api-key": "internal-test-key", "x-integration-code": "SYNC" }, payload: { title: "Task", owner_division: "IT", created_by_user_id: 7 } });
     expect(response.statusCode).toBe(400); expect(response.json().message).toContain("created_by_user_id"); await app.close();
   });

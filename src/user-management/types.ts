@@ -5,6 +5,7 @@ export type UserManagementStatus = "pending" | "active" | "inactive";
 export interface ManagedUser {
   id: number;
   display_name: string | null;
+  business_user_code: string | null;
   division: Division | null;
   role: Role | null;
   active: boolean;
@@ -17,6 +18,11 @@ export interface AccessUpdate {
   division_id: number | null;
   role_id: number | null;
   active: boolean;
+}
+
+export interface BusinessUserCodeUpdate {
+  business_user_code: string | null;
+  confirm_change: boolean;
 }
 
 export interface UserManagementCatalogs {

@@ -2,6 +2,16 @@
 
 This is the operator checklist and recovery runbook for the controlled Gwens beta. It records the minimum safe operating contract; it does not replace automated gates or live verification for a release.
 
+## Current recovery verification
+
+Database logical backup and restore verification passed on 2026-09-02. The `public` application schema and data were restored into a disposable loopback-only PostgreSQL 17.11 cluster, with matching production/recovery counts, identity `MATCH=5`, 22/22 expected tables, 22 RLS-enabled tables, zero public policies, and zero orphan references. The verified artifact is retained outside Git and the VPS under restricted operator-local ACLs. See [database-recovery.md](database-recovery.md).
+
+Supabase Dashboard backup inventory remains empty and PITR remains disabled. Controlled beta therefore depends on the documented daily logical-backup policy until an approved managed backup capability is enabled.
+
+`DATABASE_BACKUP_VERIFICATION = PASS`
+
+`RESTORE_DRILL = PASS`
+
 ## Gate classification
 
 - **MUST PASS**: required before soft launch. A failure is a blocker.
@@ -25,7 +35,7 @@ Telegram is only an interface. Every command, callback, and text mutation must r
 
 - [ ] Infrastructure: one non-root systemd process; service enabled and active; localhost bind; restart policy and journald healthy; sufficient disk and memory.
 - [ ] Database: local and live migration registries match; protected tables retain RLS; no unintended public policy, drift, missing required constraint, or orphan reference.
-- [ ] Backup: a current database recovery point and restoration procedure have been verified. An empty or inaccessible backup inventory is `DATABASE_BACKUP_VERIFICATION_REQUIRED` and blocks the gate.
+- [ ] Backup: a current database recovery point and restoration procedure have been verified. A tested retained logical artifact satisfies this gate while managed Dashboard backup/PITR remains unavailable; the daily manual policy is mandatory.
 - [ ] Telegram: VPS is the only poller; laptop polling is off; `/start`, `/admin`, `/tasks`, and `/owner` enforce current identity and private-console boundaries; callbacks acknowledge and do not stack menus.
 - [ ] Identity: normalized/legacy reconciliation passes; channel mappings are unique; inactive and pending users are denied; exactly the intended active SYSTEM_ADMIN remains protected.
 - [ ] Roles and Divisi: the authorization matrix passes; cross-Divisi is default-deny; `ONPAGE_B2C -> CONTENT_CREATOR` is the only approved current collaboration path and does not reveal INTERNAL owner activity.
@@ -112,4 +122,4 @@ The designated IT operator owns rotation: create the replacement at its source, 
 
 ## Issue handling
 
-Classify authorization bypass, duplicate polling, migration/RLS divergence, secret exposure, runtime crash loop, incorrect cross-Divisi access, unavailable deployment rollback, critical identity inconsistency, or an unverified database recovery point as **BLOCKER**. Classify bounded operational constraints above as **BETA_ACCEPTABLE** only while their controls remain true. Keep integrations and broader product capabilities as **POST_BETA**.
+Classify authorization bypass, duplicate polling, migration/RLS divergence, secret exposure, runtime crash loop, incorrect cross-Divisi access, unavailable deployment rollback, critical identity inconsistency, or an unverified database recovery point as **BLOCKER**. The current tested logical artifact closes the recovery-point blocker; failure to maintain the documented cadence reopens it. Classify bounded operational constraints above as **BETA_ACCEPTABLE** only while their controls remain true. Keep integrations and broader product capabilities as **POST_BETA**.

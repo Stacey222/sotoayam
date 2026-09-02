@@ -159,7 +159,7 @@ describe("Slice 3.1 Telegram IT console", () => {
   it("22. bot routes /admin using sender identity and inline keyboard", async () => {
     const console = harness().console; const sender = { sendMessage: vi.fn() };
     const bot = new TelegramBot("token", new TelegramRegistrationService({ upsertTelegramRegistration: vi.fn() }), { resolveByLegacyTelegramUserId: vi.fn() }, sender, { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, console);
-    await bot.handleUpdate({ update_id: 1, message: { text: "/admin", chat: { id: 7001 }, from: { id: 9001 } } });
+    await bot.handleUpdate({ update_id: 1, message: { text: "/admin", chat: { id: 7001, type: "private" }, from: { id: 9001 } } });
     expect(sender.sendMessage).toHaveBeenCalledWith(7001, "Gwens IT Console", expect.objectContaining({ inlineKeyboard: expect.any(Array) }));
   });
   it("23. existing /start response remains unchanged", async () => {
@@ -196,14 +196,14 @@ function navigationBot(consoleService = harness().console, overrides: Record<str
 async function callback(bot: TelegramBot, data: string) {
   await bot.handleUpdate({
     update_id: 100,
-    callback_query: { id: "callback-token", from: { id: 9001 }, data, message: { message_id: 77, chat: { id: 7001 } } },
+    callback_query: { id: "callback-token", from: { id: 9001 }, data, message: { message_id: 77, chat: { id: 7001, type: "private" } } },
   });
 }
 
 describe("Slice 4 Telegram single-message navigation gate", () => {
   it("1. /admin sends exactly one initial menu message", async () => {
     const test = navigationBot();
-    await test.bot.handleUpdate({ update_id: 1, message: { text: "/admin", chat: { id: 7001 }, from: { id: 9001 } } });
+    await test.bot.handleUpdate({ update_id: 1, message: { text: "/admin", chat: { id: 7001, type: "private" }, from: { id: 9001 } } });
     expect(test.sender.sendMessage).toHaveBeenCalledTimes(1); expect(test.sender.editMessage).not.toHaveBeenCalled();
   });
 
@@ -276,5 +276,24 @@ describe("Slice 4 Telegram single-message navigation gate", () => {
     const test = navigationBot(consoleService); await callback(test.bot, "ac:gv");
     expect(test.sender.editMessage).toHaveBeenCalledWith(7001, 77, expect.stringContaining("ONPAGE_B2C → CONTENT_CREATOR"), expect.anything());
     expect(test.sender.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("19. refuses to expose IT Console in a Telegram group", async () => {
+    const state = harness();
+    const test = navigationBot(state.console);
+    await test.bot.handleUpdate({ update_id: 1, message: { text: "/admin", chat: { id: -900, type: "group" }, from: { id: 9001 } } });
+    expect(state.channels.findByExternalIdentity).not.toHaveBeenCalled();
+    expect(test.sender.sendMessage.mock.calls[0]?.[1]).toContain("private chat");
+  });
+
+  it("20. refuses IT Console callbacks outside a private chat", async () => {
+    const state = harness();
+    const test = navigationBot(state.console);
+    await test.bot.handleUpdate({
+      update_id: 2,
+      callback_query: { id: "callback-token", from: { id: 9001 }, data: "ac:u", message: { message_id: 77, chat: { id: -900, type: "group" } } },
+    });
+    expect(state.channels.findByExternalIdentity).not.toHaveBeenCalled();
+    expect(test.sender.editMessage).toHaveBeenCalledWith(-900, 77, "Perintah tidak tersedia.", undefined);
   });
 });

@@ -77,6 +77,10 @@ export class TelegramBot {
     }
     if (/^\/admin(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) {
       this.logger.info({ updateId: update.update_id }, "Telegram /admin received");
+      if (message.from?.id === undefined || !this.isPrivateChat(message.chat, message.from.id)) {
+        await this.sender.sendMessage(message.chat.id, "IT Console hanya tersedia melalui private chat.");
+        return;
+      }
       await this.sendConsoleResponse(message.chat.id, await this.openConsole(message.from?.id));
       return;
     }
@@ -201,7 +205,9 @@ export class TelegramBot {
           ? this.isPrivateChat(message.chat, query.from.id) && this.ownerConsole
             ? await this.ownerConsole.handleCallback(query.from.id, data)
             : { text: "Perintah tidak tersedia." }
-          : this.itConsole ? await this.itConsole.handleCallback(query.from.id, data) : { text: "Perintah tidak tersedia." };
+          : this.isPrivateChat(message.chat, query.from.id) && this.itConsole
+            ? await this.itConsole.handleCallback(query.from.id, data)
+            : { text: "Perintah tidak tersedia." };
       await this.editConsoleResponse(message.chat.id, message.message_id, response);
     } catch (error) {
       this.logger.error(

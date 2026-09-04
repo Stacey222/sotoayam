@@ -1,8 +1,48 @@
+# Dependencies and generated output
 node_modules/
 dist/
+build/
 coverage/
+*.log
+
+# Local environment and credentials
 .env
 .env.*
 !.env.example
-*.log
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+credentials/
+**/credentials/
+credentials.local.json
+*.credentials.local.json
+
+# Database backups and recovery artifacts
+backups/
+recovery-temp/
+*.dump
+*.backup
+*.sql.gz
+
+# Temporary deployment and transfer artifacts
+tmp/
+.temp/
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# OS and editor-local files
 .DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp

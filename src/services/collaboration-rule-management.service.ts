@@ -4,28 +4,25 @@ import type { AuditRepository } from "../repositories/audit.repository.js";
 import type { DivisionsRepository } from "../repositories/divisions.repository.js";
 import type { DivisionCollaborationRepository } from "../repositories/division-collaboration.repository.js";
 import type { SystemAuthorityRepository } from "../repositories/system-authority.repository.js";
-import type { TaskUsersRepository } from "../repositories/task-users.repository.js";
-import type { UserManagementService } from "./user-management.service.js";
+import type { TaskActor } from "../tasks/types.js";
 
-export interface CollaborationRuleReader { list(): Promise<CollaborationRuleView[]> }
+export interface CollaborationRuleReader { list(actor: TaskActor): Promise<CollaborationRuleView[]> }
 
 export class CollaborationRuleManagementService implements CollaborationRuleReader {
   constructor(
     private readonly rules: DivisionCollaborationRepository,
     private readonly divisions: DivisionsRepository,
-    private readonly taskUsers: TaskUsersRepository,
-    private readonly users: UserManagementService,
     private readonly authorities: SystemAuthorityRepository,
     private readonly audit: AuditRepository,
   ) {}
 
-  async list(): Promise<CollaborationRuleView[]> {
-    await this.authorizedActor();
+  async list(actor: TaskActor): Promise<CollaborationRuleView[]> {
+    await this.authorizedActor(actor);
     return this.rules.listRules();
   }
 
-  async create(input: CreateCollaborationRuleInput): Promise<CollaborationRuleView> {
-    const actorId = await this.authorizedActor();
+  async create(actor: TaskActor, input: CreateCollaborationRuleInput): Promise<CollaborationRuleView> {
+    const actorId = await this.authorizedActor(actor);
     await this.validateRelation(input.sourceDivisionId, input.targetDivisionId);
     if (!input.allowed && input.requiresApproval) {
       throw new AppError(400, "COLLABORATION_NOT_ALLOWED", "A denied rule cannot require approval");
@@ -41,8 +38,8 @@ export class CollaborationRuleManagementService implements CollaborationRuleRead
     return created;
   }
 
-  async update(id: number, input: UpdateCollaborationRuleInput): Promise<CollaborationRuleView> {
-    const actorId = await this.authorizedActor();
+  async update(actor: TaskActor, id: number, input: UpdateCollaborationRuleInput): Promise<CollaborationRuleView> {
+    const actorId = await this.authorizedActor(actor);
     const current = await this.required(id);
     const wasActive = current.active;
     const allowed = input.allowed ?? current.allowed;
@@ -58,18 +55,16 @@ export class CollaborationRuleManagementService implements CollaborationRuleRead
     return updated;
   }
 
-  deactivate(id: number): Promise<CollaborationRuleView> { return this.update(id, { active: false }); }
+  deactivate(actor: TaskActor, id: number): Promise<CollaborationRuleView> { return this.update(actor, id, { active: false }); }
 
-  private async authorizedActor(): Promise<number> {
-    const actor = await this.taskUsers.findTrustedAdminActorUser();
-    const normalized = await this.users.get(actor.id);
-    if (!normalized.active || normalized.division?.code !== "IT") {
+  private async authorizedActor(actor: TaskActor): Promise<number> {
+    if (!actor.active || actor.divisionCode !== "IT") {
       throw new AppError(403, "COLLABORATION_GOVERNANCE_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
     }
-    if (!await this.authorities.findActiveForUser(normalized.id)) {
+    if (!await this.authorities.findActiveForUser(actor.id)) {
       throw new AppError(403, "COLLABORATION_GOVERNANCE_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
     }
-    return normalized.id;
+    return actor.id;
   }
 
   private async validateRelation(sourceId: number, targetId: number): Promise<void> {

@@ -8,7 +8,7 @@ h2 { margin-bottom: 0; }
 .eyebrow { margin-bottom: .4rem; font-size: .72rem; font-weight: 800; letter-spacing: .14em; color: #a7d7b6; }
 .subtitle { margin-bottom: 0; color: #d5e4da; }
 main { max-width: 1120px; margin: 0 auto; padding: 1.25rem; }
-.toolbar, .filters, .actions, .dialog-heading { display: flex; align-items: center; gap: .65rem; }
+.toolbar, .filters, .actions, .dialog-heading, .header-actions { display: flex; align-items: center; gap: .65rem; }
 .toolbar, .dialog-heading { justify-content: space-between; }
 .filters { overflow-x: auto; }
 button { border: 0; border-radius: .55rem; padding: .7rem 1rem; font: inherit; font-weight: 700; background: #167246; color: white; cursor: pointer; }

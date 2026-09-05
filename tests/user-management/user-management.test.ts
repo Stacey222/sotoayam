@@ -83,7 +83,8 @@ describe("Slice 2.5 user management acceptance", () => {
   it("28. supports grant-then-revoke handover", async () => { const sql = await readFile(migrationPath, "utf8"); expect(sql).toContain("function public.assign_system_admin"); expect(sql).toContain("function public.revoke_system_admin"); });
   it("29. keeps reconciliation keys unchanged", async () => { const sql = await readFile(migrationPath, "utf8"); expect(sql).not.toMatch(/legacy_telegram_user_id\s*=/); expect(sql).not.toMatch(/external_id\s*=/); });
   it("30. protects normalized endpoints with the shared admin boundary", async () => {
-    users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service, adminApiKey: "safe-key" });
+    users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service, adminApiKey: "safe-key",
+      actorResolver: { resolveTrustedActor: async () => ({ id: 9, active: true, divisionId: 1, divisionCode: "IT", roleId: 2, roleCode: "ADMIN", permissions: new Set() }) } });
     const denied = await app.inject({ method: "GET", url: "/api/admin/users?status=pending" });
     const accepted = await app.inject({ method: "GET", url: "/api/admin/users?status=pending", headers: { "x-admin-api-key": "safe-key" } });
     expect(denied.statusCode).toBe(401); expect(accepted.statusCode).toBe(200); await app.close();
@@ -97,8 +98,9 @@ describe("Slice 2.5 user management acceptance", () => {
     expect(response.statusCode).toBe(200); expect(response.json().data.business_user_code).toBe("GW-IT-001"); await app.close();
   });
   it("34. denies code administration when normalized IT authority is unavailable", async () => {
-    users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service, adminApiKey: "safe-key" });
+    users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service, adminApiKey: "safe-key",
+      actorResolver: { resolveTrustedActor: async () => { throw new AppError(403, "SYSTEM_AUTHORITY_REQUIRED", "required"); } } });
     const response = await app.inject({ method: "PATCH", url: "/api/admin/users/1/business-user-code", headers: { "x-admin-api-key": "safe-key" }, payload: { business_user_code: "GW-IT-001", confirm_change: false } });
-    expect(response.statusCode).toBe(503); await app.close();
+    expect(response.statusCode).toBe(403); await app.close();
   });
 });

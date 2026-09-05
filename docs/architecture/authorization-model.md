@@ -2,7 +2,7 @@
 
 ## Decision model
 
-Authentication and authorization are separate. The current shared `ADMIN_API_KEY` may remain only as a temporary bootstrap control; it cannot represent a person.
+Authentication and authorization are separate. Human HTTP requests use a verified Supabase Bearer session mapped through server-controlled `app_metadata.gwens_user_id`. The shared `ADMIN_API_KEY` remains only as a temporary secondary boundary; it cannot represent a person.
 
 Every protected decision should evaluate:
 

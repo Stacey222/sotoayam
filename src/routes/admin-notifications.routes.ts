@@ -13,7 +13,7 @@ export async function adminNotificationsRoutes(app: FastifyInstance, options: Ad
     if (!options.adminApiKey || !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) {
       throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
     }
-    const actor = await options.actorResolver.resolveTrustedActor();
+    const actor = await options.actorResolver.resolveTrustedActor(request.headers.authorization);
     if (!actor.active || actor.divisionId === null || actor.divisionCode !== "IT" || actor.roleId === null) {
       throw new AppError(403, "NOTIFICATION_OPERATIONS_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
     }

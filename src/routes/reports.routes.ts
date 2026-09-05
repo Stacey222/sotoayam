@@ -16,7 +16,7 @@ export async function reportsRoutes(app: FastifyInstance, options: ReportsRoutes
   });
   app.get("/content-creator/affiliate-task-status", async (request) => {
     const query = request.query as { window?: unknown; detail?: unknown; page?: unknown };
-    const actor = await options.actorResolver.resolveOwnerActor();
+    const actor = await options.actorResolver.resolveOwnerActor(request.headers.authorization);
     const window = parseReportWindow(query.window);
     if (query.detail !== undefined) {
       if (!(["BLOCKED", "OVERDUE", "UPCOMING"] as unknown[]).includes(query.detail)) {

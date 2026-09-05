@@ -9,7 +9,11 @@ let catalogs = { divisions: [], roles: [] };
 
 function adminHeaders() {
   const key = sessionStorage.getItem("gwens-admin-key");
-  return key ? { "X-Admin-Api-Key": key } : {};
+  const accessToken = sessionStorage.getItem("gwens-access-token");
+  return {
+    ...(key ? { "X-Admin-Api-Key": key } : {}),
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+  };
 }
 function showNotice(message) { notice.textContent = message; notice.hidden = !message; }
 async function api(path, options = {}) {
@@ -48,7 +52,7 @@ async function loadUsers() {
   try {
     const [catalogPayload, userPayload] = await Promise.all([api("/api/admin/users/catalogs"), api(`/api/admin/users?status=${encodeURIComponent(selectedStatus)}`)]);
     catalogs = catalogPayload.data; render(userPayload.data);
-  } catch (error) { showNotice(`${error.message}. Jika proteksi admin aktif, masukkan Admin Key.`); render([]); }
+  } catch (error) { showNotice(`${error.message}. Masukkan Admin Key dan sesi pengguna yang valid.`); render([]); }
   finally { rows.removeAttribute("aria-busy"); }
 }
 function openEditor(user) {
@@ -61,6 +65,7 @@ function openEditor(user) {
 document.querySelectorAll(".filter").forEach((button) => button.addEventListener("click", () => { selectedStatus = button.dataset.status; document.querySelectorAll(".filter").forEach((item) => item.classList.toggle("active", item === button)); void loadUsers(); }));
 document.querySelector("#refresh").addEventListener("click", () => void loadUsers());
 document.querySelector("#admin-key-button").addEventListener("click", () => { const key = window.prompt("Masukkan Admin API Key (kosongkan untuk menghapus):", ""); if (key === null) return; if (key.trim()) sessionStorage.setItem("gwens-admin-key", key.trim()); else sessionStorage.removeItem("gwens-admin-key"); void loadUsers(); });
+document.querySelector("#user-session-button").addEventListener("click", () => { const token = window.prompt("Masukkan access token sesi Supabase (kosongkan untuk menghapus):", ""); if (token === null) return; if (token.trim()) sessionStorage.setItem("gwens-access-token", token.trim()); else sessionStorage.removeItem("gwens-access-token"); void loadUsers(); });
 rows.addEventListener("click", (event) => { const button = event.target.closest("button[data-user-id]"); const user = button ? usersById.get(button.dataset.userId) : null; if (user) openEditor(user); });
 document.querySelector("#close-dialog").addEventListener("click", () => editor.close());
 document.querySelector("#cancel").addEventListener("click", () => editor.close());

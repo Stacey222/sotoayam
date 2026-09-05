@@ -19,9 +19,9 @@ export class SystemAuthorityService {
     };
   }
 
-  async assign(userId: number, reason: string) {
+  async assign(userId: number, reason: string, actorUserId: number) {
     try {
-      return await this.authorities.assign(userId, reason);
+      return await this.authorities.assign(userId, reason, actorUserId);
     } catch (error) {
       if (error instanceof DatabaseError && error.diagnostic.code === "P0001") {
         throw new AppError(409, "GOVERNANCE_INVARIANT", error.diagnostic.message ?? "SYSTEM_ADMIN assignment rejected");
@@ -30,9 +30,9 @@ export class SystemAuthorityService {
     }
   }
 
-  async revoke(userId: number, reason: string) {
+  async revoke(userId: number, reason: string, actorUserId: number) {
     try {
-      return await this.authorities.revoke(userId, reason);
+      return await this.authorities.revoke(userId, reason, actorUserId);
     } catch (error) {
       if (error instanceof DatabaseError && (error.diagnostic.code === "P0001" || error.diagnostic.code === "P0002")) {
         throw new AppError(error.diagnostic.code === "P0002" ? 404 : 409, "GOVERNANCE_INVARIANT", error.diagnostic.message ?? "SYSTEM_ADMIN revocation rejected");

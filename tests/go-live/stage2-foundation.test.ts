@@ -7,9 +7,9 @@ import { normalizeBusinessUserCode } from "../../src/identity/business-user-code
 import type { IntegrationAdministrationRepository, IntegrationCapability } from "../../src/repositories/integration-administration.repository.js";
 import type { SystemAuthorityRepository } from "../../src/repositories/system-authority.repository.js";
 import type { TaskSourceIntegration } from "../../src/repositories/task-ingestion.repository.js";
-import type { TaskUsersRepository } from "../../src/repositories/task-users.repository.js";
 import { IntegrationAdministrationService } from "../../src/services/integration-administration.service.js";
 import { UserManagementService } from "../../src/services/user-management.service.js";
+import type { TaskActor } from "../../src/tasks/types.js";
 import type { BusinessUserCodeUpdate, ManagedUser } from "../../src/user-management/types.js";
 
 const migrationPath = path.resolve(process.cwd(), "supabase/migrations/202609020001_create_business_identity_and_integration_capabilities.sql");
@@ -61,23 +61,23 @@ class Integrations implements IntegrationAdministrationRepository {
 function adminHarness(options: { division?: Division; authority?: boolean; active?: boolean } = {}) {
   const integrations = new Integrations(); integrations.values.push({ id: 1, code: "SYNC", name: "Sync", source: "AUTOMATION", requesting_division_id: 1, active: false });
   const user = managed({ division: options.division ?? itDivision, active: options.active ?? true });
-  const users = { get: async () => user } as unknown as UserManagementService;
-  const taskUsers = { findTrustedAdminActorUser: async () => ({ id: 1, displayName: "Operator", active: user.active, divisionId: user.division?.id ?? null, divisionCode: user.division?.code ?? null, roleId: 1, roleCode: "ADMIN" }), findById: vi.fn() } as unknown as TaskUsersRepository;
+  const actor: TaskActor = { id: 1, displayName: "Operator", active: user.active, divisionId: user.division?.id ?? null,
+    divisionCode: user.division?.code ?? null, roleId: 1, roleCode: "ADMIN", permissions: new Set() };
   const assignment: SystemAuthorityAssignment = { id: 1, user_id: 1, authority_code: "SYSTEM_ADMIN", granted_at: now, granted_by_user_id: null, revoked_at: null, revoked_by_user_id: null, reason: null, created_at: now, updated_at: now };
   const authorities = { findActiveForUser: async () => options.authority === false ? null : assignment, countActive: vi.fn(), assign: vi.fn(), revoke: vi.fn() } as SystemAuthorityRepository;
   const divisions = { findAll: async () => [itDivision], findByCode: async (code: string) => code === "IT" ? itDivision : null, create: vi.fn() };
-  return { service: new IntegrationAdministrationService(integrations, divisions, taskUsers, users, authorities), integrations };
+  return { service: new IntegrationAdministrationService(integrations, divisions, authorities), integrations, actor };
 }
 
 describe("Stage 2 integration capability governance", () => {
-  it("allows active IT SYSTEM_ADMIN to manage only the supported capability and keeps duplicate grants idempotent", async () => { const h = adminHarness(); expect((await h.service.grantCapability(1, "TASK_CREATE")).capability_code).toBe("TASK_CREATE"); await h.service.grantCapability(1, "TASK_CREATE"); expect(h.integrations.capabilities).toHaveLength(1); await expect(h.service.grantCapability(1, "TASK_READ")).rejects.toMatchObject({ code: "INTEGRATION_CAPABILITY_UNSUPPORTED" }); });
-  it("denies OWNER/business authority without SYSTEM_ADMIN", async () => { await expect(adminHarness({ authority: false }).service.list()).rejects.toMatchObject({ code: "INTEGRATION_ADMIN_FORBIDDEN" }); });
+  it("allows active IT SYSTEM_ADMIN to manage only the supported capability and keeps duplicate grants idempotent", async () => { const h = adminHarness(); expect((await h.service.grantCapability(h.actor, 1, "TASK_CREATE")).capability_code).toBe("TASK_CREATE"); await h.service.grantCapability(h.actor, 1, "TASK_CREATE"); expect(h.integrations.capabilities).toHaveLength(1); await expect(h.service.grantCapability(h.actor, 1, "TASK_READ")).rejects.toMatchObject({ code: "INTEGRATION_CAPABILITY_UNSUPPORTED" }); });
+  it("denies OWNER/business authority without SYSTEM_ADMIN", async () => { const h = adminHarness({ authority: false }); await expect(h.service.list(h.actor)).rejects.toMatchObject({ code: "INTEGRATION_ADMIN_FORBIDDEN" }); });
   it("denies SYSTEM_ADMIN outside IT and inactive SYSTEM_ADMIN", async () => {
     const management = { ...itDivision, id: 2, code: "MANAGEMENT" };
-    await expect(adminHarness({ division: management }).service.list()).rejects.toMatchObject({ code: "INTEGRATION_ADMIN_FORBIDDEN" });
-    await expect(adminHarness({ active: false }).service.list()).rejects.toMatchObject({ code: "INTEGRATION_ADMIN_FORBIDDEN" });
+    const outside = adminHarness({ division: management }); await expect(outside.service.list(outside.actor)).rejects.toMatchObject({ code: "INTEGRATION_ADMIN_FORBIDDEN" });
+    const inactive = adminHarness({ active: false }); await expect(inactive.service.list(inactive.actor)).rejects.toMatchObject({ code: "INTEGRATION_ADMIN_FORBIDDEN" });
   });
-  it("creates identities inactive and revokes capability immediately", async () => { const h = adminHarness(); const created = await h.service.create({ code: " future_sync ", name: "Future", source: "AUTOMATION", requestingDivisionId: 1 }); expect(created).toMatchObject({ code: "FUTURE_SYNC", active: false }); await h.service.grantCapability(1, "TASK_CREATE"); expect((await h.service.revokeCapability(1, "TASK_CREATE")).revoked_at).not.toBeNull(); });
+  it("creates identities inactive and revokes capability immediately", async () => { const h = adminHarness(); const created = await h.service.create(h.actor, { code: " future_sync ", name: "Future", source: "AUTOMATION", requestingDivisionId: 1 }); expect(created).toMatchObject({ code: "FUTURE_SYNC", active: false }); await h.service.grantCapability(h.actor, 1, "TASK_CREATE"); expect((await h.service.revokeCapability(h.actor, 1, "TASK_CREATE")).revoked_at).not.toBeNull(); });
   it("migration is default-deny, RLS protected, service-only, audited, and seeds no integration or grant", async () => {
     const sql = await readFile(migrationPath, "utf8");
     const schema = sql.split("create or replace function")[0] ?? sql;

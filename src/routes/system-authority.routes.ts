@@ -2,8 +2,10 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { AppError } from "../errors.js";
 import { secureEqual } from "../security.js";
 import type { SystemAuthorityService } from "../services/system-authority.service.js";
+import type { TaskActorResolver } from "../services/task-actor.service.js";
+import type { TaskActor } from "../tasks/types.js";
 
-export interface SystemAuthorityRoutesOptions { service: SystemAuthorityService; adminApiKey?: string }
+export interface SystemAuthorityRoutesOptions { service: SystemAuthorityService; actorResolver: TaskActorResolver; adminApiKey?: string }
 
 function input(body: unknown): { userId: number; reason: string } {
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new AppError(400, "VALIDATION_ERROR", "Request body must be an object");
@@ -15,10 +17,13 @@ function input(body: unknown): { userId: number; reason: string } {
 }
 
 export async function systemAuthorityRoutes(app: FastifyInstance, options: SystemAuthorityRoutesOptions): Promise<void> {
+  const actors = new WeakMap<FastifyRequest, TaskActor>();
   app.addHook("preHandler", async (request: FastifyRequest, _reply: FastifyReply) => {
     if (options.adminApiKey && !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
+    actors.set(request, await options.actorResolver.resolveTrustedActor(request.headers.authorization));
   });
+  const actor = (request: FastifyRequest): TaskActor => actors.get(request)!;
   app.get("/status", async () => ({ success: true, data: await options.service.status() }));
-  app.post("/assign", async (request) => { const value = input(request.body); return { success: true, data: await options.service.assign(value.userId, value.reason) }; });
-  app.post("/revoke", async (request) => { const value = input(request.body); return { success: true, data: await options.service.revoke(value.userId, value.reason) }; });
+  app.post("/assign", async (request) => { const value = input(request.body); return { success: true, data: await options.service.assign(value.userId, value.reason, actor(request).id) }; });
+  app.post("/revoke", async (request) => { const value = input(request.body); return { success: true, data: await options.service.revoke(value.userId, value.reason, actor(request).id) }; });
 }

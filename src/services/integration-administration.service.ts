@@ -3,23 +3,20 @@ import type { DivisionsRepository } from "../repositories/divisions.repository.j
 import type { IntegrationAdministrationRepository } from "../repositories/integration-administration.repository.js";
 import { INTEGRATION_CAPABILITIES, type IntegrationCapabilityCode } from "../repositories/task-ingestion.repository.js";
 import type { SystemAuthorityRepository } from "../repositories/system-authority.repository.js";
-import type { TaskUsersRepository } from "../repositories/task-users.repository.js";
-import type { UserManagementService } from "./user-management.service.js";
+import type { TaskActor } from "../tasks/types.js";
 
 export class IntegrationAdministrationService {
   constructor(
     private readonly integrations: IntegrationAdministrationRepository,
     private readonly divisions: DivisionsRepository,
-    private readonly taskUsers: TaskUsersRepository,
-    private readonly users: UserManagementService,
     private readonly authorities: SystemAuthorityRepository,
   ) {}
 
-  async list() { await this.authorizedActor(); return this.integrations.list(); }
-  async listCapabilities(id: number) { await this.authorizedActor(); await this.required(id); return this.integrations.listCapabilities(id); }
+  async list(actor: TaskActor) { await this.authorizedActor(actor); return this.integrations.list(); }
+  async listCapabilities(actor: TaskActor, id: number) { await this.authorizedActor(actor); await this.required(id); return this.integrations.listCapabilities(id); }
 
-  async create(input: { code: string; name: string; source: "AUTOMATION" | "ERP"; requestingDivisionId: number }) {
-    const actorId = await this.authorizedActor();
+  async create(actor: TaskActor, input: { code: string; name: string; source: "AUTOMATION" | "ERP"; requestingDivisionId: number }) {
+    const actorId = await this.authorizedActor(actor);
     const code = input.code.trim().toUpperCase();
     const name = input.name.trim();
     if (!/^[A-Z][A-Z0-9_]{0,99}$/.test(code)) throw new AppError(400, "INTEGRATION_INVALID", "Integration code is invalid");
@@ -29,18 +26,18 @@ export class IntegrationAdministrationService {
     return this.integrations.create({ ...input, code, name, actorUserId: actorId });
   }
 
-  async setActive(id: number, active: boolean) {
-    const actorId = await this.authorizedActor(); await this.required(id);
+  async setActive(actor: TaskActor, id: number, active: boolean) {
+    const actorId = await this.authorizedActor(actor); await this.required(id);
     return this.integrations.setActive(id, active, actorId);
   }
 
-  async grantCapability(id: number, capability: string) {
-    const actorId = await this.authorizedActor(); await this.required(id);
+  async grantCapability(actor: TaskActor, id: number, capability: string) {
+    const actorId = await this.authorizedActor(actor); await this.required(id);
     return this.integrations.grantCapability(id, this.capability(capability), actorId);
   }
 
-  async revokeCapability(id: number, capability: string) {
-    const actorId = await this.authorizedActor(); await this.required(id);
+  async revokeCapability(actor: TaskActor, id: number, capability: string) {
+    const actorId = await this.authorizedActor(actor); await this.required(id);
     return this.integrations.revokeCapability(id, this.capability(capability), actorId);
   }
 
@@ -58,12 +55,10 @@ export class IntegrationAdministrationService {
     return integration;
   }
 
-  private async authorizedActor(): Promise<number> {
-    const actor = await this.taskUsers.findTrustedAdminActorUser();
-    const user = await this.users.get(actor.id);
-    if (!user.active || user.division?.code !== "IT" || !await this.authorities.findActiveForUser(user.id)) {
+  private async authorizedActor(actor: TaskActor): Promise<number> {
+    if (!actor.active || actor.divisionCode !== "IT" || !await this.authorities.findActiveForUser(actor.id)) {
       throw new AppError(403, "INTEGRATION_ADMIN_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
     }
-    return user.id;
+    return actor.id;
   }
 }

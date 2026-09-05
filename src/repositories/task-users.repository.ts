@@ -15,8 +15,6 @@ interface TaskUserRow {
 
 export interface TaskUsersRepository {
   findById(id: number): Promise<TaskUser | null>;
-  findTrustedAdminActorUser(): Promise<TaskUser>;
-  findTrustedOwnerActorUser?(): Promise<TaskUser>;
 }
 
 export interface TaskDirectoryRepository {
@@ -72,26 +70,4 @@ export class SupabaseTaskUsersRepository implements TaskUsersRepository, TaskDir
       divisionCode: row.divisions?.code ?? null, roleId: row.role_id, roleCode: row.roles?.code ?? null } : null;
   }
 
-  async findTrustedAdminActorUser(): Promise<TaskUser> {
-    const { data, error } = await this.client.from("system_authority_assignments")
-      .select("user_id").eq("authority_code", "SYSTEM_ADMIN").is("revoked_at", null);
-    if (error) throw governanceDatabaseError("Unable to resolve trusted task actor", error);
-    const ids = [...new Set((data ?? []).map((row) => Number(row.user_id)))];
-    if (ids.length !== 1) throw new AppError(503, "TASK_ACTOR_UNAVAILABLE", "Task API requires exactly one trusted server-side actor during transitional authentication");
-    const user = await this.findById(ids[0]!);
-    if (!user) throw new AppError(503, "TASK_ACTOR_UNAVAILABLE", "Trusted task actor no longer exists");
-    return user;
-  }
-
-  async findTrustedOwnerActorUser(): Promise<TaskUser> {
-    const { data, error } = await this.client.from("users")
-      .select("id,display_name,active,division_id,role_id,divisions(code),roles!inner(code)")
-      .eq("active", true).eq("roles.code", "OWNER").not("division_id", "is", null);
-    if (error) throw governanceDatabaseError("Unable to resolve trusted Owner actor", error);
-    const rows = (data ?? []) as unknown as TaskUserRow[];
-    if (rows.length !== 1) throw new AppError(503, "OWNER_ACTOR_UNAVAILABLE", "Report API requires exactly one active normalized OWNER during transitional authentication");
-    const row = rows[0]!;
-    return { id: row.id, displayName: row.display_name, active: row.active, divisionId: row.division_id,
-      divisionCode: row.divisions?.code ?? null, roleId: row.role_id, roleCode: row.roles?.code ?? null };
-  }
 }

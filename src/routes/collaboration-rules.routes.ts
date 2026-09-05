@@ -3,8 +3,9 @@ import { AppError } from "../errors.js";
 import { secureEqual } from "../security.js";
 import type { CollaborationRuleManagementService } from "../services/collaboration-rule-management.service.js";
 import { parsePositiveId } from "../validation.js";
+import type { TaskActorResolver } from "../services/task-actor.service.js";
 
-export interface CollaborationRulesRoutesOptions { service: CollaborationRuleManagementService; adminApiKey?: string }
+export interface CollaborationRulesRoutesOptions { service: CollaborationRuleManagementService; actorResolver: TaskActorResolver; adminApiKey?: string }
 
 function body(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new AppError(400, "VALIDATION_ERROR", "Request body must be an object");
@@ -21,7 +22,8 @@ export async function collaborationRulesRoutes(app: FastifyInstance, options: Co
       throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
     }
   });
-  app.get("/", async () => ({ success: true, data: await options.service.list() }));
+  const actor = (request: FastifyRequest) => options.actorResolver.resolveTrustedActor(request.headers.authorization);
+  app.get("/", async (request) => ({ success: true, data: await options.service.list(await actor(request)) }));
   app.post("/", async (request, reply) => {
     const value = body(request.body);
     if (Object.keys(value).some((key) => !["source_division_id", "target_division_id", "task_scope", "allowed", "requires_approval"].includes(key))) {
@@ -30,7 +32,7 @@ export async function collaborationRulesRoutes(app: FastifyInstance, options: Co
     const sourceDivisionId = parsePositiveId(String(value.source_division_id));
     const targetDivisionId = parsePositiveId(String(value.target_division_id));
     if (value.task_scope !== undefined && value.task_scope !== "ALL") throw new AppError(400, "VALIDATION_ERROR", "task_scope must be ALL");
-    const data = await options.service.create({ sourceDivisionId, targetDivisionId, taskScope: "ALL",
+    const data = await options.service.create(await actor(request), { sourceDivisionId, targetDivisionId, taskScope: "ALL",
       allowed: boolean(value.allowed, "allowed"), requiresApproval: boolean(value.requires_approval, "requires_approval") });
     return reply.status(201).send({ success: true, data });
   });
@@ -39,7 +41,7 @@ export async function collaborationRulesRoutes(app: FastifyInstance, options: Co
     if (Object.keys(value).length === 0 || Object.keys(value).some((key) => !["allowed", "requires_approval", "active"].includes(key))) {
       throw new AppError(400, "VALIDATION_ERROR", "Provide only supported collaboration rule changes");
     }
-    return { success: true, data: await options.service.update(parsePositiveId(request.params.id), {
+    return { success: true, data: await options.service.update(await actor(request), parsePositiveId(request.params.id), {
       allowed: value.allowed === undefined ? undefined : boolean(value.allowed, "allowed"),
       requiresApproval: value.requires_approval === undefined ? undefined : boolean(value.requires_approval, "requires_approval"),
       active: value.active === undefined ? undefined : boolean(value.active, "active"),

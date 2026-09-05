@@ -31,6 +31,8 @@ Environment wajib: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TO
 
 Environment opsional: `PORT`, `TELEGRAM_POLLING_ENABLED`, `LOG_LEVEL`, dan `ADMIN_API_KEY`. Jika `ADMIN_API_KEY` diisi, seluruh `/api/users` wajib menerima header `X-Admin-Api-Key`; tombol **Admin Key** pada UI menyimpannya hanya di `sessionStorage` tab browser. Jika tidak diisi, API admin bersifat public dan deployment tidak boleh dianggap production-ready.
 
+Endpoint internal notifikasi menyimpan event dan delivery per penerima. Kirim `event_id` yang stabil dari n8n untuk deduplikasi; bila satu pengiriman gagal, responsnya `503` agar n8n mengulangi event yang sama dan hanya recipient yang belum terkirim yang dicoba lagi.
+
 Telegram polling memakai `getUpdates`. Jangan jalankan lebih dari satu instance polling dengan token yang sama. Set `TELEGRAM_POLLING_ENABLED=false` pada instance tambahan atau saat memakai integrasi lain.
 
 ## Telegram Registration

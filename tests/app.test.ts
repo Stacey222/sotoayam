@@ -143,6 +143,16 @@ describe("HTTP API", () => {
     expect(response.json().error.message).toContain("empty");
     await app.close();
   });
+
+  it("returns a retryable response when notification delivery is partial", async () => {
+    sender = { sendMessage: vi.fn().mockRejectedValue(Object.assign(new Error("telegram unavailable"), { code: "TELEGRAM_SEND_FAILED" })) };
+    repository = new MemoryRepository([user({ active: true, system_error: true })]);
+    const { app } = await buildApp({ config, repository, telegramSender: sender, logger: false });
+    const response = await app.inject({ method: "POST", url: "/api/notifications/send", headers: { "x-internal-api-key": config.internalApiKey }, payload: { type: "SYSTEM_ERROR", message: "test" } });
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.code).toBe("NOTIFICATION_DELIVERY_PENDING");
+    await app.close();
+  });
 });
 
 describe("recipient routing", () => {

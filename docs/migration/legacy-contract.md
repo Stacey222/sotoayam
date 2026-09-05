@@ -48,7 +48,7 @@ The current shared Admin key is transitional authentication and has no actor ide
 
 - Requires header `X-Internal-Api-Key`; missing or incorrect key returns 401.
 - Requires a known `type` and a non-empty trimmed message no longer than 4096 characters.
-- Optional `event_id` is accepted but is not currently persisted or deduplicated.
+- Optional stable `event_id` is persisted and deduplicated. Retrying the same ID re-attempts only deliveries that are pending, and a reused ID with different type or message is rejected.
 - Optional `metadata` must be an object.
 
 Legacy event mapping:

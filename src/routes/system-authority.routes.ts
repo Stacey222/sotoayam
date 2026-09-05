@@ -16,7 +16,7 @@ function input(body: unknown): { userId: number; reason: string } {
 
 export async function systemAuthorityRoutes(app: FastifyInstance, options: SystemAuthorityRoutesOptions): Promise<void> {
   app.addHook("preHandler", async (request: FastifyRequest, _reply: FastifyReply) => {
-    if (options.adminApiKey && !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
+    if (!options.adminApiKey || !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
   });
   app.get("/status", async () => ({ success: true, data: await options.service.status() }));
   app.post("/assign", async (request) => { const value = input(request.body); return { success: true, data: await options.service.assign(value.userId, value.reason) }; });

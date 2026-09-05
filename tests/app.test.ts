@@ -22,7 +22,7 @@ const config: AppConfig = {
   supabaseServiceRoleKey: "test-service-key",
   telegramBotToken: "test-bot-token",
   internalApiKey: "test-internal-key",
-  adminApiKey: undefined,
+  adminApiKey: "test-admin-key",
   port: 3000,
   telegramPollingEnabled: false,
   reminderSchedulerEnabled: false,
@@ -115,6 +115,18 @@ describe("HTTP API", () => {
     const response = await app.inject({ method: "GET", url: "/health" });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: "ok" });
+    await app.close();
+  });
+
+  it("fails closed when the legacy user API has no configured admin key", async () => {
+    const unsafeConfig = { ...config, adminApiKey: undefined } as unknown as AppConfig;
+    const { app } = await buildApp({ config: unsafeConfig, repository, telegramSender: sender, logger: false });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/users",
+      headers: { "x-admin-api-key": "any-key" },
+    });
+    expect(response.statusCode).toBe(401);
     await app.close();
   });
 

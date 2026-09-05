@@ -4,7 +4,7 @@ import { loadConfig } from "./config/env.js";
 async function main(): Promise<void> {
   const config = loadConfig();
   const { app, bot, reminderScheduler } = await buildApp({ config });
-  const host = config.host ?? "0.0.0.0";
+  const host = config.host ?? "127.0.0.1";
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, "Shutting down");

@@ -1,8 +1,19 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../src/config/env.js";
 
 describe("Supabase server credential validation", () => {
+  beforeEach(() => vi.stubEnv("ADMIN_API_KEY", "test-admin-key"));
   afterEach(() => vi.unstubAllEnvs());
+
+  it("requires the admin API key", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("ADMIN_API_KEY", "");
+
+    expect(() => loadConfig()).toThrow("Missing required environment variable: ADMIN_API_KEY");
+  });
 
   it("rejects a publishable key used as the service-role credential", () => {
     vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
@@ -25,14 +36,14 @@ describe("Supabase server credential validation", () => {
     expect(loadConfig().supabaseServiceRoleKey).toBe("sb_secret_test-only");
   });
 
-  it("uses the compatible default host when HOST is absent", () => {
+  it("binds to localhost by default when HOST is absent", () => {
     vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
     vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
     vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
     vi.stubEnv("HOST", "");
 
-    expect(loadConfig().host).toBe("0.0.0.0");
+    expect(loadConfig().host).toBe("127.0.0.1");
   });
 
   it("accepts an explicit localhost bind address", () => {

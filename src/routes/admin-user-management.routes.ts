@@ -25,7 +25,7 @@ function nullableId(value: unknown, field: string): number | null {
 
 export async function adminUserManagementRoutes(app: FastifyInstance, options: AdminUserManagementRoutesOptions): Promise<void> {
   app.addHook("preHandler", async (request: FastifyRequest, _reply: FastifyReply) => {
-    if (options.adminApiKey && !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) {
+    if (!options.adminApiKey || !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) {
       throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
     }
   });

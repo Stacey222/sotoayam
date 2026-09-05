@@ -88,6 +88,11 @@ describe("Slice 2.5 user management acceptance", () => {
     const accepted = await app.inject({ method: "GET", url: "/api/admin/users?status=pending", headers: { "x-admin-api-key": "safe-key" } });
     expect(denied.statusCode).toBe(401); expect(accepted.statusCode).toBe(200); await app.close();
   });
+  it("30a. fails closed when the shared admin key is not configured", async () => {
+    users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service });
+    const response = await app.inject({ method: "GET", url: "/api/admin/users", headers: { "x-admin-api-key": "any-key" } });
+    expect(response.statusCode).toBe(401); await app.close();
+  });
   it("31. normalizes and assigns a business user code", async () => { users.values = [user()]; const updated = await service.updateBusinessUserCode(1, { business_user_code: " gw-it-001 ", confirm_change: false }, "test", 9); expect(updated.business_user_code).toBe("GW-IT-001"); });
   it("32. rejects invalid and numeric-only business identifiers", async () => { users.values = [user()]; await expect(service.updateBusinessUserCode(1, { business_user_code: "12345", confirm_change: false }, "test", 9)).rejects.toMatchObject({ code: "BUSINESS_USER_CODE_INVALID" }); });
   it("33. protects code administration with shared key plus active IT SYSTEM_ADMIN resolution", async () => {

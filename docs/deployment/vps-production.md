@@ -43,7 +43,7 @@ Reporting uses `BUSINESS_TIME_ZONE=Asia/Jakarta` for deterministic business-date
 
 Keep `CRITICAL_ALERT_EVALUATOR_ENABLED=false` on laptops and during the first production cutover. Run the protected IT dry-run, verify zero unintended candidates and mutations, then enable it on the VPS. It runs under the existing reminder scheduler timer with its own durable overlap lease; it does not create a second scheduler timer or send OWNER push broadcasts.
 
-Production must set `HOST=127.0.0.1`, keeping port 3000 private to the VPS. The default `0.0.0.0` remains available for compatible local development only.
+`HOST` defaults to `127.0.0.1`, keeping port 3000 private to the machine. Any bind to a non-loopback interface must be configured explicitly and reviewed with the surrounding network controls.
 
 ## Deployment
 

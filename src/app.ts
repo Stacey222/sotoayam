@@ -71,6 +71,7 @@ import { TelegramItConsoleService } from "./telegram/it-console.js";
 import { TelegramTaskConsoleService } from "./telegram/task-console.js";
 import { TelegramOwnerConsoleService } from "./telegram/owner-console.js";
 import { RuntimeHealthState } from "./runtime/health-state.js";
+import { FixedWindowRateLimiter } from "./security/api-rate-limiter.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -89,6 +90,21 @@ export interface AppRuntime {
 
 export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const app = Fastify({ logger: options.logger === false ? false : { level: options.config.logLevel } });
+  const apiRateLimiter = new FixedWindowRateLimiter(
+    options.config.apiRateLimitWindowSeconds * 1000,
+    options.config.apiRateLimitMaxRequests,
+    options.config.apiRateLimitMaxTrackedClients,
+  );
+  app.addHook("onRequest", async (request, reply) => {
+    if (!request.url.startsWith("/api/")) return;
+    const result = apiRateLimiter.check(request.ip);
+    reply.header("X-RateLimit-Limit", result.limit);
+    reply.header("X-RateLimit-Remaining", result.remaining);
+    if (!result.allowed) {
+      reply.header("Retry-After", result.retryAfterSeconds);
+      throw new AppError(429, "RATE_LIMITED", "Too many requests; retry later");
+    }
+  });
   const runtimeHealth = new RuntimeHealthState();
   const client = options.repository ? null : createSupabaseClient(options.config);
   const repository = options.repository ?? new SupabaseTelegramUsersRepository(client!);

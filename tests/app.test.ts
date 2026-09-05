@@ -30,6 +30,9 @@ const config: AppConfig = {
   businessTimeZone: "Asia/Jakarta",
   criticalAlertEvaluatorEnabled: false,
   criticalAlertPolicy: DEFAULT_CRITICAL_ALERT_POLICY,
+  apiRateLimitWindowSeconds: 60,
+  apiRateLimitMaxRequests: 120,
+  apiRateLimitMaxTrackedClients: 10_000,
   logLevel: "silent",
 };
 
@@ -141,6 +144,18 @@ describe("HTTP API", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain("empty");
+    await app.close();
+  });
+
+  it("limits API requests before route authentication while leaving health available", async () => {
+    const { app } = await buildApp({ config: { ...config, apiRateLimitMaxRequests: 2 }, repository, telegramSender: sender, logger: false });
+    expect((await app.inject({ method: "GET", url: "/api/users" })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/api/users" })).statusCode).toBe(200);
+    const blocked = await app.inject({ method: "GET", url: "/api/users" });
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.headers["retry-after"]).toBe("60");
+    expect(blocked.json().error.code).toBe("RATE_LIMITED");
+    expect((await app.inject({ method: "GET", url: "/health" })).statusCode).toBe(200);
     await app.close();
   });
 });

@@ -75,6 +75,19 @@ describe("Supabase server credential validation", () => {
     expect(loadConfig().telegramPollingEnabled).toBe(false);
   });
 
+  it("uses secure API rate-limit defaults and rejects unsafe values", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("API_RATE_LIMIT_WINDOW_SECONDS", "");
+    vi.stubEnv("API_RATE_LIMIT_MAX_REQUESTS", "");
+    vi.stubEnv("API_RATE_LIMIT_MAX_TRACKED_CLIENTS", "");
+    expect(loadConfig()).toMatchObject({ apiRateLimitWindowSeconds: 60, apiRateLimitMaxRequests: 120, apiRateLimitMaxTrackedClients: 10_000 });
+    vi.stubEnv("API_RATE_LIMIT_MAX_REQUESTS", "0");
+    expect(() => loadConfig()).toThrow("Invalid environment variable: API_RATE_LIMIT_MAX_REQUESTS");
+  });
+
   it("keeps the critical alert evaluator disabled by default", () => {
     vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");

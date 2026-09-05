@@ -31,6 +31,9 @@ const config: AppConfig = {
   businessTimeZone: "Asia/Jakarta",
   criticalAlertEvaluatorEnabled: false,
   criticalAlertPolicy: DEFAULT_CRITICAL_ALERT_POLICY,
+  apiRateLimitWindowSeconds: 60,
+  apiRateLimitMaxRequests: 120,
+  apiRateLimitMaxTrackedClients: 10_000,
   logLevel: "silent",
 };
 

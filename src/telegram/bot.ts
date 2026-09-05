@@ -57,6 +57,7 @@ export class TelegramBot {
     private readonly taskConsole?: TelegramTaskConsole,
     private readonly ownerConsole?: TelegramOwnerConsole,
     private readonly runtimeHealth?: RuntimeHealthState,
+    private readonly wait: (milliseconds: number) => Promise<void> = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
   ) {}
 
   async handleUpdate(update: TelegramUpdate): Promise<void> {
@@ -320,19 +321,12 @@ export class TelegramBot {
           );
         }
         for (const update of payload.result ?? []) {
-          this.offset = update.update_id + 1;
           this.logger.info(
             { updateId: update.update_id, updateType: update.callback_query ? "callback_query" : "message" },
             "Telegram update received",
           );
-          try {
-            await this.handleUpdate(update);
-          } catch (error) {
-            this.logger.error(
-              { errorType: error instanceof Error ? error.name : "UnknownError", updateId: update.update_id },
-              "Telegram update failed",
-            );
-          }
+          await this.handleUpdate(update);
+          this.offset = update.update_id + 1;
         }
       } catch (error) {
         if (this.stopped) break;
@@ -351,7 +345,7 @@ export class TelegramBot {
             "Telegram polling error; retrying",
           );
         }
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await this.wait(2000);
       }
     }
     if (this.runtimeHealth) this.runtimeHealth.telegramPollingActive = false;

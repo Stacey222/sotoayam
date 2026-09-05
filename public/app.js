@@ -3,12 +3,14 @@ const empty = document.querySelector("#empty");
 const notice = document.querySelector("#notice");
 const editor = document.querySelector("#editor");
 const form = document.querySelector("#edit-form");
+// Retained so existing browser sessions keep their locally stored admin key after the rebrand.
+const LEGACY_ADMIN_KEY_STORAGE_KEY = "gwens-admin-key";
 let selectedStatus = "pending";
 let usersById = new Map();
 let catalogs = { divisions: [], roles: [] };
 
 function adminHeaders() {
-  const key = sessionStorage.getItem("gwens-admin-key");
+  const key = sessionStorage.getItem(LEGACY_ADMIN_KEY_STORAGE_KEY);
   return key ? { "X-Admin-Api-Key": key } : {};
 }
 function showNotice(message) { notice.textContent = message; notice.hidden = !message; }
@@ -60,7 +62,7 @@ function openEditor(user) {
 }
 document.querySelectorAll(".filter").forEach((button) => button.addEventListener("click", () => { selectedStatus = button.dataset.status; document.querySelectorAll(".filter").forEach((item) => item.classList.toggle("active", item === button)); void loadUsers(); }));
 document.querySelector("#refresh").addEventListener("click", () => void loadUsers());
-document.querySelector("#admin-key-button").addEventListener("click", () => { const key = window.prompt("Masukkan Admin API Key (kosongkan untuk menghapus):", ""); if (key === null) return; if (key.trim()) sessionStorage.setItem("gwens-admin-key", key.trim()); else sessionStorage.removeItem("gwens-admin-key"); void loadUsers(); });
+document.querySelector("#admin-key-button").addEventListener("click", () => { const key = window.prompt("Masukkan Admin API Key (kosongkan untuk menghapus):", ""); if (key === null) return; if (key.trim()) sessionStorage.setItem(LEGACY_ADMIN_KEY_STORAGE_KEY, key.trim()); else sessionStorage.removeItem(LEGACY_ADMIN_KEY_STORAGE_KEY); void loadUsers(); });
 rows.addEventListener("click", (event) => { const button = event.target.closest("button[data-user-id]"); const user = button ? usersById.get(button.dataset.userId) : null; if (user) openEditor(user); });
 document.querySelector("#close-dialog").addEventListener("click", () => editor.close());
 document.querySelector("#cancel").addEventListener("click", () => editor.close());

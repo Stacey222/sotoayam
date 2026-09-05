@@ -31,7 +31,7 @@ function sanitize(value: string | undefined): string | undefined {
 }
 
 async function main(): Promise<void> {
-  console.log("Gwens Legacy Schema Compatibility\n");
+  console.log("Sotoayam Legacy Schema Compatibility\n");
   const fixturePath = path.resolve(process.cwd(), "tests/fixtures/legacy-schema-contract.json");
   const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as SchemaFixture;
   const client = createSupabaseClient(loadSupabaseConfig());

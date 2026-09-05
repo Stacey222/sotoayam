@@ -1,9 +1,9 @@
-# Gwens Migration Baseline v1
+# Sotoayam Migration Baseline v1
 
 ## Checkpoint identity
 
 - Date: 2026-08-29 (Asia/Jakarta).
-- Baseline commit: the single local commit containing this document, with subject `chore: establish gwens automation baseline`.
+- Baseline commit: the single local commit containing this document, with historical subject `chore: establish gwens automation baseline`; the subject is immutable Git history and remains a legacy compatibility reference.
 - Resolve immutable SHA: `git rev-parse HEAD`.
 - No remote is created or modified by this baseline.
 
@@ -60,7 +60,7 @@ The normative contract is `docs/migration/legacy-contract.md`; executable covera
 - Handover order: assign replacement, verify replacement, revoke previous authority, audit every operation; never leave zero active SYSTEM_ADMIN.
 - Cross-Divisi default is DENY. `ONPAGE_B2C -> CONTENT_CREATOR` is the confirmed collaboration; other proposals remain inactive.
 - Requesting Divisi may see SHARED progress/activity but not INTERNAL target-Divisi notes.
-- First planned real report after task foundation: `CONTENT_CREATOR -> AFFILIATE_TASK_STATUS`, sourced from the Gwens Task System.
+- First planned real report after task foundation: `CONTENT_CREATOR -> AFFILIATE_TASK_STATUS`, sourced from the Sotoayam Task System.
 
 ## Rollback boundary
 

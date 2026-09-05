@@ -19,4 +19,4 @@ No ERP connector or endpoint is assumed. Every item is `MISSING_INPUT` until ver
 | Pagination | Cursor/page behavior, ordering guarantees, and maximum page size | `MISSING_INPUT` |
 | Incremental sync | Watermark/change token, deletion/tombstone behavior, and reconciliation | `MISSING_INPUT` |
 
-Before design, confirm data ownership, business purpose, required freshness, acceptable outage behavior, historical import scope, privacy classification, sandbox availability, and who approves field mappings. The adapter must call Gwens canonical services and use a machine integration identity.
+Before design, confirm data ownership, business purpose, required freshness, acceptable outage behavior, historical import scope, privacy classification, sandbox availability, and who approves field mappings. The adapter must call Sotoayam canonical services and use a machine integration identity.

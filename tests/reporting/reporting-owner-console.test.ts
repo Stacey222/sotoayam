@@ -62,7 +62,7 @@ class Actors implements TelegramTaskActorResolver {
 
 describe("Owner Telegram Console", () => {
   it("denies /owner to a normal user", async () => expect((await new TelegramOwnerConsoleService(new Actors(owner({ roleCode: "STAFF" })), service()).open(100)).text).toBe("Perintah tidak tersedia."));
-  it("authorizes an active OWNER", async () => expect((await new TelegramOwnerConsoleService(new Actors(), service()).open(100)).text).toBe("Gwens Owner Console"));
+  it("authorizes an active OWNER", async () => expect((await new TelegramOwnerConsoleService(new Actors(), service()).open(100)).text).toBe("Sotoayam Owner Console"));
   it("renders only confirmed menu features", async () => { const response = await new TelegramOwnerConsoleService(new Actors(), service()).open(100); expect(JSON.stringify(response.inlineKeyboard)).toContain("Business Report"); expect(JSON.stringify(response.inlineKeyboard)).not.toContain("Slice 9"); });
   it("navigates to a compact report result", async () => { const response = await new TelegramOwnerConsoleService(new Actors(), service([task()])).handleCallback(100, "oc:v:7"); expect(response.text).toContain("Affiliate Task Status"); expect(response.text.length).toBeLessThan(4096); });
   it("re-authorizes every callback", async () => { const actors = new Actors(); const console = new TelegramOwnerConsoleService(actors, service()); await console.open(100); await console.handleCallback(100, "oc:r"); expect(actors.calls).toBe(2); });

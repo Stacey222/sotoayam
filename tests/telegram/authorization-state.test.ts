@@ -47,7 +47,7 @@ describe("Slice 2.6A Telegram authorization state", () => {
 
   it("4. renders active IT ADMIN semantics", async () => {
     const test = botFor(state({ status: "ACTIVE", active: true, divisionId: 1, roleId: 2, divisionCode: "IT", roleCode: "ADMIN" })); await start(test.bot);
-    expect(test.sender.sendMessage.mock.calls[0]?.[1]).toBe("Akun Gwens aktif.\n\nDivisi: IT\nRole: ADMIN\nStatus: Aktif");
+    expect(test.sender.sendMessage.mock.calls[0]?.[1]).toBe("Akun Sotoayam aktif.\n\nDivisi: IT\nRole: ADMIN\nStatus: Aktif");
   });
 
   it("5. keeps SYSTEM_ADMIN separate from incomplete business onboarding", () => {
@@ -97,6 +97,6 @@ describe("Slice 2.6A Telegram authorization state", () => {
   it("12. preserves the legacy registration input contract", async () => {
     const test = botFor(state()); await start(test.bot);
     expect(test.writer.upsertTelegramRegistration).toHaveBeenCalledWith({ telegram_chat_id: 101, telegram_username: null, telegram_first_name: "User" });
-    expect(test.sender.sendMessage.mock.calls[0]?.[1]).toContain("Registrasi Telegram Gwens berhasil.");
+    expect(test.sender.sendMessage.mock.calls[0]?.[1]).toContain("Registrasi Telegram Sotoayam berhasil.");
   });
 });

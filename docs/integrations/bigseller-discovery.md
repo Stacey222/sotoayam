@@ -23,7 +23,7 @@ No API endpoint, credential type, or account capability is assumed. Vendor suppo
 
 - Automated listing mutation or bulk publishing.
 - Price or promotion automation.
-- Broad raw-data replication without a confirmed Gwens use case.
+- Broad raw-data replication without a confirmed Sotoayam use case.
 - Any user, role, Divisi, collaboration-rule, OWNER, or SYSTEM_ADMIN management.
 
-All sections remain `MISSING_INPUT`. BigSeller must use a machine identity and approved capabilities; it must not write Gwens tables directly.
+All sections remain `MISSING_INPUT`. BigSeller must use a machine identity and approved capabilities; it must not write Sotoayam tables directly.

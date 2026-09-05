@@ -127,7 +127,7 @@ describe("Slice 5 Telegram Task Console", () => {
   beforeEach(() => { test = harness(); });
 
   it("1. authorizes an active fully onboarded user for /tasks", async () => {
-    expect((await test.console.open(100)).text).toBe("Gwens Task Console");
+    expect((await test.console.open(100)).text).toBe("Sotoayam Task Console");
   });
   it("2. rejects an unknown or deactivated Telegram actor", async () => {
     expect((await test.console.open(999)).text).toBe("Perintah tidak tersedia.");
@@ -232,7 +232,7 @@ describe("Slice 5 Telegram Task Console", () => {
     expect((await test.console.handleText(100, "31-08-2026"))?.text).toContain("YYYY-MM-DD");
   });
   it("28. routes /tasks and task callbacks through single-message editing with acknowledgement", async () => {
-    const taskConsole: TelegramTaskConsole = { open: vi.fn().mockResolvedValue({ text: "Gwens Task Console" }), handleCallback: vi.fn().mockResolvedValue({ text: "My Tasks" }), handleText: vi.fn() };
+    const taskConsole: TelegramTaskConsole = { open: vi.fn().mockResolvedValue({ text: "Sotoayam Task Console" }), handleCallback: vi.fn().mockResolvedValue({ text: "My Tasks" }), handleText: vi.fn() };
     const sender = { sendMessage: vi.fn(), editMessage: vi.fn(), answerCallbackQuery: vi.fn() };
     const bot = new TelegramBot("token", new TelegramRegistrationService({ upsertTelegramRegistration: vi.fn() }), { resolveByLegacyTelegramUserId: vi.fn() }, sender, { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, undefined, taskConsole);
     await bot.handleUpdate({ update_id: 1, message: { text: "/tasks", chat: { id: 100, type: "private" }, from: { id: 100 } } });

@@ -32,7 +32,7 @@ if (!pending) {
   checks.NO_SPECULATIVE_RULES = rows.length === 1;
 }
 
-console.log("Gwens Division Collaboration Schema\n");
+console.log("Sotoayam Division Collaboration Schema\n");
 for (const [name, passed] of Object.entries(checks)) console.log(`${name} = ${passed ? "PASS" : "FAIL"}`);
 console.log(`LIVE_STATE = ${pending ? "PENDING_MIGRATION" : error ? "FAIL" : "PASS"}`);
 console.log(`MIGRATION_SHA256 = ${createHash("sha256").update(sql).digest("hex")}`);

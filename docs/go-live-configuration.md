@@ -92,7 +92,7 @@ Current default policy is `PROPOSED` for business confirmation: overdue 1/24/72 
 
 - Meta is a planned business/ad performance source only.
 - Shopee is a planned marketplace source only where supported access and legitimate use are confirmed.
-- Hermes is a planned reasoning layer only: `Gwens -> reasoning request -> Hermes -> structured recommendation -> Gwens validation -> authorized action`. Hermes is never canonical authority.
+- Hermes is a planned reasoning layer only: `Sotoayam -> reasoning request -> Hermes -> structured recommendation -> Sotoayam validation -> authorized action`. Hermes is never canonical authority.
 
 ## Backup operating policy
 

@@ -1,8 +1,8 @@
 {
-  "name": "gwens-automation-control",
+  "name": "sotoayam",
   "version": "0.1.0",
   "private": true,
-  "description": "Internal control layer for Gwens automation and Telegram notifications",
+  "description": "Sotoayam automation platform and Telegram notifications",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",

@@ -54,7 +54,7 @@ async function normalizedSchemaDeclared(): Promise<boolean> {
 }
 
 async function main(): Promise<void> {
-  console.log("Gwens Legacy Identity Reconciliation\n");
+  console.log("Sotoayam Legacy Identity Reconciliation\n");
   if (!(await normalizedSchemaDeclared())) {
     console.log("NORMALIZED_SCHEMA = NOT_APPLICABLE");
     console.log("IDENTITY_COMPARISON = NOT_APPLICABLE");

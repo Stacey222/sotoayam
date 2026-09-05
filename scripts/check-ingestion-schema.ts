@@ -25,7 +25,7 @@ const probes = await Promise.all([
 const pending = probes.some((result) => result.error?.code === "PGRST205" || result.error?.code === "PGRST204" || result.error?.code === "42703");
 const live = probes.every((result) => !result.error);
 
-console.log("Gwens Task Ingestion Schema\n");
+console.log("Sotoayam Task Ingestion Schema\n");
 for (const [name, passed] of Object.entries(checks)) console.log(`${name} = ${passed ? "PASS" : "FAIL"}`);
 console.log(`LIVE_INGESTION_SCHEMA = ${pending ? "PENDING_MIGRATION" : live ? "PASS" : "FAIL"}`);
 console.log(`MIGRATION_SHA256 = ${createHash("sha256").update(sql).digest("hex")}`);

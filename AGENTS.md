@@ -1,4 +1,4 @@
-# Gwens Automation Control — Codex Project Protocol
+# Sotoayam — Codex Project Protocol
 
 These instructions apply to the entire repository. They are the permanent engineering baseline for future work; each future Slice prompt is a delta that adds to or explicitly overrides this protocol for that task.
 
@@ -39,15 +39,15 @@ These instructions apply to the entire repository. They are the permanent engine
 ### Laptop
 
 - The laptop is for development and verification only; it is not a production runtime.
-- `LOCAL_GWENS_POLLING=OFF` is the default and required steady state.
+- `LOCAL_GWENS_POLLING=OFF` is the default and required steady state. The variable name is retained as a legacy compatibility identifier.
 - Production schedulers are disabled by default.
-- Do not leave a local bot poller, production scheduler, or duplicate long-running Gwens process active after verification.
+- Do not leave a local bot poller, production scheduler, or duplicate long-running Sotoayam process active after verification.
 
 ### VPS
 
-- The VPS is the sole Gwens production runtime.
-- Gwens is managed by systemd and runs under its designated non-root service account.
-- `VPS_GWENS_POLLING=ON` is required for the production Telegram poller.
+- The VPS is the sole Sotoayam production runtime.
+- Sotoayam is managed by systemd and runs under its designated non-root service account.
+- `VPS_GWENS_POLLING=ON` is required for the production Telegram poller. The variable name is retained as a legacy compatibility identifier.
 - Production schedulers run only on the VPS and only when their Slice has passed staged cutover and acceptance.
 - Bind the application to localhost unless an explicitly approved architecture requires external binding.
 - Prevent duplicate Telegram polling before and after every cutover; exactly one production poller may be active.

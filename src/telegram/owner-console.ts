@@ -60,7 +60,7 @@ export class TelegramOwnerConsoleService implements TelegramOwnerConsole {
   }
 
   private mainMenu(): TelegramConsoleResponse {
-    return { text: "Gwens Owner Console", inlineKeyboard: [
+    return { text: "Sotoayam Owner Console", inlineKeyboard: [
       [button("Business Report", "oc:r")],
       [button("Critical Alerts", "oc:c"), button("Approval", "oc:a")],
       [button("Automation Status", "oc:s")],
@@ -112,7 +112,7 @@ export class TelegramOwnerConsoleService implements TelegramOwnerConsole {
   private async automationStatus(actor: Awaited<ReturnType<TelegramTaskActorResolver["resolveTelegramActor"]>>): Promise<TelegramConsoleResponse> {
     if (!this.alerts) return this.unavailableFeature();
     const status = await this.alerts.automationStatus(actor);
-    return { text: ["Automation Status", "", `Overall: ${status.overall}`, `Gwens runtime: ${status.runtime}`,
+    return { text: ["Automation Status", "", `Overall: ${status.overall}`, `Sotoayam runtime: ${status.runtime}`,
       `Telegram polling: ${status.telegramPolling}`, `Reminder scheduler: ${status.reminderScheduler}`,
       `Critical Alert evaluator: ${status.criticalAlertEvaluator}`, `Notification delivery: ${status.notificationDelivery}`,
       `Active integrations: ${status.activeIntegrations}`].join("\n"), inlineKeyboard: [[button("Refresh", "oc:s"), button("Back", "oc:m")]] };

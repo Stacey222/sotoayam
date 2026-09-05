@@ -7,7 +7,7 @@ import { createSupabaseClient } from "../src/db/supabase.js";
 const MIGRATION = "202608290002_create_normalized_identity.sql";
 
 async function main(): Promise<void> {
-  console.log("Gwens Normalized Identity Schema\n");
+  console.log("Sotoayam Normalized Identity Schema\n");
   const sql = await readFile(path.resolve(process.cwd(), "supabase/migrations", MIGRATION), "utf8");
   const usersBlock = sql.match(/create table if not exists public\.users \(([\s\S]*?)\n\);/)?.[1] ?? "";
   const channelsBlock = sql.match(/create table if not exists public\.user_channels \(([\s\S]*?)\n\);/)?.[1] ?? "";

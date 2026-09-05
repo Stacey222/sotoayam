@@ -1,6 +1,6 @@
-# Gwens Automation Control Beta Readiness
+# Sotoayam Beta Readiness
 
-This is the operator checklist and recovery runbook for the controlled Gwens beta. It records the minimum safe operating contract; it does not replace automated gates or live verification for a release.
+This is the operator checklist and recovery runbook for the controlled Sotoayam beta. It records the minimum safe operating contract; it does not replace automated gates or live verification for a release.
 
 ## Current recovery verification
 
@@ -70,7 +70,7 @@ Telegram is only an interface. Every command, callback, and text mutation must r
 
 ### Onboard a user
 
-1. Ask the user to send `/start` to the Gwens bot in a private chat.
+1. Ask the user to send `/start` to the Sotoayam bot in a private chat.
 2. Open `/admin` from the active IT SYSTEM_ADMIN account.
 3. Select the pending normalized user, assign the correct Divisi and role, then activate the user through the transactional management path.
 4. Ask the user to send `/start` again and confirm the active Divisi/role response. Never record or disclose the Telegram external ID.

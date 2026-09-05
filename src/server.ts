@@ -23,7 +23,7 @@ async function main(): Promise<void> {
       telegramPolling: config.telegramPollingEnabled,
       adminProtected: Boolean(config.adminApiKey),
     },
-    "Gwens Automation Control started",
+    "Sotoayam started",
   );
   if (config.telegramPollingEnabled) {
     void bot.start().catch((error: unknown) => {

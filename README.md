@@ -1,4 +1,4 @@
-# Sotoayam Automation Control
+# Sotoayam
 
 Backend internal dan web admin sederhana untuk registrasi pengguna Telegram serta routing notifikasi dari n8n. Business logic recipient berada di backend, sehingga n8n hanya mengirim event dan tidak menyimpan Telegram Chat ID.
 
@@ -9,7 +9,7 @@ ERP (future)
   ↓
 n8n
   ↓
-Gwens Automation Control
+Sotoayam
   ├── Supabase / PostgreSQL
   └── Telegram Bot API
 ```
@@ -30,6 +30,10 @@ Persyaratan: Node.js 20+ dan project Supabase.
 Environment wajib: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TOKEN`, dan `INTERNAL_API_KEY`. Untuk kompatibilitas workspace lama, backend juga menerima alias `SUPABASE_SERVICE_KEY`, tetapi nama canonical yang dianjurkan adalah `SUPABASE_SERVICE_ROLE_KEY`.
 
 Environment opsional: `PORT`, `TELEGRAM_POLLING_ENABLED`, `LOG_LEVEL`, dan `ADMIN_API_KEY`. Jika `ADMIN_API_KEY` diisi, seluruh `/api/users` wajib menerima header `X-Admin-Api-Key`; tombol **Admin Key** pada UI menyimpannya hanya di `sessionStorage` tab browser. Jika tidak diisi, API admin bersifat public dan deployment tidak boleh dianggap production-ready.
+
+## Legacy Compatibility Identifiers
+
+Nama teknis lama yang sudah menjadi kontrak deployment atau data persisten tetap dipertahankan: path `/opt/gwens-automation`, unit `gwens-automation.service`, akun/grup sistem `gwens`, project ID Supabase lokal `gwensoto`, key browser `gwens-admin-key`, contract ID `GWENS_LEGACY_SCHEMA_V1`, serta advisory-lock key `gwens_*` di migration historis. Mengubahnya tanpa migrasi deployment, browser state, dan database yang terkoordinasi dapat memutus instalasi atau kompatibilitas yang ada. Nama-nama tersebut bukan identitas produk yang ditampilkan; identitas produk resminya adalah Sotoayam.
 
 Telegram polling memakai `getUpdates`. Jangan jalankan lebih dari satu instance polling dengan token yang sama. Set `TELEGRAM_POLLING_ENABLED=false` pada instance tambahan atau saat memakai integrasi lain.
 

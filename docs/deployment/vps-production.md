@@ -1,6 +1,6 @@
-# Gwens Automation VPS Production
+# Sotoayam VPS Production
 
-Gwens Automation Control runs as the non-root `gwens` service account. Hermes is a separate application and Telegram bot; its process, token, and configuration must never be reused or modified by this deployment.
+Sotoayam runs under the legacy non-root `gwens` service account. Hermes is a separate application and Telegram bot; its process, token, and configuration must never be reused or modified by this deployment. Existing `/opt/gwens-automation` paths and the `gwens-automation.service` unit remain compatibility identifiers for deployed installations.
 
 ## Layout
 
@@ -35,7 +35,7 @@ CRITICAL_ALERT_EVALUATOR_ENABLED
 LOG_LEVEL
 ```
 
-Use the Gwens Automation bot token, never the Hermes token. Permissions must be `0640`; ownership is the deployment user with group `gwens`, so only the deployment account and service group can read it. Verify variable names without printing values.
+Use the Sotoayam bot token, never the Hermes token. Permissions must be `0640`; ownership is the deployment user with the legacy group `gwens`, so only the deployment account and service group can read it. Verify variable names without printing values.
 
 Keep `REMINDER_SCHEDULER_ENABLED=false` on laptops. For a production cutover, deploy with the scheduler disabled, verify health and a reminder dry-run, then set it to `true` on the VPS and restart the single service process. The bounded interval defaults to 300 seconds.
 
@@ -53,10 +53,10 @@ Production must set `HOST=127.0.0.1`, keeping port 3000 private to the VPS. The 
 4. Deploy to a new versioned release and atomically update `current`.
 5. Start the VPS first with `TELEGRAM_POLLING_ENABLED=false`.
 6. Verify localhost health and Supabase connectivity.
-7. Stop the verified local Gwens poller.
+7. Stop the verified local Sotoayam poller.
 8. Set VPS polling to `true`, restart the service, and verify one poller.
 
-Ordinary laptop development should keep Gwens polling disabled whenever VPS production polling is active.
+Ordinary laptop development should keep Sotoayam polling disabled whenever VPS production polling is active.
 
 ## Telegram Task Console State
 
@@ -80,9 +80,9 @@ Run `scripts/deploy/rollback.sh` on the VPS. It validates that the previous targ
 
 ## Security
 
-- The service runs as `gwens`, not root.
+- The service runs as the legacy `gwens` account, not root.
 - Secrets live only in the protected shared environment file.
 - systemd uses journald and process hardening.
 - The deployment account has only narrowly scoped service-control sudo rules.
 - Release archives exclude `.env`, `.git`, `node_modules`, logs, caches, and credentials.
-- Local and VPS Gwens polling must never run simultaneously.
+- Local and VPS Sotoayam polling must never run simultaneously.

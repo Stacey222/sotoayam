@@ -133,7 +133,7 @@ export class TelegramTaskConsoleService implements TelegramTaskConsole {
   private mainMenu(actor: TaskActor, notice?: string): TelegramConsoleResponse {
     const keyboard: TelegramInlineButton[][] = [[button("My Tasks", "tc:l")]];
     if (actor.permissions.has("task.create")) keyboard.push([button("Create Task", "tc:c")]);
-    return { text: `${notice ? `${notice}\n\n` : ""}Gwens Task Console`, inlineKeyboard: keyboard };
+    return { text: `${notice ? `${notice}\n\n` : ""}Sotoayam Task Console`, inlineKeyboard: keyboard };
   }
 
   private filterMenu(): TelegramConsoleResponse {

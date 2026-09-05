@@ -118,6 +118,16 @@ describe("HTTP API", () => {
     await app.close();
   });
 
+  it("serves the Sotoayam product identity", async () => {
+    const { app } = await buildApp({ config, repository, telegramSender: sender, logger: false });
+    const response = await app.inject({ method: "GET", url: "/" });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("<title>Sotoayam</title>");
+    expect(response.body).toContain('<p class="eyebrow">Sotoayam</p>');
+    expect(response.body).not.toMatch(/Gwens|GWENS/);
+    await app.close();
+  });
+
   it("rejects an unknown notification type", async () => {
     const { app } = await buildApp({ config, repository, telegramSender: sender, logger: false });
     const response = await app.inject({
@@ -216,7 +226,7 @@ describe("Telegram behavior", () => {
 
     expect(sender.sendMessage).toHaveBeenCalledWith(
       1003,
-      "Registrasi Telegram Gwens belum dapat diproses. Silakan coba lagi beberapa saat atau hubungi Admin Gwens.",
+      "Registrasi Telegram Sotoayam belum dapat diproses. Silakan coba lagi beberapa saat atau hubungi Admin Sotoayam.",
     );
     expect(silentLogger.error).toHaveBeenCalledWith(
       expect.objectContaining({ errorCode: "42501", errorMessage: "new row violates row-level security policy" }),

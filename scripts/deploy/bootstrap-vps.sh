@@ -49,7 +49,7 @@ ln -sfn "${NODE_RELEASE_DIR}/bin/npx" /usr/local/bin/npx
 
 cat >/etc/systemd/system/gwens-automation.service <<'UNIT'
 [Unit]
-Description=Gwens Automation Control
+Description=Sotoayam
 Wants=network-online.target
 After=network-online.target
 StartLimitIntervalSec=60

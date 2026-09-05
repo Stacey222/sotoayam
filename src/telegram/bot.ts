@@ -150,7 +150,7 @@ export class TelegramBot {
       try {
         await this.sender.sendMessage(
           message.chat.id,
-          "Registrasi Telegram Gwens belum dapat diproses. Silakan coba lagi beberapa saat atau hubungi Admin Gwens.",
+          "Registrasi Telegram Sotoayam belum dapat diproses. Silakan coba lagi beberapa saat atau hubungi Admin Sotoayam.",
         );
       } catch (sendError) {
         this.logger.error(
@@ -171,8 +171,8 @@ export class TelegramBot {
         "Telegram final normalized access state resolved",
       );
       const response = accessState.status === "ACTIVE"
-        ? `Akun Gwens aktif.\n\nDivisi: ${accessState.divisionCode}\nRole: ${accessState.roleCode}\nStatus: Aktif`
-        : "Registrasi Telegram Gwens berhasil.\n\nStatus: Menunggu aktivasi Admin.\n\nSilakan hubungi Admin Gwens untuk menentukan Divisi dan Role Anda.";
+        ? `Akun Sotoayam aktif.\n\nDivisi: ${accessState.divisionCode}\nRole: ${accessState.roleCode}\nStatus: Aktif`
+        : "Registrasi Telegram Sotoayam berhasil.\n\nStatus: Menunggu aktivasi Admin.\n\nSilakan hubungi Admin Sotoayam untuk menentukan Divisi dan Role Anda.";
       await this.sender.sendMessage(message.chat.id, response);
     } catch (error) {
       this.logger.error(
@@ -182,7 +182,7 @@ export class TelegramBot {
       try {
         await this.sender.sendMessage(
           message.chat.id,
-          "Status akun Gwens belum dapat dimuat. Silakan coba lagi beberapa saat atau hubungi Admin Gwens.",
+          "Status akun Sotoayam belum dapat dimuat. Silakan coba lagi beberapa saat atau hubungi Admin Sotoayam.",
         );
       } catch (sendError) {
         this.logger.error(

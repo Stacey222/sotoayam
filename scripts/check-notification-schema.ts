@@ -32,7 +32,7 @@ const probes = await Promise.all([
 ]);
 const pending = probes.some((result) => ["PGRST205", "PGRST204", "42703"].includes(result.error?.code ?? ""));
 const live = probes.every((result) => !result.error);
-console.log("Gwens Notification Foundation Schema\n");
+console.log("Sotoayam Notification Foundation Schema\n");
 for (const [name, passed] of Object.entries(checks)) console.log(`${name} = ${passed ? "PASS" : "FAIL"}`);
 console.log(`LIVE_NOTIFICATION_SCHEMA = ${pending ? "PENDING_MIGRATION" : live ? "PASS" : "FAIL"}`);
 console.log(`MIGRATION_SHA256 = ${createHash("sha256").update(sql).digest("hex")}`);

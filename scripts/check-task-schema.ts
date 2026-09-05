@@ -37,7 +37,7 @@ try {
   }
 } finally { await app.close(); }
 
-console.log("Gwens Task Core Schema\n");
+console.log("Sotoayam Task Core Schema\n");
 for (const [name, value] of Object.entries(checks)) console.log(`${name} = ${value ? "PASS" : "FAIL"}`);
 console.log(`LIVE_TASK_SCHEMA = ${pending ? "PENDING_MIGRATION" : live ? "PASS" : "FAIL"}`);
 console.log(`PRODUCTION_TASK_COUNT = ${taskCount}`);

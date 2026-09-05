@@ -1,10 +1,10 @@
-# Gwens Database Backup and Recovery
+# Sotoayam Database Backup and Recovery
 
-This runbook covers a logical backup of the Gwens application schema and a restore drill in an isolated PostgreSQL target. It never authorizes restoring into production.
+This runbook covers a logical backup of the Sotoayam application schema and a restore drill in an isolated PostgreSQL target. It never authorizes restoring into production.
 
 ## Scope and safety
 
-- Back up the `public` schema and its data. This contains the Gwens application tables, functions, constraints, indexes, RLS state, policies, and business rows.
+- Back up the `public` schema and its data. This contains the Sotoayam application tables, functions, constraints, indexes, RLS state, policies, and business rows.
 - Validate the Supabase migration registry separately. Migration history and Supabase-managed platform schemas are not application data in this logical artifact.
 - Do not blindly dump `auth`, `storage`, `realtime`, `extensions`, `supabase_migrations`, or other platform-owned schemas. Supabase manages those objects.
 - A logical backup does not include Telegram message history, environment variables, credentials, VPS files, journald, unfinished in-memory wizard state, or external-service state.
@@ -49,7 +49,7 @@ Use a disposable PostgreSQL cluster or separately provisioned non-production Sup
 
 1. Select an unused non-production port and a new temporary data directory.
 2. Initialize a new cluster and bind it to loopback only.
-3. Create a database named clearly for recovery, such as `gwens_recovery`.
+3. Create a database named clearly for recovery, such as `sotoayam_recovery`.
 4. Verify the database name, loopback server address, port, server version, and temporary data directory.
 5. Confirm the target is not the production host or project.
 
@@ -76,7 +76,7 @@ Require `pg_restore` exit code zero. Do not ignore constraint, schema, data, or 
 
 Verify only aggregate/status information; do not dump personal rows.
 
-- All expected Gwens tables, functions, indexes, and constraints exist.
+- All expected Sotoayam tables, functions, indexes, and constraints exist.
 - RLS remains enabled on every protected application table.
 - No unintended policy grants public access.
 - Production and recovery counts match for users, tasks, alerts, notifications, integration identities, and collaboration rules.
@@ -92,7 +92,7 @@ The application uses Supabase PostgREST, so a raw PostgreSQL target does not pro
 
 The 2026-09-02 drill produced and restored this application logical backup:
 
-- Filename: `gwens-production-public-20260902T093513Z.dump`
+- Filename: `gwens-production-public-20260902T093513Z.dump` (historical artifact name retained so operators can identify the verified backup)
 - Size: `151130` bytes
 - SHA-256: `37071c90278fc954e372d20d2626b5d48b37296cdec102dee7bfeb052469d2b1`
 - Contents: `public` schema and data, custom format, 276 archive TOC entries
@@ -121,4 +121,4 @@ After a successful drill:
 1. Stop the temporary PostgreSQL server.
 2. Remove its data directory, extracted temporary tools, CLI login artifacts, restore logs, and plaintext connection artifacts.
 3. Retain only the verified backup and checksum in the protected backup directory.
-4. Confirm the repository is clean, laptop Gwens polling remains off, and production runtime was never used as the restore target.
+4. Confirm the repository is clean, laptop Sotoayam polling remains off, and production runtime was never used as the restore target.

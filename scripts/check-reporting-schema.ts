@@ -19,7 +19,7 @@ const client = createSupabaseClient(loadSupabaseConfig());
 const probe = await client.from("tasks").select("task_category").limit(0);
 const pending = ["PGRST204", "42703"].includes(probe.error?.code ?? "");
 const live = !probe.error;
-console.log("Gwens Reporting Foundation Schema\n");
+console.log("Sotoayam Reporting Foundation Schema\n");
 for (const [name, passed] of Object.entries(checks)) console.log(`${name} = ${passed ? "PASS" : "FAIL"}`);
 console.log(`LIVE_REPORTING_SCHEMA = ${pending ? "PENDING_MIGRATION" : live ? "PASS" : "FAIL"}`);
 console.log(`MIGRATION_SHA256 = ${createHash("sha256").update(sql).digest("hex")}`);

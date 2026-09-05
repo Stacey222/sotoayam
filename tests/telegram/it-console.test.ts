@@ -94,7 +94,7 @@ function harness(options: { actor?: Partial<ManagedUser>; authority?: boolean; c
 
 describe("Slice 3.1 Telegram IT console", () => {
   it("1. allows an active IT SYSTEM_ADMIN to open /admin", async () => {
-    expect((await harness().console.open(9001)).text).toBe("Gwens IT Console");
+    expect((await harness().console.open(9001)).text).toBe("Sotoayam IT Console");
   });
   it("2. denies an ordinary STAFF user", async () => {
     expect((await harness({ actor: { role: roles[0] }, authority: false }).console.open(9001)).text).toBe("Perintah tidak tersedia.");
@@ -164,7 +164,7 @@ describe("Slice 3.1 Telegram IT console", () => {
     const console = harness().console; const sender = { sendMessage: vi.fn() };
     const bot = new TelegramBot("token", new TelegramRegistrationService({ upsertTelegramRegistration: vi.fn() }), { resolveByLegacyTelegramUserId: vi.fn() }, sender, { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, console);
     await bot.handleUpdate({ update_id: 1, message: { text: "/admin", chat: { id: 7001, type: "private" }, from: { id: 9001 } } });
-    expect(sender.sendMessage).toHaveBeenCalledWith(7001, "Gwens IT Console", expect.objectContaining({ inlineKeyboard: expect.any(Array) }));
+    expect(sender.sendMessage).toHaveBeenCalledWith(7001, "Sotoayam IT Console", expect.objectContaining({ inlineKeyboard: expect.any(Array) }));
   });
   it("23. existing /start response remains unchanged", async () => {
     const legacy = { id: 1, telegram_chat_id: 7001, telegram_username: null, telegram_first_name: "IT", name: null,
@@ -174,7 +174,7 @@ describe("Slice 3.1 Telegram IT console", () => {
     const bot = new TelegramBot("token", new TelegramRegistrationService({ upsertTelegramRegistration: vi.fn().mockResolvedValue(legacy) }),
       { resolveByLegacyTelegramUserId: vi.fn().mockResolvedValue({ status: "ACTIVE", active: true, divisionId: 10, roleId: 40, divisionCode: "IT", roleCode: "ADMIN" }) }, sender, { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, harness().console);
     await bot.handleUpdate({ update_id: 1, message: { text: "/start", chat: { id: 7001 }, from: { id: 9001, first_name: "IT" } } });
-    expect(sender.sendMessage).toHaveBeenCalledWith(7001, "Akun Gwens aktif.\n\nDivisi: IT\nRole: ADMIN\nStatus: Aktif");
+    expect(sender.sendMessage).toHaveBeenCalledWith(7001, "Akun Sotoayam aktif.\n\nDivisi: IT\nRole: ADMIN\nStatus: Aktif");
   });
   it("24. assigns business user code only after text input and explicit confirmation", async () => {
     const test = harness(); await test.console.handleCallback(9001, "ac:kb:2"); const preview = await test.console.handleText(9001, "gw-cc-001");

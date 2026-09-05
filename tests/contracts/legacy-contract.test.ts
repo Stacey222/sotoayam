@@ -145,7 +145,7 @@ describe("LEGACY COMPATIBILITY CONTRACT — Telegram registration", () => {
     expect(repository.users[0]).toMatchObject({ division: "UNASSIGNED", role: "UNASSIGNED", active: false });
     expect(sender.sendMessage).toHaveBeenCalledWith(
       2001,
-      expect.stringContaining("Registrasi Telegram Gwens berhasil."),
+      expect.stringContaining("Registrasi Telegram Sotoayam berhasil."),
     );
   });
 
@@ -207,7 +207,7 @@ describe("LEGACY COMPATIBILITY CONTRACT — Telegram registration", () => {
 
     expect(sender.sendMessage).toHaveBeenCalledWith(
       2003,
-      "Registrasi Telegram Gwens belum dapat diproses. Silakan coba lagi beberapa saat atau hubungi Admin Gwens.",
+      "Registrasi Telegram Sotoayam belum dapat diproses. Silakan coba lagi beberapa saat atau hubungi Admin Sotoayam.",
     );
     const serializedLogs = JSON.stringify(testLogger.error.mock.calls);
     expect(serializedLogs).not.toContain(botToken);

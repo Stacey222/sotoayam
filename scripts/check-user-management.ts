@@ -46,7 +46,7 @@ try {
   await app.close();
 }
 
-console.log("Gwens IT User Management\n");
+console.log("Sotoayam IT User Management\n");
 for (const [name, value] of Object.entries(checks)) console.log(`${name} = ${pass(value)}`);
 console.log(`PENDING_USERS = ${pending ?? 0}`);
 console.log(`ACTIVE_USERS = ${active ?? 0}`);

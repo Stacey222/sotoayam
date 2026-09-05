@@ -114,7 +114,7 @@ export class TelegramItConsoleService implements TelegramItConsole {
   }
 
   private mainMenu(): TelegramConsoleResponse {
-    return { text: "Gwens IT Console", inlineKeyboard: [
+    return { text: "Sotoayam IT Console", inlineKeyboard: [
       [button("User Management", "ac:u"), button("System Status", "ac:s")],
       [button("Collaboration Rules", "ac:g")],
     ] };

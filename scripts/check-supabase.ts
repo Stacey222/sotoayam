@@ -67,7 +67,7 @@ function isConnectionFailure(error: SafeError): boolean {
 }
 
 async function main(): Promise<void> {
-  console.log("Gwens Supabase Diagnostic\n");
+  console.log("Sotoayam Supabase Diagnostic\n");
 
   const environmentPresent = Boolean(
     process.env.SUPABASE_URL?.trim() && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
@@ -124,7 +124,7 @@ async function main(): Promise<void> {
 
   let serverWritePassed = false;
   let diagnosticChatId: number | undefined;
-  const marker = `gwens_diagnostic_${randomUUID()}`;
+  const marker = `sotoayam_diagnostic_${randomUUID()}`;
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
       const candidate = -(8_600_000_000_000_000 + randomInt(0, 100_000_000));
@@ -151,7 +151,7 @@ async function main(): Promise<void> {
           .insert({
             telegram_chat_id: diagnosticChatId,
             telegram_username: marker,
-            telegram_first_name: "Gwens Diagnostic",
+            telegram_first_name: "Sotoayam Diagnostic",
           })
           .select("id")
           .single();

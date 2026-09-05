@@ -37,7 +37,7 @@ function sourceControlReady(): boolean {
 }
 
 function main(): void {
-  console.log("Gwens Migration Baseline\n");
+  console.log("Sotoayam Migration Baseline\n");
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
   const checks: CheckResult[] = [
     { name: "SOURCE_CONTROL", passed: sourceControlReady() },
@@ -56,7 +56,7 @@ function main(): void {
     { name: "SECRET_SCAN", passed: run(npm, ["run", "check:secrets"]) },
   ];
 
-  console.log("\nGwens Migration Baseline Summary\n");
+  console.log("\nSotoayam Migration Baseline Summary\n");
   for (const check of checks) console.log(`${check.name} = ${check.passed ? "PASS" : "FAIL"}`);
   const supabasePassed = checks.find((check) => check.name === "SUPABASE_CONNECTION")?.passed === true;
   console.log(`REVERSIBLE_WRITE = ${supabasePassed ? "PASS" : "FAIL"}`);

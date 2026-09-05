@@ -34,7 +34,7 @@ const probes = [users, capabilities, integrations];
 const pending = probes.some((result) => ["PGRST204", "PGRST205", "42703", "42P01"].includes(result.error?.code ?? ""));
 const live = probes.every((result) => !result.error);
 
-console.log("Gwens Go-Live Stage 2 Schema\n");
+console.log("Sotoayam Go-Live Stage 2 Schema\n");
 for (const [name, passed] of Object.entries(checks)) console.log(`${name} = ${passed ? "PASS" : "FAIL"}`);
 console.log(`LIVE_STAGE2_SCHEMA = ${pending ? "PENDING_MIGRATION" : live ? "PASS" : "FAIL"}`);
 console.log(`MIGRATION_SHA256 = ${createHash("sha256").update(sql).digest("hex")}`);

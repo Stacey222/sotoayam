@@ -31,7 +31,7 @@ function sameSet(actual: readonly string[], expected: readonly string[]): boolea
 }
 
 async function main(): Promise<void> {
-  console.log("Gwens Governance Foundation\n");
+  console.log("Sotoayam Governance Foundation\n");
   const migrationPath = path.resolve(process.cwd(), "supabase", "migrations", MIGRATION);
   const sql = await readFile(migrationPath, "utf8");
   const requiredTables = [

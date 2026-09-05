@@ -3,6 +3,7 @@ import type { DueDelivery, ReminderChannelsRepository, ReminderNotificationsRepo
 import type { TaskUsersRepository } from "../repositories/task-users.repository.js";
 import type { FailureClass } from "../reminders/types.js";
 import type { TelegramSender } from "./telegram.service.js";
+import { TelegramDeliveryError } from "./telegram.service.js";
 
 export interface NotificationChannelAdapter {
   readonly channel: "TELEGRAM";
@@ -47,7 +48,7 @@ export class NotificationDeliveryService {
       } catch (error) {
         const failure = this.classify(error);
         const exhausted = failure.class === "PERMANENT" || attempt >= claimed.max_attempts;
-        const delayMinutes = attempt <= 1 ? 5 : 15;
+        const delayMinutes = failure.retryAfterSeconds ? Math.ceil(failure.retryAfterSeconds / 60) : (attempt <= 1 ? 5 : 15);
         await this.notifications.markFailed(item.id, { state: exhausted ? "FAILED" : "PENDING", attemptCount: attempt,
           nextAttemptAt: exhausted ? null : new Date(now.getTime() + delayMinutes * 60_000).toISOString(),
           failureClass: failure.class, failureCode: failure.code });
@@ -67,7 +68,10 @@ export class NotificationDeliveryService {
     return channels[0]!.externalId;
   }
 
-  private classify(error: unknown): { class: FailureClass; code: string } {
+  private classify(error: unknown): { class: FailureClass; code: string; retryAfterSeconds?: number } {
+    if (error instanceof TelegramDeliveryError) {
+      return { class: error.code === "TELEGRAM_SEND_PERMANENT" ? "PERMANENT" : "TRANSIENT", code: error.code, retryAfterSeconds: error.retryAfterSeconds };
+    }
     if (error instanceof AppError) {
       if (["RECIPIENT_UNAVAILABLE", "RECIPIENT_INACTIVE", "CHANNEL_UNAVAILABLE", "CHANNEL_AMBIGUOUS", "CHANNEL_INVALID"].includes(error.code)) {
         return { class: "PERMANENT", code: error.code };

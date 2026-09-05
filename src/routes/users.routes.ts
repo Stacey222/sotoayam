@@ -15,7 +15,7 @@ export interface UsersRoutesOptions {
 export async function usersRoutes(app: FastifyInstance, options: UsersRoutesOptions): Promise<void> {
   const authorize = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
     // TODO SECURITY: replace the shared key with authenticated admin identities and audit logs.
-    if (options.adminApiKey && !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) {
+    if (!options.adminApiKey || !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) {
       throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
     }
   };

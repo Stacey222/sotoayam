@@ -102,7 +102,7 @@ Defaults:
 - `PORT=3000` when omitted.
 - Telegram polling is enabled unless `TELEGRAM_POLLING_ENABLED` is exactly `false`.
 - `LOG_LEVEL=info` when omitted.
-- `ADMIN_API_KEY` is optional in current runtime, which is a known security limitation.
+- `ADMIN_API_KEY` is required at startup, and legacy admin routes fail closed if route configuration is absent.
 
 ## Static Admin UI
 

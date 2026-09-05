@@ -28,6 +28,7 @@ import { SupabaseReminderChannelsRepository, SupabaseReminderNotificationsReposi
 import { SupabaseReportingRepository } from "./repositories/reporting.repository.js";
 import { SupabaseCriticalAlertsRepository, SupabaseCriticalAlertSignalsRepository } from "./repositories/critical-alerts.repository.js";
 import { SupabaseIntegrationAdministrationRepository } from "./repositories/integration-administration.repository.js";
+import { SupabaseAutomationNotificationRepository } from "./repositories/automation-notifications.repository.js";
 import { adminUserManagementRoutes } from "./routes/admin-user-management.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
@@ -113,7 +114,10 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
           },
         });
   const resolver = new RecipientResolverService(repository);
-  const notificationService = new NotificationService(resolver, telegramSender, app.log);
+  const notificationService = new NotificationService(
+    resolver, telegramSender, app.log,
+    client ? new SupabaseAutomationNotificationRepository(client) : undefined,
+  );
   const userManagementService = client ? new UserManagementService(
     new SupabaseUserManagementRepository(client),
     new SupabaseDivisionsRepository(client),

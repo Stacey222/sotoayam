@@ -88,7 +88,7 @@ export function parseNotificationEvent(body: unknown): NotificationEvent {
     validationError("Message must not be empty");
   }
   if (body.message.length > 4096) validationError("Message must not exceed 4096 characters");
-  if (body.event_id !== undefined && (typeof body.event_id !== "string" || body.event_id.length > 200)) {
+  if (body.event_id !== undefined && (typeof body.event_id !== "string" || body.event_id.trim().length === 0 || body.event_id.length > 200)) {
     validationError("Invalid event_id");
   }
   if (body.metadata !== undefined && !isRecord(body.metadata)) validationError("Metadata must be an object");
@@ -96,7 +96,7 @@ export function parseNotificationEvent(body: unknown): NotificationEvent {
   return {
     type: body.type as NotificationEvent["type"],
     message: body.message.trim(),
-    ...(body.event_id ? { event_id: body.event_id as string } : {}),
+    ...(body.event_id ? { event_id: (body.event_id as string).trim() } : {}),
     ...(body.metadata ? { metadata: body.metadata } : {}),
   };
 }

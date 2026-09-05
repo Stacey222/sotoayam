@@ -22,10 +22,11 @@ Persyaratan: Node.js 20+ dan project Supabase.
 
 1. Install dependency: `npm install`.
 2. Salin nama variable dari `.env.example` ke `.env` milik lokal dan isi secret secara lokal. Jangan commit `.env`.
-3. Jalankan migration `supabase/migrations/202608260001_create_telegram_users.sql` melalui Supabase CLI atau SQL Editor.
-4. Jalankan development server: `npm run dev`.
-5. Buka `http://localhost:3000`.
-6. Jalankan test: `npm test`; typecheck/build: `npm run typecheck` dan `npm run build`.
+3. Login dan link Supabase CLI ke project yang benar, lalu terapkan **seluruh** migration berurutan dengan `npx supabase db push`. Jangan menjalankan hanya satu file SQL; aplikasi memerlukan seluruh katalog identity, task, governance, reminder, dan integrasi di `supabase/migrations/`.
+4. Jalankan `npm run check:migration-baseline` setelah konfigurasi credential Supabase tersedia. Pemeriksaan ini memverifikasi kontrak migrasi dan konektivitas; jangan menaruh credential di command, dokumentasi, atau Git.
+5. Jalankan development server: `npm run dev`.
+6. Buka `http://localhost:3000`.
+7. Jalankan test: `npm test`; typecheck/build: `npm run typecheck` dan `npm run build`.
 
 Environment wajib: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TOKEN`, dan `INTERNAL_API_KEY`. Untuk kompatibilitas workspace lama, backend juga menerima alias `SUPABASE_SERVICE_KEY`, tetapi nama canonical yang dianjurkan adalah `SUPABASE_SERVICE_ROLE_KEY`.
 
@@ -71,7 +72,7 @@ X-Internal-Api-Key: <credential yang disimpan di n8n>
 }
 ```
 
-`event_id` diterima untuk forward compatibility, tetapi deduplikasi/idempotency event belum diterapkan pada MVP. n8n tidak perlu mengetahui recipient maupun Telegram Chat ID.
+`event_id` diterima untuk forward compatibility. n8n tidak perlu mengetahui recipient maupun Telegram Chat ID.
 
 Mapping event:
 

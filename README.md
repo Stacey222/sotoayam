@@ -31,6 +31,8 @@ Environment wajib: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TO
 
 Environment opsional: `PORT`, `TELEGRAM_POLLING_ENABLED`, `LOG_LEVEL`, dan `ADMIN_API_KEY`. Jika `ADMIN_API_KEY` diisi, seluruh `/api/users` wajib menerima header `X-Admin-Api-Key`; tombol **Admin Key** pada UI menyimpannya hanya di `sessionStorage` tab browser. Jika tidak diisi, API admin bersifat public dan deployment tidak boleh dianggap production-ready.
 
+Semua route `/api/*` dibatasi per IP socket dalam fixed window: default 120 request per 60 detik. Atur `API_RATE_LIMIT_WINDOW_SECONDS`, `API_RATE_LIMIT_MAX_REQUESTS`, dan `API_RATE_LIMIT_MAX_TRACKED_CLIENTS` bila kebutuhan integrasi memerlukannya. `429` menyertakan `Retry-After`.
+
 Telegram polling memakai `getUpdates`. Jangan jalankan lebih dari satu instance polling dengan token yang sama. Set `TELEGRAM_POLLING_ENABLED=false` pada instance tambahan atau saat memakai integrasi lain.
 
 ## Telegram Registration

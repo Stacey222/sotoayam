@@ -18,6 +18,9 @@ export interface AppConfig extends SupabaseConfig {
   businessTimeZone: string;
   criticalAlertEvaluatorEnabled: boolean;
   criticalAlertPolicy: CriticalAlertPolicy;
+  apiRateLimitWindowSeconds: number;
+  apiRateLimitMaxRequests: number;
+  apiRateLimitMaxTrackedClients: number;
   logLevel: string;
 }
 
@@ -72,6 +75,12 @@ function parseSchedulerInterval(value: string | undefined): number {
   return seconds;
 }
 
+function parseBoundedPositiveInteger(value: string | undefined, fallback: number, name: string, max: number): number {
+  const parsed = Number(value?.trim() || fallback);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > max) throw new Error(`Invalid environment variable: ${name}`);
+  return parsed;
+}
+
 function parseBusinessTimeZone(value: string | undefined): string {
   const timeZone = value?.trim() || "Asia/Jakarta";
   try {
@@ -97,6 +106,9 @@ export function loadConfig(): AppConfig {
     businessTimeZone: parseBusinessTimeZone(process.env.BUSINESS_TIME_ZONE),
     criticalAlertEvaluatorEnabled: process.env.CRITICAL_ALERT_EVALUATOR_ENABLED === "true",
     criticalAlertPolicy: parseCriticalAlertPolicy(process.env.CRITICAL_ALERT_POLICY_JSON),
+    apiRateLimitWindowSeconds: parseBoundedPositiveInteger(process.env.API_RATE_LIMIT_WINDOW_SECONDS, 60, "API_RATE_LIMIT_WINDOW_SECONDS", 3600),
+    apiRateLimitMaxRequests: parseBoundedPositiveInteger(process.env.API_RATE_LIMIT_MAX_REQUESTS, 120, "API_RATE_LIMIT_MAX_REQUESTS", 100_000),
+    apiRateLimitMaxTrackedClients: parseBoundedPositiveInteger(process.env.API_RATE_LIMIT_MAX_TRACKED_CLIENTS, 10_000, "API_RATE_LIMIT_MAX_TRACKED_CLIENTS", 1_000_000),
     logLevel: process.env.LOG_LEVEL?.trim() || "info",
   };
   if (config.criticalAlertEvaluatorEnabled && !config.reminderSchedulerEnabled) {

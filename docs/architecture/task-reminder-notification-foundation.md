@@ -24,6 +24,6 @@ Protected operations:
 - `GET /api/admin/notifications/recent?limit=20`
 - `POST /api/admin/notifications/evaluate?dry_run=true`
 
-The boundary requires the Admin API key and the existing normalized SYSTEM_ADMIN actor. Dry-run reads and resolves candidates but creates no notification, changes no reminder state, and sends no Telegram message.
+The boundary requires the Admin API key plus a verified human session resolving to an active IT `SYSTEM_ADMIN`. Dry-run reads and resolves candidates but creates no notification, changes no reminder state, and sends no Telegram message.
 
 No routing rules are seeded. Legacy `telegram_users` notification booleans remain unchanged and continue serving only their existing compatibility contract.

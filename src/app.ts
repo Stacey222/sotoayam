@@ -47,7 +47,7 @@ import { UserManagementService } from "./services/user-management.service.js";
 import { SystemAuthorityService } from "./services/system-authority.service.js";
 import { UserAccessStateService, type UserAccessStateResolver } from "./services/user-access-state.service.js";
 import { resolveUserAccessState } from "./identity/user-access-state.js";
-import { TelegramTaskActorService, TrustedOwnerActorService, TrustedTaskActorService } from "./services/task-actor.service.js";
+import { AuthenticatedOwnerActorService, AuthenticatedTaskActorService, SupabaseHumanSessionVerifier, TelegramTaskActorService } from "./services/task-actor.service.js";
 import { TaskAuthorizationService } from "./services/task-authorization.service.js";
 import { TaskService } from "./services/task.service.js";
 import { DivisionCollaborationService } from "./services/division-collaboration.service.js";
@@ -125,6 +125,15 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const taskUsers = client ? new SupabaseTaskUsersRepository(client) : undefined;
   const collaborationRepository = client ? new SupabaseDivisionCollaborationRepository(client) : undefined;
   const permissionsRepository = client ? new SupabasePermissionsRepository(client) : undefined;
+  const authorityRepository = client ? new SupabaseSystemAuthorityRepository(client) : undefined;
+  const humanSessions = client ? new SupabaseHumanSessionVerifier(client) : undefined;
+  const humanActor = humanSessions && taskUsers && permissionsRepository
+    ? new AuthenticatedTaskActorService(humanSessions, taskUsers, permissionsRepository)
+    : undefined;
+  const systemAdminActor = humanSessions && taskUsers && permissionsRepository && authorityRepository
+    ? new AuthenticatedTaskActorService(humanSessions, taskUsers, permissionsRepository, authorityRepository)
+    : undefined;
+  const ownerActor = humanActor ? new AuthenticatedOwnerActorService(humanActor) : undefined;
   const divisionsRepository = client ? new SupabaseDivisionsRepository(client) : undefined;
   const taskService = client && taskUsers && collaborationRepository ? new TaskService(
     new SupabaseTasksRepository(client), taskUsers, new SupabaseTaskActivitiesRepository(client),
@@ -165,16 +174,14 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     ? new CollaborationRuleManagementService(
         collaborationRepository,
         new SupabaseDivisionsRepository(client),
-        taskUsers,
-        userManagementService,
         new SupabaseSystemAuthorityRepository(client),
         new SupabaseAuditRepository(client),
       )
     : undefined;
   const integrationAdministrationService = client && userManagementService && taskUsers && divisionsRepository
     ? new IntegrationAdministrationService(
-        new SupabaseIntegrationAdministrationRepository(client), divisionsRepository, taskUsers,
-        userManagementService, new SupabaseSystemAuthorityRepository(client),
+        new SupabaseIntegrationAdministrationRepository(client), divisionsRepository,
+        new SupabaseSystemAuthorityRepository(client),
       )
     : undefined;
   const itConsole = client && userManagementService ? new TelegramItConsoleService(
@@ -244,35 +251,38 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     adminApiKey: options.config.adminApiKey,
     accessService: userManagementService,
   });
-  if (userManagementService) await app.register(adminUserManagementRoutes, {
+  if (userManagementService && systemAdminActor) await app.register(adminUserManagementRoutes, {
     prefix: "/api/admin/users",
     service: userManagementService,
     adminApiKey: options.config.adminApiKey,
-    actorResolver: taskUsers && permissionsRepository ? new TrustedTaskActorService(taskUsers, permissionsRepository) : undefined,
+    actorResolver: systemAdminActor,
   });
-  if (systemAuthorityService) await app.register(systemAuthorityRoutes, {
+  if (systemAuthorityService && systemAdminActor) await app.register(systemAuthorityRoutes, {
     prefix: "/api/admin/system-authority",
     service: systemAuthorityService,
     adminApiKey: options.config.adminApiKey,
+    actorResolver: systemAdminActor,
   });
-  if (collaborationManagementService) await app.register(collaborationRulesRoutes, {
+  if (collaborationManagementService && systemAdminActor) await app.register(collaborationRulesRoutes, {
     prefix: "/api/admin/collaboration-rules",
     service: collaborationManagementService,
     adminApiKey: options.config.adminApiKey,
+    actorResolver: systemAdminActor,
   });
-  if (integrationAdministrationService) await app.register(integrationAdministrationRoutes, {
-    prefix: "/api/admin/integrations", service: integrationAdministrationService, adminApiKey: options.config.adminApiKey,
+  if (integrationAdministrationService && systemAdminActor) await app.register(integrationAdministrationRoutes, {
+    prefix: "/api/admin/integrations", service: integrationAdministrationService, actorResolver: systemAdminActor,
+    adminApiKey: options.config.adminApiKey,
   });
-  if (taskService && taskUsers && permissionsRepository) {
+  if (taskService && humanActor) {
     await app.register(tasksRoutes, {
       prefix: "/api/tasks",
       service: taskService,
-      actorResolver: new TrustedTaskActorService(taskUsers, permissionsRepository),
+      actorResolver: humanActor,
       adminApiKey: options.config.adminApiKey,
     });
   }
-  if (taskIngestionService && taskUsers && permissionsRepository) {
-    const actorResolver = new TrustedTaskActorService(taskUsers, permissionsRepository);
+  if (taskIngestionService && systemAdminActor) {
+    const actorResolver = systemAdminActor;
     await app.register(csvImportRoutes, {
       prefix: "/api/tasks/import", service: taskIngestionService, actorResolver, adminApiKey: options.config.adminApiKey,
     });
@@ -281,21 +291,21 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
       integrations: new SupabaseTaskSourceIntegrationsRepository(client!), internalApiKey: options.config.internalApiKey,
     });
   }
-  if (notificationOperations && taskUsers && permissionsRepository) {
+  if (notificationOperations && systemAdminActor) {
     await app.register(adminNotificationsRoutes, { prefix: "/api/admin/notifications", service: notificationOperations,
-      actorResolver: new TrustedTaskActorService(taskUsers, permissionsRepository), adminApiKey: options.config.adminApiKey });
+      actorResolver: systemAdminActor, adminApiKey: options.config.adminApiKey });
   }
-  if (reportingService && taskUsers) {
+  if (reportingService && ownerActor) {
     await app.register(reportsRoutes, { prefix: "/api/reports", service: reportingService,
-      actorResolver: new TrustedOwnerActorService(taskUsers), adminApiKey: options.config.adminApiKey });
+      actorResolver: ownerActor, adminApiKey: options.config.adminApiKey });
   }
-  if (criticalAlertService && taskUsers) {
+  if (criticalAlertService && ownerActor) {
     await app.register(criticalAlertsRoutes, { prefix: "/api/alerts", service: criticalAlertService,
-      actorResolver: new TrustedOwnerActorService(taskUsers), adminApiKey: options.config.adminApiKey });
+      actorResolver: ownerActor, adminApiKey: options.config.adminApiKey });
   }
-  if (criticalAlertEvaluator && taskUsers && permissionsRepository) {
+  if (criticalAlertEvaluator && systemAdminActor) {
     await app.register(adminCriticalAlertRoutes, { prefix: "/api/admin/alerts", evaluator: criticalAlertEvaluator,
-      actorResolver: new TrustedTaskActorService(taskUsers, permissionsRepository), adminApiKey: options.config.adminApiKey });
+      actorResolver: systemAdminActor, adminApiKey: options.config.adminApiKey });
   }
   await app.register(notificationRoutes, {
     prefix: "/api/notifications",

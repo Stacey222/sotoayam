@@ -4,12 +4,13 @@ import { secureEqual } from "../security.js";
 import type { UserManagementService } from "../services/user-management.service.js";
 import type { UserManagementStatus } from "../user-management/types.js";
 import type { TaskActorResolver } from "../services/task-actor.service.js";
+import type { TaskActor } from "../tasks/types.js";
 import { parsePositiveId } from "../validation.js";
 
 export interface AdminUserManagementRoutesOptions {
   service: UserManagementService;
   adminApiKey?: string;
-  actorResolver?: TaskActorResolver;
+  actorResolver: TaskActorResolver;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -24,11 +25,14 @@ function nullableId(value: unknown, field: string): number | null {
 }
 
 export async function adminUserManagementRoutes(app: FastifyInstance, options: AdminUserManagementRoutesOptions): Promise<void> {
+  const actors = new WeakMap<FastifyRequest, TaskActor>();
   app.addHook("preHandler", async (request: FastifyRequest, _reply: FastifyReply) => {
     if (options.adminApiKey && !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) {
       throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
     }
+    actors.set(request, await options.actorResolver.resolveTrustedActor(request.headers.authorization));
   });
+  const actor = (request: FastifyRequest): TaskActor => actors.get(request)!;
 
   app.get("/catalogs", async () => ({ success: true, data: await options.service.catalogs() }));
   app.get("/", async (request) => {
@@ -52,14 +56,13 @@ export async function adminUserManagementRoutes(app: FastifyInstance, options: A
       division_id: body.division_id === undefined ? current.division?.id ?? null : nullableId(body.division_id, "division_id"),
       role_id: body.role_id === undefined ? current.role?.id ?? null : nullableId(body.role_id, "role_id"),
       active: body.active === undefined ? current.active : body.active,
-    });
+    }, "admin_user_management_api", actor(request).id);
     request.log.info({ userId: current.id }, "Normalized user access updated");
     return { success: true, data };
   });
   app.patch<{ Params: { id: string } }>("/:id/business-user-code", async (request) => {
-    if (!options.actorResolver) throw new AppError(503, "BUSINESS_USER_CODE_ADMIN_UNAVAILABLE", "Business user code administration is unavailable");
-    const actor = await options.actorResolver.resolveTrustedActor();
-    if (!actor.active || actor.divisionCode !== "IT") {
+    const requestActor = actor(request);
+    if (!requestActor.active || requestActor.divisionCode !== "IT") {
       throw new AppError(403, "BUSINESS_USER_CODE_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
     }
     const value = record(request.body);
@@ -71,7 +74,7 @@ export async function adminUserManagementRoutes(app: FastifyInstance, options: A
     const data = await options.service.updateBusinessUserCode(parsePositiveId(request.params.id), {
       business_user_code: value.business_user_code,
       confirm_change: value.confirm_change,
-    }, "admin_user_management_api", actor.id);
+    }, "admin_user_management_api", requestActor.id);
     request.log.info({ userId: data.id }, "Business user code updated");
     return { success: true, data };
   });

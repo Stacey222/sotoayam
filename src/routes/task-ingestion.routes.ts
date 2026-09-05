@@ -21,7 +21,7 @@ export async function csvImportRoutes(app: FastifyInstance, options: CsvImportRo
     if (typeof request.body !== "string") throw new AppError(400, "CSV_CONTENT_TYPE_REQUIRED", "Use text/csv with a UTF-8 CSV body");
     const dryRun = booleanQuery(request.query.dry_run);
     const safeLabel = importLabel(request.headers["x-import-label"]);
-    const actor = await options.actorResolver.resolveTrustedActor();
+    const actor = await options.actorResolver.resolveTrustedActor(request.headers.authorization);
     return { success: true, data: await options.service.importCsv(actor, request.body, { dryRun, safeLabel }) };
   });
 }

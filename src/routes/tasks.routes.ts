@@ -14,15 +14,15 @@ export async function tasksRoutes(app: FastifyInstance, options: TasksRoutesOpti
       throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
     }
   });
-  const actor = () => options.actorResolver.resolveTrustedActor();
-  app.post("/", async (request, reply) => reply.status(201).send({ success: true, data: await options.service.createManual(await actor(), parseCreateTask(request.body)) }));
-  app.get("/", async (request) => ({ success: true, data: await options.service.list(await actor(), parseTaskFilters(request.query)) }));
-  app.get<{ Params: { id: string } }>("/:id", async (request) => ({ success: true, data: await options.service.get(await actor(), parsePositiveId(request.params.id)) }));
-  app.patch<{ Params: { id: string } }>("/:id", async (request) => ({ success: true, data: await options.service.update(await actor(), parsePositiveId(request.params.id), parseUpdateTask(request.body)) }));
-  app.post<{ Params: { id: string } }>("/:id/status", async (request) => ({ success: true, data: await options.service.transition(await actor(), parsePositiveId(request.params.id), parseTransition(request.body)) }));
-  app.post<{ Params: { id: string } }>("/:id/activities", async (request, reply) => reply.status(201).send({ success: true, data: await options.service.addActivity(await actor(), parsePositiveId(request.params.id), parseActivity(request.body)) }));
+  const actor = (request: FastifyRequest) => options.actorResolver.resolveTrustedActor(request.headers.authorization);
+  app.post("/", async (request, reply) => reply.status(201).send({ success: true, data: await options.service.createManual(await actor(request), parseCreateTask(request.body)) }));
+  app.get("/", async (request) => ({ success: true, data: await options.service.list(await actor(request), parseTaskFilters(request.query)) }));
+  app.get<{ Params: { id: string } }>("/:id", async (request) => ({ success: true, data: await options.service.get(await actor(request), parsePositiveId(request.params.id)) }));
+  app.patch<{ Params: { id: string } }>("/:id", async (request) => ({ success: true, data: await options.service.update(await actor(request), parsePositiveId(request.params.id), parseUpdateTask(request.body)) }));
+  app.post<{ Params: { id: string } }>("/:id/status", async (request) => ({ success: true, data: await options.service.transition(await actor(request), parsePositiveId(request.params.id), parseTransition(request.body)) }));
+  app.post<{ Params: { id: string } }>("/:id/activities", async (request, reply) => reply.status(201).send({ success: true, data: await options.service.addActivity(await actor(request), parsePositiveId(request.params.id), parseActivity(request.body)) }));
   app.post<{ Params: { id: string } }>("/:id/relationships", async (request, reply) => {
     const input = parseRelationship(request.body);
-    return reply.status(201).send({ success: true, data: await options.service.addRelationship(await actor(), parsePositiveId(request.params.id), input.targetId, input.type) });
+    return reply.status(201).send({ success: true, data: await options.service.addRelationship(await actor(request), parsePositiveId(request.params.id), input.targetId, input.type) });
   });
 }

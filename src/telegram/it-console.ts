@@ -6,6 +6,7 @@ import type { TelegramInlineButton } from "../services/telegram.service.js";
 import type { ManagedUser, UserManagementStatus } from "../user-management/types.js";
 import type { CollaborationRuleReader } from "../services/collaboration-rule-management.service.js";
 import { normalizeBusinessUserCode } from "../identity/business-user-code.js";
+import type { TaskActor } from "../tasks/types.js";
 
 export interface TelegramConsoleResponse {
   text: string;
@@ -18,9 +19,7 @@ export interface TelegramItConsole {
   handleText(externalTelegramId: number, text: string): Promise<TelegramConsoleResponse | null>;
 }
 
-interface AuthorizedActor {
-  userId: number;
-}
+interface AuthorizedActor extends TaskActor { userId: number }
 
 interface BusinessCodeState {
   actorUserId: number;
@@ -54,7 +53,7 @@ export class TelegramItConsoleService implements TelegramItConsole {
     if (data === "ac:u") return this.userMenu();
     if (data === "ac:s") return this.systemStatus();
     if (data === "ac:g") return this.collaborationMenu();
-    if (data === "ac:gv") return this.collaborationList();
+    if (data === "ac:gv") return this.collaborationList(actor);
 
     let match = /^ac:l:(p|a|i):(\d+)$/.exec(data);
     if (match) return this.userList(this.status(match[1]!), Number(match[2]));
@@ -110,7 +109,11 @@ export class TelegramItConsoleService implements TelegramItConsole {
     const user = await this.users.get(channel.user_id).catch(() => null);
     if (!user?.active || user.division?.code !== "IT") return null;
     const authority = await this.authorities.findActiveForUser(user.id);
-    return authority ? { userId: user.id } : null;
+    return authority ? {
+      userId: user.id, id: user.id, displayName: user.display_name, active: user.active,
+      divisionId: user.division?.id ?? null, divisionCode: user.division?.code ?? null,
+      roleId: user.role?.id ?? null, roleCode: user.role?.code ?? null, permissions: new Set(),
+    } : null;
   }
 
   private mainMenu(): TelegramConsoleResponse {
@@ -139,9 +142,9 @@ export class TelegramItConsoleService implements TelegramItConsole {
     return { text: "Collaboration Rules", inlineKeyboard: [[button("View Rules", "ac:gv")], [button("Back", "ac:m")]] };
   }
 
-  private async collaborationList(): Promise<TelegramConsoleResponse> {
+  private async collaborationList(actor: AuthorizedActor): Promise<TelegramConsoleResponse> {
     if (!this.collaborationRules) return unavailable();
-    const rules = await this.collaborationRules.list();
+    const rules = await this.collaborationRules.list(actor);
     const text = rules.length === 0 ? "Collaboration Rules\n\nTidak ada rule."
       : `Collaboration Rules\n\n${rules.map((rule) => `${rule.source_division.code} → ${rule.target_division.code}\nAllowed: ${rule.allowed ? "Yes" : "No"}\nApproval: ${rule.requires_approval ? "Required" : "No"}\nStatus: ${rule.active ? "Active" : "Inactive"}`).join("\n\n")}`;
     return { text, inlineKeyboard: [[button("Back", "ac:g")]] };

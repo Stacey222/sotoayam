@@ -5,8 +5,8 @@ import { governanceDatabaseError } from "./governance-database-error.js";
 export interface SystemAuthorityRepository {
   findActiveForUser(userId: number): Promise<SystemAuthorityAssignment | null>;
   countActive(): Promise<number>;
-  assign(userId: number, reason: string): Promise<SystemAuthorityAssignment>;
-  revoke(userId: number, reason: string): Promise<SystemAuthorityAssignment>;
+  assign(userId: number, reason: string, actorUserId: number): Promise<SystemAuthorityAssignment>;
+  revoke(userId: number, reason: string, actorUserId: number): Promise<SystemAuthorityAssignment>;
 }
 
 export class SupabaseSystemAuthorityRepository implements SystemAuthorityRepository {
@@ -31,17 +31,17 @@ export class SupabaseSystemAuthorityRepository implements SystemAuthorityReposit
     return count ?? 0;
   }
 
-  async assign(userId: number, reason: string): Promise<SystemAuthorityAssignment> {
+  async assign(userId: number, reason: string, actorUserId: number): Promise<SystemAuthorityAssignment> {
     const { data, error } = await this.client.rpc("assign_system_admin", {
-      p_user_id: userId, p_reason: reason, p_actor_user_id: null,
+      p_user_id: userId, p_reason: reason, p_actor_user_id: actorUserId,
     }).single();
     if (error) throw governanceDatabaseError("Unable to assign SYSTEM_ADMIN", error);
     return data as SystemAuthorityAssignment;
   }
 
-  async revoke(userId: number, reason: string): Promise<SystemAuthorityAssignment> {
+  async revoke(userId: number, reason: string, actorUserId: number): Promise<SystemAuthorityAssignment> {
     const { data, error } = await this.client.rpc("revoke_system_admin", {
-      p_user_id: userId, p_reason: reason, p_actor_user_id: null,
+      p_user_id: userId, p_reason: reason, p_actor_user_id: actorUserId,
     }).single();
     if (error) throw governanceDatabaseError("Unable to revoke SYSTEM_ADMIN", error);
     return data as SystemAuthorityAssignment;

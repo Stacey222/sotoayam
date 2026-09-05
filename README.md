@@ -31,6 +31,8 @@ Environment wajib: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TO
 
 Environment opsional: `PORT`, `TELEGRAM_POLLING_ENABLED`, `LOG_LEVEL`, dan `ADMIN_API_KEY`. Jika `ADMIN_API_KEY` diisi, seluruh `/api/users` wajib menerima header `X-Admin-Api-Key`; tombol **Admin Key** pada UI menyimpannya hanya di `sessionStorage` tab browser. Jika tidak diisi, API admin bersifat public dan deployment tidak boleh dianggap production-ready.
 
+HTTP API untuk task, report, alert, CSV import, dan administrasi normalized memakai identitas manusia dari sesi Supabase. Kirim `Authorization: Bearer <access-token>`; jika shared Admin key dikonfigurasi, kirim juga key tersebut sebagai boundary transisi. Mapping pengguna berasal dari server-controlled `app_metadata.gwens_user_id`; lihat [HTTP User Authentication](docs/http-user-authentication.md) untuk provisioning, revocation, dan rollback.
+
 Telegram polling memakai `getUpdates`. Jangan jalankan lebih dari satu instance polling dengan token yang sama. Set `TELEGRAM_POLLING_ENABLED=false` pada instance tambahan atau saat memakai integrasi lain.
 
 ## Telegram Registration
@@ -93,4 +95,4 @@ Pengiriman memakai `Promise.allSettled`, jadi kegagalan satu recipient tidak mem
 - Notification endpoint selalu dilindungi shared secret dengan perbandingan constant-time berbasis digest.
 - RLS diaktifkan pada tabel tanpa policy client; akses data dilakukan backend service role.
 - Error response tidak mengirim stack trace atau environment value.
-- `ADMIN_API_KEY` adalah proteksi MVP. Upgrade yang disarankan sebelum production adalah identity-based admin authentication, audit log, rate limiting, dan secret rotation.
+- `ADMIN_API_KEY` adalah boundary tambahan sementara dan tidak dipakai sebagai identitas pelaku. Endpoint manusia mengambil identitas dari sesi Supabase yang terverifikasi.

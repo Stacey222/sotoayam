@@ -1,6 +1,5 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { defineAdminRoutes } from "../auth/admin-authorization.js";
 import { AppError } from "../errors.js";
-import { secureEqual } from "../security.js";
 import type { CollaborationRuleManagementService } from "../services/collaboration-rule-management.service.js";
 import { parsePositiveId } from "../validation.js";
 
@@ -15,12 +14,7 @@ function boolean(value: unknown, field: string): boolean {
   return value;
 }
 
-export async function collaborationRulesRoutes(app: FastifyInstance, options: CollaborationRulesRoutesOptions): Promise<void> {
-  app.addHook("preHandler", async (request: FastifyRequest, _reply: FastifyReply) => {
-    if (!options.adminApiKey || !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) {
-      throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
-    }
-  });
+export const collaborationRulesRoutes = defineAdminRoutes<CollaborationRulesRoutesOptions>(async (app, options) => {
   app.get("/", async () => ({ success: true, data: await options.service.list() }));
   app.post("/", async (request, reply) => {
     const value = body(request.body);
@@ -45,4 +39,4 @@ export async function collaborationRulesRoutes(app: FastifyInstance, options: Co
       active: value.active === undefined ? undefined : boolean(value.active, "active"),
     }) };
   });
-}
+});

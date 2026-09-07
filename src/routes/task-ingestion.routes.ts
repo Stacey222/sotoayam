@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { defineAdminRoutes } from "../auth/admin-authorization.js";
 import { AppError } from "../errors.js";
 import { CSV_MAX_BYTES } from "../ingestion/csv-parser.js";
 import { parseAutomationIntake } from "../ingestion/automation-validation.js";
@@ -10,13 +11,8 @@ import type { TaskIngestionService } from "../services/task-ingestion.service.js
 export interface CsvImportRoutesOptions { service: TaskIngestionService; actorResolver: TaskActorResolver; adminApiKey?: string }
 export interface InternalTaskRoutesOptions { service: TaskIngestionService; integrations: TaskSourceIntegrationsRepository; internalApiKey: string }
 
-export async function csvImportRoutes(app: FastifyInstance, options: CsvImportRoutesOptions): Promise<void> {
+export const csvImportRoutes = defineAdminRoutes<CsvImportRoutesOptions>(async (app, options) => {
   app.addContentTypeParser("text/csv", { parseAs: "string" }, (_request, body, done) => done(null, body));
-  app.addHook("preHandler", async (request: FastifyRequest, _reply: FastifyReply) => {
-    if (!options.adminApiKey || !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) {
-      throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
-    }
-  });
   app.post<{ Querystring: { dry_run?: string } }>("/csv", { bodyLimit: CSV_MAX_BYTES }, async (request) => {
     if (typeof request.body !== "string") throw new AppError(400, "CSV_CONTENT_TYPE_REQUIRED", "Use text/csv with a UTF-8 CSV body");
     const dryRun = booleanQuery(request.query.dry_run);
@@ -24,7 +20,7 @@ export async function csvImportRoutes(app: FastifyInstance, options: CsvImportRo
     const actor = await options.actorResolver.resolveTrustedActor();
     return { success: true, data: await options.service.importCsv(actor, request.body, { dryRun, safeLabel }) };
   });
-}
+});
 
 export async function internalTaskIngestionRoutes(app: FastifyInstance, options: InternalTaskRoutesOptions): Promise<void> {
   app.addHook("preHandler", async (request: FastifyRequest, _reply: FastifyReply) => {

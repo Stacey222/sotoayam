@@ -23,6 +23,7 @@
     "check:secrets": "tsx scripts/check-secrets.ts",
     "check:reconciliation": "tsx scripts/reconcile-legacy.ts",
     "check:migration-baseline": "tsx scripts/check-migration-baseline.ts",
+    "migrate": "tsx scripts/migrate.ts",
     "test": "vitest run",
     "test:contract": "vitest run tests/contracts",
     "test:watch": "vitest",

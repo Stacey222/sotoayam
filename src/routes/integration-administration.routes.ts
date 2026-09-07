@@ -1,6 +1,5 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { defineAdminRoutes } from "../auth/admin-authorization.js";
 import { AppError } from "../errors.js";
-import { secureEqual } from "../security.js";
 import type { IntegrationAdministrationService } from "../services/integration-administration.service.js";
 import { parsePositiveId } from "../validation.js";
 
@@ -10,12 +9,7 @@ const body = (value: unknown): Record<string, unknown> => {
   return value as Record<string, unknown>;
 };
 
-export async function integrationAdministrationRoutes(app: FastifyInstance, options: IntegrationAdministrationRoutesOptions) {
-  app.addHook("preHandler", async (request: FastifyRequest, _reply: FastifyReply) => {
-    if (!options.adminApiKey || !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) {
-      throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
-    }
-  });
+export const integrationAdministrationRoutes = defineAdminRoutes<IntegrationAdministrationRoutesOptions>(async (app, options) => {
   app.get("/", async () => ({ success: true, data: await options.service.list() }));
   app.post("/", async (request, reply) => {
     const value = body(request.body);
@@ -42,4 +36,4 @@ export async function integrationAdministrationRoutes(app: FastifyInstance, opti
   app.delete<{ Params: { id: string; capability: string } }>("/:id/capabilities/:capability", async (request) => ({
     success: true, data: await options.service.revokeCapability(parsePositiveId(request.params.id), request.params.capability),
   }));
-}
+});

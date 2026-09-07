@@ -1,19 +1,13 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { defineAdminRoutes } from "../auth/admin-authorization.js";
 import { AppError } from "../errors.js";
 import { parseReportWindow } from "../reporting/time-window.js";
 import type { ReportDrillDown } from "../reporting/types.js";
-import { secureEqual } from "../security.js";
 import type { OwnerActorResolver } from "../services/task-actor.service.js";
 import type { ReportingService } from "../services/reporting.service.js";
 
 export interface ReportsRoutesOptions { service: ReportingService; actorResolver: OwnerActorResolver; adminApiKey?: string }
 
-export async function reportsRoutes(app: FastifyInstance, options: ReportsRoutesOptions): Promise<void> {
-  app.addHook("preHandler", async (request: FastifyRequest, _reply: FastifyReply) => {
-    if (!options.adminApiKey || !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) {
-      throw new AppError(401, "UNAUTHORIZED", "Invalid or missing report API key");
-    }
-  });
+export const reportsRoutes = defineAdminRoutes<ReportsRoutesOptions>(async (app, options) => {
   app.get("/content-creator/affiliate-task-status", async (request) => {
     const query = request.query as { window?: unknown; detail?: unknown; page?: unknown };
     const actor = await options.actorResolver.resolveOwnerActor();
@@ -28,4 +22,4 @@ export async function reportsRoutes(app: FastifyInstance, options: ReportsRoutes
     }
     return { success: true, data: await options.service.affiliateTaskStatus(actor, window) };
   });
-}
+}, { unauthorizedMessage: "Invalid or missing report API key" });

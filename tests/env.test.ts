@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../src/config/env.js";
 
 describe("Supabase server credential validation", () => {
+  beforeEach(() => vi.stubEnv("ADMIN_API_KEY", "a".repeat(32)));
   afterEach(() => vi.unstubAllEnvs());
 
   it("rejects a publishable key used as the service-role credential", () => {
@@ -123,5 +124,40 @@ describe("Supabase server credential validation", () => {
     expect(loadConfig().businessTimeZone).toBe("Asia/Jakarta");
     vi.stubEnv("BUSINESS_TIME_ZONE", "Not/A-Time-Zone");
     expect(() => loadConfig()).toThrow("Invalid environment variable: BUSINESS_TIME_ZONE");
+  });
+
+  describe("ADMIN_API_KEY validation", () => {
+    beforeEach(() => {
+      vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+      vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+      vi.stubEnv("SUPABASE_SERVICE_KEY", "");
+      vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+      vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    });
+
+    it("rejects a missing admin API key", () => {
+      vi.stubEnv("ADMIN_API_KEY", undefined);
+      expect(() => loadConfig()).toThrow("Missing required environment variable: ADMIN_API_KEY");
+    });
+
+    it("rejects an empty admin API key", () => {
+      vi.stubEnv("ADMIN_API_KEY", "");
+      expect(() => loadConfig()).toThrow("Missing required environment variable: ADMIN_API_KEY");
+    });
+
+    it.each([1, 16, 31])("rejects a %i-character admin API key", (length) => {
+      vi.stubEnv("ADMIN_API_KEY", "a".repeat(length));
+      expect(() => loadConfig()).toThrow("Invalid environment variable: ADMIN_API_KEY must be at least 32 characters");
+    });
+
+    it("accepts an admin API key with exactly 32 characters", () => {
+      vi.stubEnv("ADMIN_API_KEY", "a".repeat(32));
+      expect(loadConfig().adminApiKey).toHaveLength(32);
+    });
+
+    it("accepts an admin API key longer than 32 characters", () => {
+      vi.stubEnv("ADMIN_API_KEY", "a".repeat(33));
+      expect(loadConfig().adminApiKey).toHaveLength(33);
+    });
   });
 });

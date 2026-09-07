@@ -1,6 +1,5 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { defineAdminRoutes } from "../auth/admin-authorization.js";
 import type { TelegramUsersRepository } from "../repositories/telegram-users.repository.js";
-import { secureEqual } from "../security.js";
 import { parsePositiveId, parseUserFilters, parseUserUpdate } from "../validation.js";
 import { AppError } from "../errors.js";
 import type { UserManagementService } from "../services/user-management.service.js";
@@ -12,16 +11,7 @@ export interface UsersRoutesOptions {
   accessService?: UserManagementService;
 }
 
-export async function usersRoutes(app: FastifyInstance, options: UsersRoutesOptions): Promise<void> {
-  const authorize = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-    // TODO SECURITY: replace the shared key with authenticated admin identities and audit logs.
-    if (options.adminApiKey && !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) {
-      throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
-    }
-  };
-
-  app.addHook("preHandler", authorize);
-
+export const usersRoutes = defineAdminRoutes<UsersRoutesOptions>(async (app, options) => {
   app.get("/", async (request) => ({ success: true, data: await options.repository.findAll(parseUserFilters(request.query)) }));
 
   app.get<{ Params: { id: string } }>("/:id", async (request) => {
@@ -44,4 +34,4 @@ export async function usersRoutes(app: FastifyInstance, options: UsersRoutesOpti
     request.log.info({ userId: id }, "Telegram user updated");
     return { success: true, data: user };
   });
-}
+});

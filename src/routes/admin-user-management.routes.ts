@@ -1,6 +1,5 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { defineAdminRoutes } from "../auth/admin-authorization.js";
 import { AppError } from "../errors.js";
-import { secureEqual } from "../security.js";
 import type { UserManagementService } from "../services/user-management.service.js";
 import type { UserManagementStatus } from "../user-management/types.js";
 import type { TaskActorResolver } from "../services/task-actor.service.js";
@@ -23,13 +22,7 @@ function nullableId(value: unknown, field: string): number | null {
   return value;
 }
 
-export async function adminUserManagementRoutes(app: FastifyInstance, options: AdminUserManagementRoutesOptions): Promise<void> {
-  app.addHook("preHandler", async (request: FastifyRequest, _reply: FastifyReply) => {
-    if (options.adminApiKey && !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) {
-      throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
-    }
-  });
-
+export const adminUserManagementRoutes = defineAdminRoutes<AdminUserManagementRoutesOptions>(async (app, options) => {
   app.get("/catalogs", async () => ({ success: true, data: await options.service.catalogs() }));
   app.get("/", async (request) => {
     const value = (request.query as { status?: unknown }).status;
@@ -75,4 +68,4 @@ export async function adminUserManagementRoutes(app: FastifyInstance, options: A
     request.log.info({ userId: data.id }, "Business user code updated");
     return { success: true, data };
   });
-}
+});

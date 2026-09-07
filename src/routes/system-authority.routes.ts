@@ -1,6 +1,5 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { defineAdminRoutes } from "../auth/admin-authorization.js";
 import { AppError } from "../errors.js";
-import { secureEqual } from "../security.js";
 import type { SystemAuthorityService } from "../services/system-authority.service.js";
 
 export interface SystemAuthorityRoutesOptions { service: SystemAuthorityService; adminApiKey?: string }
@@ -14,11 +13,8 @@ function input(body: unknown): { userId: number; reason: string } {
   return { userId: value.user_id, reason: value.reason.trim() };
 }
 
-export async function systemAuthorityRoutes(app: FastifyInstance, options: SystemAuthorityRoutesOptions): Promise<void> {
-  app.addHook("preHandler", async (request: FastifyRequest, _reply: FastifyReply) => {
-    if (options.adminApiKey && !secureEqual(request.headers["x-admin-api-key"] as string | undefined, options.adminApiKey)) throw new AppError(401, "UNAUTHORIZED", "Invalid or missing admin API key");
-  });
+export const systemAuthorityRoutes = defineAdminRoutes<SystemAuthorityRoutesOptions>(async (app, options) => {
   app.get("/status", async () => ({ success: true, data: await options.service.status() }));
   app.post("/assign", async (request) => { const value = input(request.body); return { success: true, data: await options.service.assign(value.userId, value.reason) }; });
   app.post("/revoke", async (request) => { const value = input(request.body); return { success: true, data: await options.service.revoke(value.userId, value.reason) }; });
-}
+});

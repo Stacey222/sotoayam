@@ -22,7 +22,7 @@ const config: AppConfig = {
   supabaseServiceRoleKey: "test-service-key",
   telegramBotToken: "test-bot-token",
   internalApiKey: "test-internal-key",
-  adminApiKey: undefined,
+  adminApiKey: "a".repeat(32),
   port: 3000,
   telegramPollingEnabled: false,
   reminderSchedulerEnabled: false,

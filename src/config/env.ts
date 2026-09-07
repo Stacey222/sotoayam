@@ -9,7 +9,7 @@ export interface SupabaseConfig {
 export interface AppConfig extends SupabaseConfig {
   telegramBotToken: string;
   internalApiKey: string;
-  adminApiKey?: string;
+  adminApiKey: string;
   host?: string;
   port: number;
   telegramPollingEnabled: boolean;
@@ -35,6 +35,14 @@ function requireEnv(name: string, aliases: string[] = []): string {
     if (value) return value;
   }
   throw new Error(`Missing required environment variable: ${name}`);
+}
+
+function requireMinimumLengthEnv(name: string, minimumLength: number): string {
+  const value = requireEnv(name);
+  if (value.length < minimumLength) {
+    throw new Error(`Invalid environment variable: ${name} must be at least ${minimumLength} characters`);
+  }
+  return value;
 }
 
 function requireSupabaseServerKey(): string {
@@ -88,7 +96,7 @@ export function loadConfig(): AppConfig {
     ...supabase,
     telegramBotToken: requireEnv("TELEGRAM_BOT_TOKEN"),
     internalApiKey: requireEnv("INTERNAL_API_KEY"),
-    adminApiKey: process.env.ADMIN_API_KEY?.trim() || undefined,
+    adminApiKey: requireMinimumLengthEnv("ADMIN_API_KEY", 32),
     host: parseHost(process.env.HOST),
     port: parsePort(process.env.PORT),
     telegramPollingEnabled: process.env.TELEGRAM_POLLING_ENABLED === "true",

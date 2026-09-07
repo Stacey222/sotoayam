@@ -1,5 +1,7 @@
 # Go-Live Task Category Matrix
 
+> Historical origin-installation taxonomy record. A fresh customer is not required to reproduce the named Divisi, category, live-task count, or report. Taxonomy-as-data is deferred to P0-13/P0-14.
+
 Task Core is authoritative. A category is supplied explicitly through `TaskService` or a canonical intake path; it must never be inferred from titles, descriptions, source references, or other free text.
 
 | Category | Owner Divisi | Purpose | Valid creation sources | Report usage | Automation usage | Status |

@@ -77,31 +77,42 @@ LOG_LEVEL
 
 Use the Sotoayam bot token, never the Hermes token. Permissions must be `0640`; only the deployment account and configured service group should be able to read it. Verify variable names without printing values.
 
-Keep `REMINDER_SCHEDULER_ENABLED=false` on laptops. For a production cutover, deploy with the scheduler disabled, verify health and a reminder dry-run, then set it to `true` on the VPS and restart the single service process. The bounded interval defaults to 300 seconds.
+`.env.example` contains safe preparation values, not a completed production decision. `install-env.sh` requires every operational flag to be explicitly `true` or `false` and accepts either safe configuration:
 
-Reporting uses `BUSINESS_TIME_ZONE=Asia/Jakarta` for deterministic business-date boundaries while database timestamps remain UTC.
+| Setting | Fresh-customer choice |
+| --- | --- |
+| `TELEGRAM_POLLING_ENABLED` | Set `true` when this instance has its dedicated bot and no other process is polling it. Keep `false` only for preparation, HTTP-only operation, or an intentional staged handover. |
+| `REMINDER_SCHEDULER_ENABLED` | Set `true` when automatic reminder evaluation is intended and database migration/configuration is ready. `false` is a legitimate deliberate choice when reminders are not yet in use. |
+| `CRITICAL_ALERT_EVALUATOR_ENABLED` | Set `true` only when the scheduler is enabled and the customer has reviewed the alert policy. It never becomes enabled implicitly. |
 
-Keep `CRITICAL_ALERT_EVALUATOR_ENABLED=false` on laptops and during the first production cutover. Run the protected IT dry-run, verify zero unintended candidates and mutations, then enable it on the VPS. It runs under the existing reminder scheduler timer with its own durable overlap lease; it does not create a second scheduler timer or send OWNER push broadcasts.
+The evaluator depends on the scheduler; invalid combinations are rejected. The scheduler interval defaults to 300 seconds. Laptop development must keep polling and production schedulers disabled whenever the VPS owns them.
 
-Production must set `HOST=127.0.0.1`, keeping port 3000 private to the VPS. The default `0.0.0.0` remains available for compatible local development only.
+Choose `BUSINESS_TIME_ZONE` for the customer. `UTC` is the safe fresh fallback; the historical installation keeps `Asia/Jakarta` explicitly. Database timestamps remain UTC.
+
+Production uses `HOST=127.0.0.1` by default, keeping the configured `PORT` private to the VPS.
 
 The deployment process also requires `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, and `SUPABASE_PROJECT_REF` in its own protected environment. These deploy-only values establish the non-interactive Supabase CLI link for the inactive release. Do not add them to `shared/.env`, the release archive, shell history, or systemd service environment.
 
-## Deployment
+## Fresh customer install
 
 1. Verify a clean Git checkpoint and all tests/checkers.
-2. Run `scripts/deploy/package-release.ps1` locally.
-3. Upload the archive, `scripts/deploy/deploy-release.sh`, and `scripts/deploy/deployment-config.sh` over SSH, preserving their relative location.
-4. Provide the three deploy-only Supabase variables through the approved protected operator environment, then run the deployment script.
-5. The script installs the pinned migration tooling in the inactive release, links it, runs `npm run migrate`, removes link state and development tooling, and only then atomically updates `current`.
-6. The script restarts systemd and requires localhost `/health` to pass. Start the VPS first with `TELEGRAM_POLLING_ENABLED=false`.
-7. Verify Supabase connectivity and the remaining runtime checks.
-8. Stop the verified local Sotoayam poller.
-9. Set VPS polling to `true`, restart the service, and verify one poller.
+2. Create `shared/.env` from `.env.example`, replace every placeholder, choose the customer timezone, and explicitly select all three operational flags. Confirm a dedicated Telegram bot has no competing poller before selecting polling `true`.
+3. Pass the completed file through `scripts/deploy/install-env.sh`; it validates configuration shape without requiring historical users, Divisi, roles, rules, or row counts.
+4. Run `scripts/deploy/package-release.ps1` locally.
+5. Upload the archive, `scripts/deploy/deploy-release.sh`, and `scripts/deploy/deployment-config.sh` over SSH, preserving their relative location.
+6. Provide the three deploy-only Supabase variables through the approved protected operator environment, then run the deployment script.
+7. The script installs pinned migration tooling in the inactive release, runs `npm run migrate`, removes link state and development tooling, and only then atomically updates `current`.
+8. The script restarts systemd and requires localhost `/health` to pass.
+9. From a protected operator environment containing the runtime configuration, run `node scripts/deploy/check-vps-runtime.mjs` in the active release. It verifies configuration shape, the pinned Node runtime, and generic health only.
+10. Verify exactly one process and, when polling was selected, exactly one Telegram poller.
 
 Any install, CLI, link, or migration failure exits non-zero before `current` changes or systemd restarts. A failure after migration but before activation leaves the database forward-migrated and the previous application release active; investigate compatibility before retrying. A post-activation restart or health failure exits non-zero and leaves the manual application rollback procedure below available. It never reverses database migrations automatically.
 
-Ordinary laptop development should keep Sotoayam polling disabled whenever VPS production polling is active.
+## Existing staged / legacy installation
+
+The origin installation deliberately started with polling, reminders, and critical evaluation disabled while another process remained authoritative. That sequence is not a universal fresh-install prerequisite. Existing installations performing the same controlled handover may explicitly select all three flags as `false`, verify health and dry runs, stop the previous poller, then enable only the approved workers.
+
+`scripts/deploy/check-legacy-staged-runtime.mjs` retains the historical business-data assertion for the origin installation. It is opt-in, is not included in fresh release archives, and must never be used as a customer acceptance gate. The generic `check-vps-runtime.mjs` does not use an admin key or inspect users, Telegram identities, Divisi, roles, collaboration rules, or row counts.
 
 ## Telegram Task Console State
 
@@ -117,7 +128,7 @@ sudo journalctl -u "${SERVICE_NAME}" -f
 curl -fsS "http://127.0.0.1:${HEALTH_PORT}/health"
 ```
 
-Port 3000 is for localhost health and internal operation. Do not expose it publicly unless a separately reviewed API ingress is required. Do not expose database or Supabase-related ports.
+The configured port is for localhost health and internal operation. Do not expose it publicly unless a separately reviewed API ingress is required. Do not expose database or Supabase-related ports.
 
 ## Rollback
 

@@ -176,7 +176,7 @@ describe("release deployment migration gate", () => {
 describe("release packaging", () => {
   it("includes the official migration runner, config, and migration inventory", async () => {
     const packaging = await readFile(path.join(projectRoot, "scripts/deploy/package-release.ps1"), "utf8");
-    expect(packaging).toContain(".node-version scripts/migrate.ts scripts/deploy/deployment-config.sh supabase/config.toml supabase/migrations");
+    expect(packaging).toContain(".node-version scripts/migrate.ts scripts/deploy/deployment-config.sh scripts/deploy/check-vps-runtime.mjs supabase/config.toml supabase/migrations");
     expect(packaging.indexOf("npm run build")).toBeLessThan(packaging.indexOf("tar -czf"));
   });
 });

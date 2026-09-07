@@ -2,6 +2,8 @@
 
 This is the operator checklist and recovery runbook for the controlled Sotoayam beta. It records the minimum safe operating contract; it does not replace automated gates or live verification for a release.
 
+> Historical staged-installation record: named Divisi, collaboration rules, report categories, row counts, and rollout steps below describe the origin controlled beta. They are not fresh-customer installation requirements. Fresh installations use `docs/deployment/vps-production.md`; broader removal of private operational history is deferred to P0-15.
+
 ## Current recovery verification
 
 Database logical backup and restore verification passed on 2026-09-02. The `public` application schema and data were restored into a disposable loopback-only PostgreSQL 17.11 cluster, with matching production/recovery counts, identity `MATCH=5`, 22/22 expected tables, 22 RLS-enabled tables, zero public policies, and zero orphan references. The verified artifact is retained outside Git and the VPS under restricted operator-local ACLs. See [database-recovery.md](database-recovery.md).

@@ -41,17 +41,23 @@ Fresh-install deployment identity and paths are parameterized through the shared
 
 `.node-version` is the authoritative deployment runtime pin. Bootstrap installs the exact supported Node.js version and release deployment rejects any different runtime before dependency installation or activation.
 
+Fresh-customer installation defaults are separated from the historical staged cutover. Fresh runtime validation now checks configuration shape, the exact Node.js pin, and generic localhost health without requiring origin-company users, Divisi, roles, collaboration rules, or row counts. Historical business-data validation remains available only through an explicitly legacy, opt-in checker that is excluded from fresh release archives.
+
+Operational worker flags remain explicit customer choices: safe preparation values do not silently enable Telegram polling, reminders, or critical-alert evaluation, and fresh installation no longer forces the original all-disabled cutover state. The fresh host and business-timezone fallbacks are `127.0.0.1` and `UTC`; existing installations retain compatibility through explicit environment values.
+
+Historical operational assumptions are not universal product requirements. Remaining customer taxonomy hardcoding is deferred to P0-13/P0-14, and broader private operational documentation cleanup remains P0-15.
+
 ## Next Agent
-Recommended: Codex.
+Recommended: Claude Code.
 
 Next task:
-P0-10 separate founder staged-cutover defaults from customer installation defaults.
+P0-05 design persisted notification intent for `/api/notifications/send`.
 
 Reason:
-Portable deployment configuration and deterministic runtime selection are complete; staged operational assumptions must now be separated from clean customer defaults.
+P0-10 is complete. The orchestrator roadmap places P0-05 next so the notification intake contract can be approved before P0-06 implementation.
 
 ## Pending Higher-Level Work
-After the immediate patch:
+After P0-10:
 - idempotent notification intake;
 - first-admin bootstrap;
 - taxonomy-as-data;

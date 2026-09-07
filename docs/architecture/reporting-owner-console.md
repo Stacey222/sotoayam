@@ -10,7 +10,7 @@ The database validates category as an uppercase code instead of a closed databas
 
 ## Metrics
 
-The report window filters task `created_at`. `TODAY` starts at local business midnight; `LAST_7_DAYS` and `LAST_30_DAYS` include the current business date plus the preceding 6 or 29 dates, ending at evaluation time. `BUSINESS_TIME_ZONE` is validated at startup and production uses `Asia/Jakarta`; stored timestamps remain UTC.
+The report window filters task `created_at`. `TODAY` starts at local business midnight; `LAST_7_DAYS` and `LAST_30_DAYS` include the current business date plus the preceding 6 or 29 dates, ending at evaluation time. `BUSINESS_TIME_ZONE` is validated at startup and must be selected for the customer; the safe fallback is `UTC`, while the historical staged installation explicitly uses `Asia/Jakarta`. Stored timestamps remain UTC.
 
 Total and completion-rate denominator include OPEN, IN_PROGRESS, BLOCKED, and COMPLETED tasks. CANCELLED and DRAFT are explicitly excluded and counted separately in the service result. Completion rate is COMPLETED divided by that total and is null when the denominator is zero. OVERDUE is derived for active tasks with `deadline < now`; it is never stored. Upcoming deadlines are active tasks due from now through the next seven days.
 

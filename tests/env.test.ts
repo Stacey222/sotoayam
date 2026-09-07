@@ -26,14 +26,14 @@ describe("Supabase server credential validation", () => {
     expect(loadConfig().supabaseServiceRoleKey).toBe("sb_secret_test-only");
   });
 
-  it("uses the compatible default host when HOST is absent", () => {
+  it("uses the safe localhost default when HOST is absent", () => {
     vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
     vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
     vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
     vi.stubEnv("HOST", "");
 
-    expect(loadConfig().host).toBe("0.0.0.0");
+    expect(loadConfig().host).toBe("127.0.0.1");
   });
 
   it("accepts an explicit localhost bind address", () => {
@@ -124,6 +124,15 @@ describe("Supabase server credential validation", () => {
     expect(loadConfig().businessTimeZone).toBe("Asia/Jakarta");
     vi.stubEnv("BUSINESS_TIME_ZONE", "Not/A-Time-Zone");
     expect(() => loadConfig()).toThrow("Invalid environment variable: BUSINESS_TIME_ZONE");
+  });
+
+  it("uses UTC when the customer business timezone is absent", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("BUSINESS_TIME_ZONE", "");
+    expect(loadConfig().businessTimeZone).toBe("UTC");
   });
 
   describe("ADMIN_API_KEY validation", () => {

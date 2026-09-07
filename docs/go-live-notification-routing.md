@@ -1,5 +1,7 @@
 # Go-Live Notification Routing
 
+> Historical origin-installation routing snapshot. Observed row counts and named operational roles are not fresh-install prerequisites; universal default-deny and explicit-recipient rules remain product invariants.
+
 Observed production routing rules: zero configured and zero active `notification_routing_rules`. The table currently supports explicit `TASK_ESCALATION` routes to one specific user. Missing routes remain `UNROUTED`.
 
 | Event | Recipient authority | Recipient selection | Channel | Automatic? | Configured? | Fallback | Unrouted behavior |

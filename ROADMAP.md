@@ -37,7 +37,7 @@ Legend:
   Owner: Codex
 - [x] P0-09 Parameterize installer; remove founder-specific deploy account; pin Node version.
   Owner: Codex -> Antigravity review
-- [ ] P0-10 Separate founder staged-cutover defaults from customer install defaults.
+- [x] P0-10 Separate founder staged-cutover defaults from customer install defaults.
   Owner: Codex
 
 ### First installation / configuration

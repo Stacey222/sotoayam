@@ -1,16 +1,86 @@
-const port = process.env.PORT ?? "3000";
-const response = await fetch(`http://127.0.0.1:${port}/api/admin/collaboration-rules`, {
-  headers: { "x-admin-api-key": process.env.ADMIN_API_KEY },
-});
-const payload = await response.json().catch(() => ({}));
-const rules = Array.isArray(payload.data) ? payload.data : [];
-const confirmed = rules.length === 1
-  && rules[0]?.source_division?.code === "ONPAGE_B2C"
-  && rules[0]?.target_division?.code === "CONTENT_CREATOR"
-  && rules[0]?.allowed === true
-  && rules[0]?.requires_approval === false
-  && rules[0]?.active === true;
-console.log(`PROTECTED_API_STATUS=${response.status}`);
-console.log(`COLLABORATION_RULE_COUNT=${rules.length}`);
-console.log(`CONFIRMED_SEED=${confirmed ? "PASS" : "FAIL"}`);
-if (response.status !== 200 || !confirmed) process.exitCode = 1;
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+const REQUIRED_RUNTIME_ENV = [
+  "SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "TELEGRAM_BOT_TOKEN",
+  "INTERNAL_API_KEY",
+  "ADMIN_API_KEY",
+  "HOST",
+  "PORT",
+  "TELEGRAM_POLLING_ENABLED",
+  "REMINDER_SCHEDULER_ENABLED",
+  "REMINDER_SCHEDULER_INTERVAL_SECONDS",
+  "BUSINESS_TIME_ZONE",
+  "CRITICAL_ALERT_EVALUATOR_ENABLED",
+  "LOG_LEVEL",
+];
+const BOOLEAN_RUNTIME_ENV = [
+  "TELEGRAM_POLLING_ENABLED",
+  "REMINDER_SCHEDULER_ENABLED",
+  "CRITICAL_ALERT_EVALUATOR_ENABLED",
+];
+
+export function validateRuntimeEnvironment(environment) {
+  const missing = REQUIRED_RUNTIME_ENV.filter((name) => !environment[name]?.trim());
+  const invalid = BOOLEAN_RUNTIME_ENV.filter((name) => !["true", "false"].includes(environment[name] ?? ""));
+  const port = Number(environment.PORT);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) invalid.push("PORT");
+  if (environment.HOST !== "127.0.0.1") invalid.push("HOST");
+  if (environment.CRITICAL_ALERT_EVALUATOR_ENABLED === "true" && environment.REMINDER_SCHEDULER_ENABLED !== "true") {
+    invalid.push("CRITICAL_ALERT_EVALUATOR_ENABLED");
+  }
+  return { missing, invalid: [...new Set(invalid)] };
+}
+
+export async function checkVpsRuntime(options = {}) {
+  const environment = options.environment ?? process.env;
+  const fetchImplementation = options.fetchImplementation ?? globalThis.fetch;
+  const stdout = options.stdout ?? console.log;
+  const stderr = options.stderr ?? console.error;
+  const nodeVersion = options.nodeVersion ?? process.version;
+  const versionFile = options.versionFile ?? path.resolve(".node-version");
+
+  const configuration = validateRuntimeEnvironment(environment);
+  if (configuration.missing.length > 0 || configuration.invalid.length > 0) {
+    stderr(`RUNTIME_CONFIG=FAIL missing=${configuration.missing.join(",") || "none"} invalid=${configuration.invalid.join(",") || "none"}`);
+    return 1;
+  }
+  stdout("RUNTIME_CONFIG=PASS");
+
+  let supportedVersion;
+  try {
+    const pin = (await readFile(versionFile, "utf8")).trim();
+    if (!/^\d+\.\d+\.\d+$/.test(pin)) throw new Error("invalid pin");
+    supportedVersion = `v${pin}`;
+  } catch {
+    stderr("NODE_VERSION_CHECK=FAIL reason=pin-unavailable");
+    return 1;
+  }
+  if (nodeVersion !== supportedVersion) {
+    stderr(`NODE_VERSION_CHECK=FAIL expected=${supportedVersion} actual=${nodeVersion}`);
+    return 1;
+  }
+  stdout("NODE_VERSION_CHECK=PASS");
+
+  let response;
+  try {
+    response = await fetchImplementation(`http://127.0.0.1:${environment.PORT}/health`);
+  } catch {
+    stderr("HEALTH_CHECK=FAIL reason=unreachable");
+    return 1;
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (response.status !== 200 || payload?.status !== "ok") {
+    stderr(`HEALTH_CHECK=FAIL status=${response.status}`);
+    return 1;
+  }
+  stdout("HEALTH_CHECK=PASS");
+  stdout("RUNTIME_CHECK=PASS");
+  return 0;
+}
+
+const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : undefined;
+if (import.meta.url === invokedPath) process.exitCode = await checkVpsRuntime();

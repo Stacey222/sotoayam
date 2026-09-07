@@ -22,7 +22,7 @@ export interface AppConfig extends SupabaseConfig {
 }
 
 function parseHost(value: string | undefined): string {
-  const host = value?.trim() || "0.0.0.0";
+  const host = value?.trim() || "127.0.0.1";
   if (host.length > 253 || !/^[A-Za-z0-9.:-]+$/.test(host)) {
     throw new Error("Invalid environment variable: HOST");
   }
@@ -81,7 +81,7 @@ function parseSchedulerInterval(value: string | undefined): number {
 }
 
 function parseBusinessTimeZone(value: string | undefined): string {
-  const timeZone = value?.trim() || "Asia/Jakarta";
+  const timeZone = value?.trim() || "UTC";
   try {
     new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date(0));
   } catch {

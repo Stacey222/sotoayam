@@ -30,7 +30,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "engines": {
-    "node": ">=20"
+    "node": "24.20.0"
   },
   "dependencies": {
     "@fastify/static": "^10.1.3",

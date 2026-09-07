@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ENV_FILE="/opt/gwens-automation/shared/.env"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/deployment-config.sh"
+load_deployment_config
+ENV_FILE="${APP_ROOT}/shared/.env"
 
 if grep -q '^HOST=' "${ENV_FILE}"; then
   sed -i 's/^HOST=.*/HOST="127.0.0.1"/' "${ENV_FILE}"

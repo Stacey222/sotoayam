@@ -37,19 +37,22 @@ One official ordered migration command exists: `npm run migrate`. It validates t
 
 Application rollback and database migration rollback are distinct. The existing application rollback can atomically select the previous compatible release; database migrations remain forward-only and are never reversed automatically.
 
+Fresh-install deployment identity and paths are parameterized through the shared `scripts/deploy/deployment-config.sh` contract. `DEPLOY_USER` is explicit; fresh defaults use `/opt/sotoayam`, the `sotoayam` service account/group, and `sotoayam.service`. Existing installations can continue supplying compatibility-sensitive legacy identifiers without renaming active resources.
+
+`.node-version` is the authoritative deployment runtime pin. Bootstrap installs the exact supported Node.js version and release deployment rejects any different runtime before dependency installation or activation.
+
 ## Next Agent
 Recommended: Codex.
 
 Next task:
-P0-09 parameterize the installer and pin the Node.js runtime policy.
+P0-10 separate founder staged-cutover defaults from customer installation defaults.
 
 Reason:
-The migration gate is in place; remaining founder-specific installer defaults and floating Node.js selection prevent a clean customer installation contract.
+Portable deployment configuration and deterministic runtime selection are complete; staged operational assumptions must now be separated from clean customer defaults.
 
 ## Pending Higher-Level Work
 After the immediate patch:
 - idempotent notification intake;
-- parameterized install;
 - first-admin bootstrap;
 - taxonomy-as-data;
 - install documentation.

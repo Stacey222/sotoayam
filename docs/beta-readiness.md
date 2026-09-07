@@ -98,14 +98,14 @@ Use `/admin` for IT-safe status and the protected localhost operational APIs for
 
 ### Application rollback
 
-1. Confirm the previous release target is a versioned directory under `/opt/gwens-automation/releases` and is compatible with the live schema.
-2. Run the reviewed rollback script. It atomically repoints `current`, restarts `gwens-automation.service`, and checks localhost health.
+1. Confirm the previous release target is a versioned directory under `${APP_ROOT}/releases` and is compatible with the live schema.
+2. Run the reviewed rollback script. It atomically repoints `current`, restarts `${SERVICE_NAME}`, and checks localhost health.
 3. Verify one process, one poller, scheduler/evaluator ownership, bounded logs, and no duplicate notifications.
 4. Never roll back database migration history automatically. Use a reviewed forward repair if schema repair is required.
 
 ### Rebuild on a new VPS
 
-1. Provision Node.js 20+, the designated non-root service account, systemd unit, release/shared layout, journald, and localhost-only networking.
+1. Provision the exact `.node-version` runtime, configured non-root service account, systemd unit, release/shared layout, journald, and localhost-only networking.
 2. Transfer a committed, verified versioned release artifact that excludes `.env`, Git metadata, caches, logs, and credentials.
 3. Restore the protected VPS-owned shared environment and confirm only required variable names are present.
 4. Verify Supabase connectivity and migration compatibility before enabling production work.

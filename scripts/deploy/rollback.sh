@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_ROOT="/opt/gwens-automation"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/deployment-config.sh"
+load_deployment_config
 PREVIOUS_FILE="${APP_ROOT}/shared/previous-release"
 
 if [[ ! -f "${PREVIOUS_FILE}" ]]; then
@@ -22,6 +24,6 @@ CURRENT="$(readlink -f "${APP_ROOT}/current")"
 ln -s "${PREVIOUS}" "${APP_ROOT}/current.next"
 mv -Tf "${APP_ROOT}/current.next" "${APP_ROOT}/current"
 printf '%s\n' "${CURRENT}" >"${PREVIOUS_FILE}"
-sudo systemctl restart gwens-automation.service
-curl -fsS http://127.0.0.1:3000/health >/dev/null
+sudo systemctl restart "${SERVICE_NAME}"
+curl -fsS "http://127.0.0.1:${HEALTH_PORT}/health" >/dev/null
 echo "ROLLBACK=PASS"

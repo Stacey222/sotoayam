@@ -1,4 +1,5 @@
-const response = await fetch("http://127.0.0.1:3000/api/admin/collaboration-rules", {
+const port = process.env.PORT ?? "3000";
+const response = await fetch(`http://127.0.0.1:${port}/api/admin/collaboration-rules`, {
   headers: { "x-admin-api-key": process.env.ADMIN_API_KEY },
 });
 const payload = await response.json().catch(() => ({}));

@@ -1,18 +1,58 @@
 # Sotoayam VPS Production
 
-Sotoayam runs under the legacy non-root `gwens` service account. Hermes is a separate application and Telegram bot; its process, token, and configuration must never be reused or modified by this deployment. Existing `/opt/gwens-automation` paths and the `gwens-automation.service` unit remain compatibility identifiers for deployed installations.
+Sotoayam runs as one non-root systemd service. Hermes is a separate application and Telegram bot; its process, token, and configuration must never be reused or modified by this deployment.
+
+## Fresh installation configuration
+
+Deployment scripts share this small environment-variable contract:
+
+| Variable | Fresh-install value | Requirement |
+| --- | --- | --- |
+| `DEPLOY_USER` | No default | Required by `bootstrap-vps.sh`; must name an existing non-root operator account. |
+| `APP_ROOT` | `/opt/sotoayam` | Optional safe absolute Unix path override. `/`, relative paths, traversal, whitespace, and shell metacharacters are rejected. |
+| `APP_USER` | `sotoayam` | Optional non-root system service account override. |
+| `APP_GROUP` | `sotoayam` | Optional non-root system service group override. |
+| `SERVICE_NAME` | `sotoayam.service` | Optional systemd `.service` unit name override; paths are rejected. |
+| `HEALTH_PORT` | `3000` | Optional localhost port used by deployment and rollback health checks; set it to the runtime `PORT` when overriding that value. |
+
+Set configuration in the invoking operator environment; no repository edit is required. Bootstrap validates all values before package installation or account/filesystem changes. For example:
+
+```bash
+export DEPLOY_USER="sotoayam-deploy"
+export APP_ROOT="/opt/sotoayam"
+export APP_USER="sotoayam"
+export APP_GROUP="sotoayam"
+export SERVICE_NAME="sotoayam.service"
+export HEALTH_PORT="3000"
+sudo --preserve-env=DEPLOY_USER,APP_ROOT,APP_USER,APP_GROUP,SERVICE_NAME,HEALTH_PORT bash scripts/deploy/bootstrap-vps.sh
+```
+
+The exact supported deployment runtime is recorded in `.node-version`. Bootstrap downloads that exact official Node.js archive for Linux x64 or arm64, verifies its published SHA-256 checksum, installs it without a version manager, and verifies `node --version`. Release deployment repeats the exact-version check before dependency installation or activation.
 
 ## Layout
 
 ```text
-/opt/gwens-automation/
+$APP_ROOT/
   releases/release-<git-sha>-<timestamp>/
   current -> releases/<active-release>/
   shared/.env
   shared/previous-release
 ```
 
-The reusable deployment commands accept host, user, and SSH key parameters. Do not embed passwords, tokens, API keys, or private keys in repository files.
+The reusable deployment commands do not infer SSH accounts or home directories. Provide host, operator, and SSH configuration outside repository source. Do not embed passwords, tokens, API keys, or private keys in repository files.
+
+## Existing legacy installation compatibility
+
+Existing installations using compatibility-sensitive identifiers are not renamed automatically. Supply their existing values for every deployment operation:
+
+```bash
+export APP_ROOT="/opt/gwens-automation"
+export APP_USER="gwens"
+export APP_GROUP="gwens"
+export SERVICE_NAME="gwens-automation.service"
+```
+
+The legacy paths, service account/group, and unit name remain supported inputs because renaming an active installation requires a separately reviewed cutover. They are not fresh-install recommendations. Do not rerun bootstrap over an existing installation without first reviewing ownership, systemd, sudoers, and rollback compatibility.
 
 ## Environment
 
@@ -35,7 +75,7 @@ CRITICAL_ALERT_EVALUATOR_ENABLED
 LOG_LEVEL
 ```
 
-Use the Sotoayam bot token, never the Hermes token. Permissions must be `0640`; ownership is the deployment user with the legacy group `gwens`, so only the deployment account and service group can read it. Verify variable names without printing values.
+Use the Sotoayam bot token, never the Hermes token. Permissions must be `0640`; only the deployment account and configured service group should be able to read it. Verify variable names without printing values.
 
 Keep `REMINDER_SCHEDULER_ENABLED=false` on laptops. For a production cutover, deploy with the scheduler disabled, verify health and a reminder dry-run, then set it to `true` on the VPS and restart the single service process. The bounded interval defaults to 300 seconds.
 
@@ -51,7 +91,7 @@ The deployment process also requires `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSW
 
 1. Verify a clean Git checkpoint and all tests/checkers.
 2. Run `scripts/deploy/package-release.ps1` locally.
-3. Upload the archive and `scripts/deploy/deploy-release.sh` over SSH.
+3. Upload the archive, `scripts/deploy/deploy-release.sh`, and `scripts/deploy/deployment-config.sh` over SSH, preserving their relative location.
 4. Provide the three deploy-only Supabase variables through the approved protected operator environment, then run the deployment script.
 5. The script installs the pinned migration tooling in the inactive release, links it, runs `npm run migrate`, removes link state and development tooling, and only then atomically updates `current`.
 6. The script restarts systemd and requires localhost `/health` to pass. Start the VPS first with `TELEGRAM_POLLING_ENABLED=false`.
@@ -70,11 +110,11 @@ The `/tasks` creation wizard, comment input, and block-reason input use bounded 
 ## Service Operations
 
 ```bash
-sudo systemctl status gwens-automation.service
-sudo systemctl restart gwens-automation.service
-sudo journalctl -u gwens-automation.service -n 100 --no-pager
-sudo journalctl -u gwens-automation.service -f
-curl -fsS http://127.0.0.1:3000/health
+sudo systemctl status "${SERVICE_NAME}"
+sudo systemctl restart "${SERVICE_NAME}"
+sudo journalctl -u "${SERVICE_NAME}" -n 100 --no-pager
+sudo journalctl -u "${SERVICE_NAME}" -f
+curl -fsS "http://127.0.0.1:${HEALTH_PORT}/health"
 ```
 
 Port 3000 is for localhost health and internal operation. Do not expose it publicly unless a separately reviewed API ingress is required. Do not expose database or Supabase-related ports.
@@ -85,7 +125,7 @@ Run `scripts/deploy/rollback.sh` on the VPS. It validates that the previous targ
 
 ## Security
 
-- The service runs as the legacy `gwens` account, not root.
+- The service runs as the configured non-root `APP_USER` and `APP_GROUP`.
 - Secrets live only in the protected shared environment file.
 - systemd uses journald and process hardening.
 - The deployment account has only narrowly scoped service-control sudo rules.

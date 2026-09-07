@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TARGET="/opt/gwens-automation/shared/.env"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/deployment-config.sh"
+load_deployment_config
+TARGET="${APP_ROOT}/shared/.env"
 NEXT="${TARGET}.next"
 REQUIRED=(
   SUPABASE_URL

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/deployment-config.sh"
+load_deployment_config
+
 if [[ "$#" -ne 2 ]]; then
   echo "Usage: deploy-release.sh <archive.tar.gz> <release-id>" >&2
   exit 1
@@ -8,7 +12,6 @@ fi
 
 ARCHIVE="$1"
 RELEASE_ID="$2"
-APP_ROOT="/opt/gwens-automation"
 CURL_COMMAND="curl"
 if [[ -n "${SOTOAYAM_DEPLOY_TEST_ROOT:-}" ]]; then
   if [[ "${NODE_ENV:-}" != "test" ]]; then
@@ -42,6 +45,7 @@ done
 umask 0027
 mkdir -p "${RELEASE_DIR}"
 tar -xzf "${ARCHIVE}" -C "${RELEASE_DIR}"
+require_supported_node "${RELEASE_DIR}/.node-version"
 
 cleanup_link_state() {
   case "${RELEASE_DIR}" in
@@ -79,11 +83,11 @@ fi
 ln -s "${RELEASE_DIR}" "${APP_ROOT}/current.next"
 mv -Tf "${APP_ROOT}/current.next" "${APP_ROOT}/current"
 
-if ! sudo systemctl restart gwens-automation.service; then
+if ! sudo systemctl restart "${SERVICE_NAME}"; then
   echo "POST_ACTIVATION_RESTART=FAIL" >&2
   exit 1
 fi
-if ! "${CURL_COMMAND}" -fsS --retry 10 --retry-connrefused --retry-delay 1 --max-time 30 http://127.0.0.1:3000/health >/dev/null; then
+if ! "${CURL_COMMAND}" -fsS --retry 10 --retry-connrefused --retry-delay 1 --max-time 30 "http://127.0.0.1:${HEALTH_PORT}/health" >/dev/null; then
   echo "POST_ACTIVATION_HEALTH=FAIL" >&2
   exit 1
 fi

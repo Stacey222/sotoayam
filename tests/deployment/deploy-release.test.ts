@@ -48,10 +48,14 @@ async function deploymentFixture(existingRelease = true): Promise<DeploymentFixt
   await mkdir(path.join(payload, "public"), { recursive: true });
   await writeFile(path.join(payload, "package.json"), "{}\n", "utf8");
   await writeFile(path.join(payload, "package-lock.json"), "{}\n", "utf8");
+  await writeFile(path.join(payload, ".node-version"), "24.20.0\n", "utf8");
   await writeFile(path.join(payload, "scripts", "migrate.ts"), "// test fixture\n", "utf8");
   await writeFile(path.join(payload, "supabase", "config.toml"), 'project_id = "test"\n', "utf8");
   await writeFile(path.join(payload, "supabase", "migrations", "202609070001_test.sql"), "select 1;\n", "utf8");
   await mkdir(fakeBin, { recursive: true });
+  await executable(path.join(fakeBin, "node"), `#!/usr/bin/env bash
+printf 'v%s\\n' "\${DEPLOY_TEST_NODE_VERSION:-24.20.0}"
+`);
 
   await executable(fakeSupabase, `#!/usr/bin/env bash
 printf 'supabase %s\\n' "$*" >>"$DEPLOY_TEST_LOG"
@@ -135,10 +139,11 @@ describe("release deployment migration gate", () => {
     ["migration failure", { DEPLOY_TEST_MIGRATION_EXIT: "3" }, 1],
     ["Supabase CLI unavailable", { DEPLOY_TEST_SKIP_CLI: "1" }, 0],
     ["Supabase authentication or link failure", { DEPLOY_TEST_LINK_EXIT: "4" }, 0],
+    ["unsupported Node.js runtime", { DEPLOY_TEST_NODE_VERSION: "22.14.0" }, 0],
   ])("keeps the existing release and does not restart after %s", async (_label, overrides, migrationRuns) => {
     const fixture = await deploymentFixture();
     const result = fixture.run(overrides);
-    const commands = await readFile(fixture.log, "utf8");
+    const commands = await readFile(fixture.log, "utf8").catch(() => "");
 
     expect(result.status).not.toBe(0);
     expect(commands).not.toContain("sudo systemctl restart");
@@ -162,7 +167,7 @@ describe("release deployment migration gate", () => {
 
     expect(result.status).not.toBe(0);
     expect(commands).toContain("npm run migrate");
-    expect(commands).toContain("sudo systemctl restart gwens-automation.service");
+    expect(commands).toContain("sudo systemctl restart sotoayam.service");
     expect(result.stderr).toContain("POST_ACTIVATION_HEALTH=FAIL");
     expect(commands).not.toMatch(/rollback|db reset|migration down/);
   });
@@ -171,7 +176,7 @@ describe("release deployment migration gate", () => {
 describe("release packaging", () => {
   it("includes the official migration runner, config, and migration inventory", async () => {
     const packaging = await readFile(path.join(projectRoot, "scripts/deploy/package-release.ps1"), "utf8");
-    expect(packaging).toContain("scripts/migrate.ts supabase/config.toml supabase/migrations");
+    expect(packaging).toContain(".node-version scripts/migrate.ts scripts/deploy/deployment-config.sh supabase/config.toml supabase/migrations");
     expect(packaging.indexOf("npm run build")).toBeLessThan(packaging.indexOf("tar -czf"));
   });
 });

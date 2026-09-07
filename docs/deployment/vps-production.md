@@ -45,16 +45,21 @@ Keep `CRITICAL_ALERT_EVALUATOR_ENABLED=false` on laptops and during the first pr
 
 Production must set `HOST=127.0.0.1`, keeping port 3000 private to the VPS. The default `0.0.0.0` remains available for compatible local development only.
 
+The deployment process also requires `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, and `SUPABASE_PROJECT_REF` in its own protected environment. These deploy-only values establish the non-interactive Supabase CLI link for the inactive release. Do not add them to `shared/.env`, the release archive, shell history, or systemd service environment.
+
 ## Deployment
 
 1. Verify a clean Git checkpoint and all tests/checkers.
 2. Run `scripts/deploy/package-release.ps1` locally.
 3. Upload the archive and `scripts/deploy/deploy-release.sh` over SSH.
-4. Deploy to a new versioned release and atomically update `current`.
-5. Start the VPS first with `TELEGRAM_POLLING_ENABLED=false`.
-6. Verify localhost health and Supabase connectivity.
-7. Stop the verified local Sotoayam poller.
-8. Set VPS polling to `true`, restart the service, and verify one poller.
+4. Provide the three deploy-only Supabase variables through the approved protected operator environment, then run the deployment script.
+5. The script installs the pinned migration tooling in the inactive release, links it, runs `npm run migrate`, removes link state and development tooling, and only then atomically updates `current`.
+6. The script restarts systemd and requires localhost `/health` to pass. Start the VPS first with `TELEGRAM_POLLING_ENABLED=false`.
+7. Verify Supabase connectivity and the remaining runtime checks.
+8. Stop the verified local Sotoayam poller.
+9. Set VPS polling to `true`, restart the service, and verify one poller.
+
+Any install, CLI, link, or migration failure exits non-zero before `current` changes or systemd restarts. A failure after migration but before activation leaves the database forward-migrated and the previous application release active; investigate compatibility before retrying. A post-activation restart or health failure exits non-zero and leaves the manual application rollback procedure below available. It never reverses database migrations automatically.
 
 Ordinary laptop development should keep Sotoayam polling disabled whenever VPS production polling is active.
 

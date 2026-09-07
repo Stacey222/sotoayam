@@ -12,7 +12,7 @@ Push-Location $projectRoot
 try {
   npm run build
   if ($LASTEXITCODE -ne 0) { throw "Build failed" }
-  tar -czf $output dist/src public package.json package-lock.json
+  tar -czf $output dist/src public package.json package-lock.json scripts/migrate.ts supabase/config.toml supabase/migrations
   if ($LASTEXITCODE -ne 0) { throw "Release packaging failed" }
 } finally {
   Pop-Location

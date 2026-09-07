@@ -33,16 +33,18 @@ New admin route groups must use `defineAdminRoutes` and be added to the security
 ## Migration State
 One official ordered migration command exists: `npm run migrate`. It validates the repository migration inventory, then uses the established Supabase CLI migration registry to apply pending migrations in deterministic filename order.
 
-`npm run migrate` is the required migration entry point. The next migration/deployment task is P0-08: wire migrations into deployment before release activation.
+`npm run migrate` is the required migration entry point and is now a mandatory pre-activation gate in `scripts/deploy/deploy-release.sh`. Migration failure prevents the release symlink from changing or the service from restarting. Deployment installs the pinned CLI only in the inactive release, establishes link state from protected deploy-only environment variables, then removes CLI link state and development tooling before activation.
+
+Application rollback and database migration rollback are distinct. The existing application rollback can atomically select the previous compatible release; database migrations remain forward-only and are never reversed automatically.
 
 ## Next Agent
 Recommended: Codex.
 
 Next task:
-P0-08 wire migrations into deployment before release activation.
+P0-09 parameterize the installer and pin the Node.js runtime policy.
 
 Reason:
-The ordered migration command is implemented and tested; deployment must invoke it safely before activating a release.
+The migration gate is in place; remaining founder-specific installer defaults and floating Node.js selection prevent a clean customer installation contract.
 
 ## Pending Higher-Level Work
 After the immediate patch:

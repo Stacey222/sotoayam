@@ -33,7 +33,7 @@ Legend:
 ### Migration/deployment
 - [x] P0-07 Add one ordered `npm run migrate` command.
   Owner: Codex
-- [ ] P0-08 Wire migrations into deployment before release activation.
+- [x] P0-08 Wire migrations into deployment before release activation.
   Owner: Codex
 - [ ] P0-09 Parameterize installer; remove founder-specific deploy account; pin Node version.
   Owner: Codex -> Antigravity review

@@ -1,6 +1,8 @@
 import type { Task, TaskPriority } from "../tasks/types.js";
 
-export type NotificationEventType = "TASK_REMINDER" | "TASK_ESCALATION";
+import type { NotificationType } from "../types/index.js";
+
+export type NotificationEventType = "TASK_REMINDER" | "TASK_ESCALATION" | NotificationType;
 export type NotificationChannel = "TELEGRAM" | "WHATSAPP" | "EMAIL";
 export type DeliveryState = "PENDING" | "PROCESSING" | "DELIVERED" | "FAILED" | "CANCELLED";
 export type FailureClass = "TRANSIENT" | "PERMANENT";
@@ -12,7 +14,7 @@ export interface TaskReminderState {
 }
 
 export interface NotificationIntent {
-  id: number; task_id: number; event_type: NotificationEventType; recipient_user_id: number | null;
+  id: number; task_id: number | null; event_type: NotificationEventType; recipient_user_id: number | null;
   routing_status: "ROUTED" | "UNROUTED"; dedupe_key: string; message: string;
   routing_failure_code: string | null;
   occurrence_at: string; created_at: string;

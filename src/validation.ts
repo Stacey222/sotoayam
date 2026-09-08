@@ -88,15 +88,21 @@ export function parseNotificationEvent(body: unknown): NotificationEvent {
     validationError("Message must not be empty");
   }
   if (body.message.length > 4096) validationError("Message must not exceed 4096 characters");
-  if (body.event_id !== undefined && (typeof body.event_id !== "string" || body.event_id.length > 200)) {
-    validationError("Invalid event_id");
+  if (body.event_id !== undefined) {
+    if (typeof body.event_id !== "string"
+      || body.event_id.length < 1
+      || body.event_id.length > 200
+      || body.event_id !== body.event_id.trim()
+      || /[\u0000-\u001f\u007f-\u009f]/u.test(body.event_id)) {
+      validationError("Invalid event_id");
+    }
   }
   if (body.metadata !== undefined && !isRecord(body.metadata)) validationError("Metadata must be an object");
 
   return {
     type: body.type as NotificationEvent["type"],
     message: body.message.trim(),
-    ...(body.event_id ? { event_id: body.event_id as string } : {}),
+    ...(body.event_id !== undefined ? { event_id: body.event_id } : {}),
     ...(body.metadata ? { metadata: body.metadata } : {}),
   };
 }

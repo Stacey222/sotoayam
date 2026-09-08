@@ -24,10 +24,11 @@ import { SupabasePermissionsRepository } from "./repositories/permissions.reposi
 import { SupabaseAuditRepository } from "./repositories/audit.repository.js";
 import { SupabaseDivisionCollaborationRepository } from "./repositories/division-collaboration.repository.js";
 import { SupabaseImportBatchRepository, SupabaseTaskSourceIntegrationsRepository } from "./repositories/task-ingestion.repository.js";
-import { SupabaseReminderChannelsRepository, SupabaseReminderNotificationsRepository, SupabaseReminderRoutingRepository, SupabaseReminderSchedulerRepository, SupabaseReminderStateRepository, SupabaseReminderTasksRepository } from "./repositories/reminders.repository.js";
+import { SupabaseReminderChannelsRepository, SupabaseReminderNotificationsRepository, SupabaseReminderRoutingRepository, SupabaseReminderSchedulerRepository, SupabaseReminderStateRepository, SupabaseReminderTasksRepository, type ReminderNotificationsRepository } from "./repositories/reminders.repository.js";
 import { SupabaseReportingRepository } from "./repositories/reporting.repository.js";
 import { SupabaseCriticalAlertsRepository, SupabaseCriticalAlertSignalsRepository } from "./repositories/critical-alerts.repository.js";
 import { SupabaseIntegrationAdministrationRepository } from "./repositories/integration-administration.repository.js";
+import { SupabaseNotificationIntakeRepository, type NotificationIntakeRepository } from "./repositories/notification-intake.repository.js";
 import { adminUserManagementRoutes } from "./routes/admin-user-management.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
@@ -41,6 +42,7 @@ import { reportsRoutes } from "./routes/reports.routes.js";
 import { adminCriticalAlertRoutes, criticalAlertsRoutes } from "./routes/critical-alerts.routes.js";
 import { integrationAdministrationRoutes } from "./routes/integration-administration.routes.js";
 import { NotificationService } from "./services/notification.service.js";
+import { NotificationIntakeService } from "./services/notification-intake.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
 import { TelegramService, type TelegramSender } from "./services/telegram.service.js";
 import { UserManagementService } from "./services/user-management.service.js";
@@ -78,6 +80,8 @@ export interface BuildAppOptions {
   registrationWriter?: TelegramRegistrationWriter;
   accessStateResolver?: UserAccessStateResolver;
   telegramSender?: TelegramSender;
+  notificationIntakeRepository?: NotificationIntakeRepository;
+  reminderNotificationsRepository?: ReminderNotificationsRepository;
   logger?: boolean;
 }
 
@@ -113,7 +117,15 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
           },
         });
   const resolver = new RecipientResolverService(repository);
-  const notificationService = new NotificationService(resolver, telegramSender, app.log);
+  const reminderNotifications = options.reminderNotificationsRepository
+    ?? (client ? new SupabaseReminderNotificationsRepository(client) : undefined);
+  const notificationIntakeRepository = options.notificationIntakeRepository
+    ?? (client ? new SupabaseNotificationIntakeRepository(client) : undefined);
+  const persistedNotificationIntake = Boolean(notificationIntakeRepository && reminderNotifications);
+  const notificationService = notificationIntakeRepository && reminderNotifications
+    ? new NotificationIntakeService(resolver, telegramSender, app.log, notificationIntakeRepository, reminderNotifications)
+    : new NotificationService(resolver, telegramSender, app.log);
+  app.log.info({ persistedNotificationIntake }, "Notification intake configured");
   const userManagementService = client ? new UserManagementService(
     new SupabaseUserManagementRepository(client),
     new SupabaseDivisionsRepository(client),
@@ -146,7 +158,6 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
       reminderSchedulerEnabled: options.config.reminderSchedulerEnabled,
       alertEvaluatorEnabled: options.config.criticalAlertEvaluatorEnabled },
   ) : undefined;
-  const reminderNotifications = client ? new SupabaseReminderNotificationsRepository(client) : undefined;
   const reminderSchedulerRepository = client ? new SupabaseReminderSchedulerRepository(client) : undefined;
   const reminderEvaluator = client && taskUsers && reminderNotifications && reminderSchedulerRepository ? new ReminderEvaluatorService(
     new SupabaseReminderTasksRepository(client), new SupabaseReminderStateRepository(client), reminderNotifications,

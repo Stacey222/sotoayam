@@ -30,6 +30,11 @@ Permanent route-level regression coverage verifies all 11 groups for missing con
 
 New admin route groups must use `defineAdminRoutes` and be added to the security manifest. Admin API-key checks must not be implemented locally in route files.
 
+## Notification Intake State
+`POST /api/notifications/send` now persists caller event identity and atomically expands recipient notifications and routed deliveries through `intake_notification_event` before Telegram side effects. `(source, external_event_id)` is the authoritative database idempotency key. Identical retries return the stored synchronous result without rebroadcasting; conflicting payload reuse returns `409 NOTIFICATION_EVENT_CONFLICT`.
+
+External routed deliveries reuse the existing claim, retry/backoff, permanent-failure, and stale-recovery machinery. Missing `event_id` remains legacy-compatible and explicitly non-idempotent. Implementation-time reconciliation was complete: 5 normalized users, 5 Telegram-linked users, 5 mapped, 0 unmapped.
+
 ## Migration State
 One official ordered migration command exists: `npm run migrate`. It validates the repository migration inventory, then uses the established Supabase CLI migration registry to apply pending migrations in deterministic filename order.
 
@@ -51,14 +56,13 @@ Historical operational assumptions are not universal product requirements. Remai
 Recommended: Claude Code.
 
 Next task:
-P0-05 design persisted notification intent for `/api/notifications/send`.
+P0-11 design the first-admin bootstrap flow.
 
 Reason:
-P0-10 is complete. The orchestrator roadmap places P0-05 next so the notification intake contract can be approved before P0-06 implementation.
+P0-05 and P0-06 are complete. The orchestrator roadmap places P0-11/P0-12 next, beginning with the approved design step.
 
 ## Pending Higher-Level Work
 After P0-10:
-- idempotent notification intake;
 - first-admin bootstrap;
 - taxonomy-as-data;
 - install documentation.

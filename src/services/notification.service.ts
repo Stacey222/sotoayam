@@ -10,6 +10,13 @@ export interface NotificationResult {
   requested: number;
   sent: number;
   failed: number;
+  duplicate?: boolean;
+  idempotent?: boolean;
+  event_id?: string;
+}
+
+export interface NotificationSender {
+  send(event: NotificationEvent): Promise<NotificationResult>;
 }
 
 export class NotificationService {

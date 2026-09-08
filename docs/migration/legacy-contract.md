@@ -48,7 +48,8 @@ The current shared Admin key is transitional authentication and has no actor ide
 
 - Requires header `X-Internal-Api-Key`; missing or incorrect key returns 401.
 - Requires a known `type` and a non-empty trimmed message no longer than 4096 characters.
-- Optional `event_id` is accepted but is not currently persisted or deduplicated.
+- Optional caller-supplied `event_id` is persisted and deduplicated within the server-derived `INTERNAL_API` source. Identical retries return the stored result without rebroadcasting; reuse with a different semantic payload returns `409 NOTIFICATION_EVENT_CONFLICT`.
+- Omitting `event_id` remains accepted for v1 compatibility. The server creates a generated intent identity, reports `idempotent=false`, and repeated requests remain distinct broadcasts.
 - Optional `metadata` must be an object.
 
 Legacy event mapping:
@@ -64,6 +65,8 @@ Legacy event mapping:
 | `SYSTEM_ERROR` | `system_error` |
 
 Recipients must satisfy `active=true` and the mapped preference boolean. Delivery attempts use every matching `telegram_chat_id`; one failed send does not prevent other attempts. Response counts include `recipients`, `requested`, `sent`, and `failed`; partial failure returns `success=false` without cancelling the batch.
+
+Persisted intake adds `duplicate`, `idempotent`, and caller `event_id` fields without removing or changing the frozen response fields. Routed recipients use the existing persisted notification-delivery retry state machine.
 
 The seven columns are explicitly legacy routing compatibility fields. A later normalized resolver must run parity comparison before cutover.
 

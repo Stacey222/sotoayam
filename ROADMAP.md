@@ -25,9 +25,9 @@ Legend:
   Owner: Claude Code design -> Codex implementation -> Antigravity review
 
 ### Reliable notification intake
-- [ ] P0-05 Design persisted notification intent for `/api/notifications/send`.
+- [x] P0-05 Design persisted notification intent for `/api/notifications/send`.
   Owner: Claude Code
-- [ ] P0-06 Implement idempotent notification intake + duplicate `event_id` regression test.
+- [x] P0-06 Implement idempotent notification intake + duplicate `event_id` regression test.
   Owner: Codex
 
 ### Migration/deployment

@@ -16,7 +16,7 @@ export interface ReminderNotificationsRepository {
   markDelivered(id: number, attemptCount: number, deliveredAt: string): Promise<void>;
   markFailed(id: number, input: { state: "PENDING" | "FAILED"; attemptCount: number; nextAttemptAt: string | null; failureClass: FailureClass; failureCode: string }): Promise<void>;
   status(): Promise<{ pending: number; processing: number; delivered: number; failed: number; unrouted_escalations: number }>;
-  recent(limit: number): Promise<Array<{ id: number; task_id: number; event_type: NotificationEventType; routing_status: string; routing_failure_code: string | null; state: DeliveryState | "UNROUTED"; attempt_count: number; failure_class: FailureClass | null; failure_code: string | null; created_at: string }>>;
+  recent(limit: number): Promise<Array<{ id: number; task_id: number | null; event_type: NotificationEventType; routing_status: string; routing_failure_code: string | null; state: DeliveryState | "UNROUTED"; attempt_count: number; failure_class: FailureClass | null; failure_code: string | null; created_at: string }>>;
 }
 export interface ReminderRoutingRepository { findEscalationRule(ownerDivisionId: number, priority: Task["priority"]): Promise<NotificationRoutingRule | null> }
 export interface ReminderChannel { userId: number; channel: "TELEGRAM"; externalId: string }
@@ -121,7 +121,7 @@ export class SupabaseReminderNotificationsRepository implements ReminderNotifica
     if (error) throw governanceDatabaseError("Unable to load recent notifications", error);
     return (data ?? []).map((row) => {
       const delivery = Array.isArray(row.notification_deliveries) ? row.notification_deliveries[0] : row.notification_deliveries;
-      return { id: Number(row.id), task_id: Number(row.task_id), event_type: row.event_type as NotificationEventType,
+      return { id: Number(row.id), task_id: row.task_id === null ? null : Number(row.task_id), event_type: row.event_type as NotificationEventType,
         routing_status: String(row.routing_status), state: (delivery?.state ?? "UNROUTED") as DeliveryState | "UNROUTED",
         routing_failure_code: row.routing_failure_code ? String(row.routing_failure_code) : null,
         attempt_count: Number(delivery?.attempt_count ?? 0), failure_class: (delivery?.failure_class ?? null) as FailureClass | null,

@@ -35,6 +35,15 @@ New admin route groups must use `defineAdminRoutes` and be added to the security
 
 External routed deliveries reuse the existing claim, retry/backoff, permanent-failure, and stale-recovery machinery. Missing `event_id` remains legacy-compatible and explicitly non-idempotent. Implementation-time reconciliation was complete: 5 normalized users, 5 Telegram-linked users, 5 mapped, 0 unmapped.
 
+## First Administrator Bootstrap State
+P0-11 and P0-12 are complete. `npm run setup` is the supported first-administrator bootstrap command and executes compiled `dist/src/cli/setup.js` after production dependency pruning.
+
+Bootstrap eligibility is enforced by database state under the existing system-authority advisory lock: no permanent bootstrap marker, no historical authority assignment (including revoked rows), and no administrator credential. The transaction atomically creates one active normalized user, one scrypt credential, one `SYSTEM_ADMIN` assignment, the singleton marker, and one sanitized audit record. It cannot re-arm automatically and is not a recovery path.
+
+The operator supplies display name, normalized email, and password only. Telegram is not required. The first administrator receives the temporary compatibility taxonomy `IT` / `ADMIN` and never receives `OWNER`; P0-13/P0-14 own removal of that bridge. The Telegram-less bootstrap user remains ineligible for `update_user_access` until that compatibility work. HTTP administrator access still uses centralized `ADMIN_API_KEY` authorization until P1-01 implements sessions.
+
+Operational incident during P0-12 validation: a local mock intended for `npm run migrate` was shadowed by npm's real local Supabase CLI. The existing linked project applied `202609080001_create_notification_event_intake.sql` and `202609090001_create_first_admin_bootstrap.sql`. No setup/bootstrap RPC was called and no VPS deployment occurred. Do not rename or rewrite those applied migration files; reconcile the linked migration registry before any future migration operation.
+
 ## Migration State
 One official ordered migration command exists: `npm run migrate`. It validates the repository migration inventory, then uses the established Supabase CLI migration registry to apply pending migrations in deterministic filename order.
 
@@ -56,14 +65,13 @@ Historical operational assumptions are not universal product requirements. Remai
 Recommended: Claude Code.
 
 Next task:
-P0-11 design the first-admin bootstrap flow.
+P0-13 design the transition of divisions, roles, and customer taxonomy from source to data.
 
 Reason:
-P0-05 and P0-06 are complete. The orchestrator roadmap places P0-11/P0-12 next, beginning with the approved design step.
+P0-11/P0-12 are complete. The temporary `IT` / `ADMIN` bootstrap bridge is the next installation blocker in roadmap order.
 
 ## Pending Higher-Level Work
-After P0-10:
-- first-admin bootstrap;
+After P0-12:
 - taxonomy-as-data;
 - install documentation.
 

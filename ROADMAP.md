@@ -41,9 +41,9 @@ Legend:
   Owner: Codex
 
 ### First installation / configuration
-- [ ] P0-11 Design first-admin bootstrap flow.
+- [x] P0-11 Design first-admin bootstrap flow.
   Owner: Claude Code
-- [ ] P0-12 Implement `npm run setup` first-admin bootstrap.
+- [x] P0-12 Implement `npm run setup` first-admin bootstrap.
   Owner: Codex
 - [ ] P0-13 Design transition of divisions/roles/customer taxonomy from source to data.
   Owner: Claude Code

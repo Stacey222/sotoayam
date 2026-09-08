@@ -93,6 +93,8 @@ Production uses `HOST=127.0.0.1` by default, keeping the configured `PORT` priva
 
 The deployment process also requires `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, and `SUPABASE_PROJECT_REF` in its own protected environment. These deploy-only values establish the non-interactive Supabase CLI link for the inactive release. Do not add them to `shared/.env`, the release archive, shell history, or systemd service environment.
 
+The first-administrator setup password is also setup-time only. Prefer the no-echo prompt. If automation requires `SOTOAYAM_BOOTSTRAP_ADMIN_PASSWORD`, supply it only to the setup process and remove it immediately afterward; never store it in `shared/.env`. A protected `--password-file` is also supported and takes precedence over the environment variable. There is intentionally no `--password` argument.
+
 ## Fresh customer install
 
 1. Verify a clean Git checkpoint and all tests/checkers.
@@ -103,8 +105,24 @@ The deployment process also requires `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSW
 6. Provide the three deploy-only Supabase variables through the approved protected operator environment, then run the deployment script.
 7. The script installs pinned migration tooling in the inactive release, runs `npm run migrate`, removes link state and development tooling, and only then atomically updates `current`.
 8. The script restarts systemd and requires localhost `/health` to pass.
-9. From a protected operator environment containing the runtime configuration, run `node scripts/deploy/check-vps-runtime.mjs` in the active release. It verifies configuration shape, the pinned Node runtime, and generic health only.
-10. Verify exactly one process and, when polling was selected, exactly one Telegram poller.
+9. Bootstrap the first administrator exactly once, as the configured service account and with the runtime environment loaded:
+
+   ```bash
+   sudo -u "${APP_USER}" node --env-file="${APP_ROOT}/shared/.env" "${APP_ROOT}/current/dist/src/cli/setup.js"
+   ```
+
+   The no-echo prompts collect display name, email, password, and password confirmation. The equivalent command from the active release, after its environment is loaded, is `npm run setup`. Successful output has this form:
+
+   ```text
+   FIRST_ADMIN_CREATED user_id=<id> email=<normalized-email>
+   authority=SYSTEM_ADMIN division=IT role=ADMIN
+   ```
+
+   Setup requires no Telegram bot or Telegram identity. It is permanently refused after any bootstrap or historical system-authority assignment; reruns return `FIRST_ADMIN_ALREADY_EXISTS` with exit code 3 and do not prompt for a password. Do not use setup for administrator recovery.
+10. From a protected operator environment containing the runtime configuration, run `node scripts/deploy/check-vps-runtime.mjs` in the active release. It verifies configuration shape, the pinned Node runtime, and generic health only. Confirm `GET /api/admin/system-authority/status` reports `READY`.
+11. Verify exactly one process and, when polling was selected, exactly one Telegram poller.
+
+The bootstrap creates a credential for the future session system, but administrator login does not exist until P1-01; HTTP admin routes continue to require `ADMIN_API_KEY`. The bootstrap administrator has no legacy Telegram mapping and cannot be edited through `PATCH /api/admin/users/:id/access` until the P0-13/P0-14 taxonomy compatibility work. If the same person later registers through Telegram, that registration creates a separate user identity; setup does not merge identities.
 
 Any install, CLI, link, or migration failure exits non-zero before `current` changes or systemd restarts. A failure after migration but before activation leaves the database forward-migrated and the previous application release active; investigate compatibility before retrying. A post-activation restart or health failure exits non-zero and leaves the manual application rollback procedure below available. It never reverses database migrations automatically.
 

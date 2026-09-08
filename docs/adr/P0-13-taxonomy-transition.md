@@ -2,11 +2,26 @@
 
 ## Status
 
-Proposed — Revised After Adversarial Review
+Accepted for P0-14 Implementation
 
 Design only. No production code, no migration, no deployment, and no live Supabase contact was performed for this ADR. Implementation is P0-14.
 
-Revision 2 (2026-09-09) resolves every blocking finding in `docs/reviews/P0-13-architecture-review.md`.
+Revision 2 (2026-09-09) resolved every blocking finding in `docs/reviews/P0-13-architecture-review.md`.
+
+Revision 3 (2026-09-09) reconciles the six architecture inconsistencies raised by `docs/plans/P0-14-implementation-plan.md`. The reconciled decisions are recorded in **Reconciliation R-001 … R-006** below and applied throughout this document; the implementation plan carries the matching detail. With those six resolved, this ADR is accepted as the design of record for P0-14.
+
+### Reconciliation R-001 … R-006
+
+| Ref | Inconsistency | Reconciled decision |
+| --- | --- | --- |
+| **R-001** | Bootstrap signature: this ADR demanded unchanged signatures for old-app safety while also saying the customer division is "passed in" to `bootstrap_first_admin` | **No overload.** A new, distinctly named `provision_first_installation(...)` owns fresh/legacy provisioning. `bootstrap_first_admin` keeps its exact four-argument signature; only its body changes (capability predicate instead of literal `IT`). Both call one internal helper for the identity/credential/authority steps. See **Bootstrap Compatibility** |
+| **R-002** | This ADR claimed an old setup CLI would fail closed on a new fresh database. False: the historical seed always creates `IT`, and Stage B flags it | **Corrected.** An old CLI on a freshly migrated database *succeeds* and produces a legacy-shaped install (admin in `IT`, provenance absent ⇒ UNKNOWN ⇒ legacy-compatible). That is safe but not clean. The matching-release CLI is mandatory for commercial provisioning. See **Deploy Compatibility Matrix** |
+| **R-003** | "No migration may contain a destructive statement" versus the need for retirement SQL to live in a migration-created function | **Reworded to execution, not text.** No migration may *execute* a delete, truncate, or deactivation when applied. Destructive SQL may appear only inside the body of the single named provisioning function, which no migration invokes. Enforced statically (parse: destructive statements only inside that one function) and behaviourally (row-count diff on a seeded fixture). See **Historical Migration Constraint** |
+| **R-004** | Gate 5 said "no `audit_logs` reference", but `202608290005` writes an immutable `migration_seed` audit row referencing the seed rule and both its divisions — making retirement impossible | **Corrected.** `audit_logs` is append-only history, not a relational reference. Retirement checks the eight real division foreign keys. For audit, exactly one row is permitted to reference a candidate: the historical `COLLABORATION_RULE_CREATED` row with `source = 'migration_seed'`. Any other audit reference is a veto. Retired rows keep their audit history. See **Seed Retirement Safety** |
+| **R-005** | The privileged capability setter requires an active SYSTEM_ADMIN, but setup must set the first capability before any SYSTEM_ADMIN exists | **Owner-executed path, no weakened trigger.** The write-guard trigger permits a change to `grants_system_authority` only when `current_user` is the owner of `public.divisions` — true only inside owner-defined `SECURITY DEFINER` functions, never for a direct `service_role` write. `provision_first_installation` is such a function and mutates capability through the same internal routine as the public setter; the public setter keeps its active-SYSTEM_ADMIN requirement. This replaces the transaction-local `set_config` marker, which `service_role` could have set for itself. See **SYSTEM_ADMIN Transitional Model** |
+| **R-006** | `installation_provenance.declared_by` conflicts with data minimisation | **Dropped.** Provenance stores lineage, timestamp, `declaration_source = 'setup_cli'`, evidence counters, and retirement result — no name, email, user id, host, credential, or secret. Accountability comes from the first-admin bootstrap audit row. See **Positive Install Provenance** |
+
+Two ordering corrections follow from R-004/R-005 and are applied below: on a fresh install the seed rows are retired **before** the customer division is created (so a customer may claim `GUDANG`, `MANAGEMENT`, or any other retired code), and the last-capability-division guard is inactive until bootstrap/authority state exists (so retiring `IT` inside the provisioning transaction is not blocked).
 
 ## Context
 
@@ -188,15 +203,23 @@ public.installation_provenance (
   singleton smallint primary key default 1 check (singleton = 1),
   lineage text not null check (lineage in ('FRESH','LEGACY')),
   declared_at timestamptz not null default now(),
-  declared_by text not null check (length(trim(declared_by)) > 0),   -- operator-supplied attribution
-  declaration_source text not null,                                   -- e.g. 'setup_cli'
-  evidence jsonb not null,                                            -- veto counters observed at declaration
+  declaration_source text not null check (declaration_source = 'setup_cli'),
+  evidence jsonb not null check (jsonb_typeof(evidence) = 'object'),  -- veto counters only
   origin_seed_retired_at timestamptz,
-  origin_seed_retired_count integer
+  origin_seed_retired_count integer,
+  check (
+    (lineage = 'FRESH'  and origin_seed_retired_at is not null and origin_seed_retired_count = 10)
+    or
+    (lineage = 'LEGACY' and origin_seed_retired_at is null     and origin_seed_retired_count is null)
+  )
 )
 ```
 
-Append-only: a `before update or delete` trigger raises unconditionally except for the single `update` that stamps `origin_seed_retired_at`/`origin_seed_retired_count` inside the same setup transaction. Lineage, once written, cannot be changed by any code path. Correcting a mistaken declaration requires a deliberate, audited, manually authorized forward migration — never a runtime action.
+**No operator identity is stored (R-006):** no name, email, user id, host, credential, or secret. `evidence` holds fixed count keys only — never row content. Accountability for who installed the system comes from the first-admin bootstrap audit row, which already exists.
+
+Append-only: a `before update or delete` trigger raises unconditionally. The row is inserted **once, complete**, near the end of the provisioning transaction — retirement has already happened by then, so there is no insert-then-update sequence and no window in which a partial row exists. Lineage, once written, cannot be changed by any code path. Correcting a mistaken declaration requires a deliberate, audited, manually authorized forward migration — never a runtime action.
+
+RLS is enabled with no policies; `service_role` receives `select` only. The single insert is performed by the table-owner `SECURITY DEFINER` provisioning function, whose `execute` privilege is granted to `service_role` alone.
 
 ### Who writes it, and when
 
@@ -205,10 +228,25 @@ Append-only: a `before update or delete` trigger raises unconditionally except f
 | **Who writes it** | The human operator performing the installation, through the existing `npm run setup` CLI. Never a migration, never the application, never an automatic inference |
 | **When** | After `npm run migrate`, at first-administrator provisioning, in the same database transaction as the bootstrap |
 | **How the operator declares** | Interactive: setup prints the exact rows it proposes to retire and asks whether this is a new installation for a new customer. Non-interactive: exactly one of `--fresh-install` or `--keep-existing-taxonomy` is **required**; there is no default and no inferred answer |
-| **Existing installs** | Never run fresh setup — `instance_bootstrap` already exists and setup refuses. Provenance stays absent, which reads as `UNKNOWN` ⇒ LEGACY. Operators may optionally record `LEGACY` explicitly with `npm run setup --record-legacy`; behavior is identical either way |
+| **Existing installs** | Never run fresh setup — `instance_bootstrap` already exists and setup refuses. Provenance stays absent, which reads as `UNKNOWN` ⇒ LEGACY. **There is no post-hoc "record legacy" command**: UNKNOWN and LEGACY are behaviourally identical, so adding a write path for an already-bootstrapped install would create mutation surface for no benefit |
 | **Re-runs** | The singleton primary key makes a second declaration a no-op with an explicit "already provisioned" message. `origin_seed_retired_at` makes retirement single-shot |
 | **Migrations** | **Never read provenance.** Every migration behaves identically on every installation. Misclassification at migration time is therefore structurally impossible |
 | **Application** | Reads provenance once at startup. Absent ⇒ `UNKNOWN`. Used for exactly one thing in P0-14: legacy report alias registration (see Reporting Transition) |
+
+### Provenance state matrix
+
+Exactly one code path may write this row: `provision_first_installation`, called by `npm run setup`, with an explicit operator-supplied lineage argument, before any bootstrap exists.
+
+| # | Installation state | May write | Result | Notes |
+| --- | --- | --- | --- | --- |
+| **A** | Brand-new customer install | `FRESH` or `LEGACY` | Operator declares. `FRESH` ⇒ retirement + customer division. `LEGACY` ⇒ nothing retired, admin bound to an existing division | The normal commercial path is `FRESH` |
+| **B** | Old dormant / unbootstrapped database | `LEGACY` (correct choice); a `FRESH` declaration is *attempted* but aborts | Evidence veto, exact-identity, or reference gate fails ⇒ transaction rolls back ⇒ **provenance stays absent (UNKNOWN)** | A wrong declaration cannot damage the install and cannot record a wrong lineage |
+| **C** | Existing live install | nothing | Setup refuses (`instance_bootstrap` present). Provenance stays absent ⇒ `UNKNOWN` ⇒ legacy-compatible | No write path exists after bootstrap |
+| **D** | Setup rerun after success | nothing | `FIRST_ADMIN_ALREADY_EXISTS`; singleton PK is a second, independent block | Not re-armable |
+| **E** | Failed setup transaction | nothing | All-or-nothing rollback: no provenance, no retirement, no division, no admin. Retry is permitted | Failure never leaves partial lineage |
+| **F** | Manually interrupted install (migrated, setup never run) | `FRESH` or `LEGACY` on the next successful setup | Stays `UNKNOWN` until then, which is legacy-safe. Retirement remains possible because bootstrap has not occurred | The desired behaviour: an interrupted clean install can still be completed cleanly |
+
+**`UNKNOWN` can never automatically become `FRESH`.** There is no inference, no environment-derived default, no migration write, and no application write. The only transition out of `UNKNOWN` is an operator's explicit lineage argument on a successful pre-bootstrap provisioning call.
 
 ### Why an environment flag is not the authority
 
@@ -225,7 +263,16 @@ Evidence can only ever prevent a destructive action. It can never authorize one.
 
 ## Historical Migration Constraint
 
-Historical migrations are immutable. Permitted in a new forward migration: `create table`, `alter table ... add column`, `create index`, `create or replace function` (replacing a function body is not an edit of history), `create trigger`, and **additive** data statements. Forbidden: editing, deleting, renaming, or re-timestamping any existing file in `supabase/migrations/`, and — new in this revision — **any `delete`, `truncate`, or `active = false` statement against operational rows in any migration, guarded or not.**
+Historical migrations are immutable. Permitted in a new forward migration: `create table`, `alter table ... add column`, `create index`, `create or replace function` (replacing a function body is not an edit of history), `create trigger`, and **additive** data statements. Forbidden: editing, deleting, renaming, or re-timestamping any existing file in `supabase/migrations/`.
+
+**Destructive-statement rule, reworded for R-003.** The prohibition is on *execution*, not on text:
+
+> No migration may **execute** a `delete`, `truncate`, or operational deactivation when it is applied. Destructive SQL may appear in a migration file only inside the body of the single named provisioning function `provision_first_installation`, which no migration invokes.
+
+The earlier absolute wording ("no destructive statement, guarded or not") was unimplementable: atomic retirement must run inside a database function, and that function has to be created by a migration. Enforcement is therefore two-sided and both halves are required:
+
+1. **Static** — parse the migration; every destructive statement must lie inside that one function body, and there must be no top-level destructive DML. The parser whitelists the function by name; obfuscating SQL to evade it is a stop condition, not a workaround.
+2. **Behavioural** — apply the migration to a fixture seeded with origin taxonomy, users, and tasks, and assert every operational row count is unchanged.
 
 ## Chosen Transition Strategy
 
@@ -241,7 +288,7 @@ Identical behavior on every installation. No deletes, no deactivations, no infer
 2. Add `divisions.grants_system_authority`, `divisions.provisioning_source`, `roles.system_managed`.
 3. Add permission `alert.acknowledge`, granted to `OWNER` by default.
 4. Mark `STAFF`/`ADMIN`/`OWNER` as reserved (`roles.system_managed = true`) — additive metadata only.
-5. Set `grants_system_authority = true` on the division whose code is `IT` **if such a row exists**. On a database without `IT` this is a zero-row no-op. This is an *additive capability grant that preserves existing behavior*, not an inference about lineage, and it is the only place any origin code appears in P0-14 SQL.
+5. Set `grants_system_authority = true` on the division whose code is `IT` **if such a row exists**. This is an *additive capability grant that preserves existing behavior*, not an inference about lineage, and it is the only place any origin code appears in P0-14 SQL. **Correction (R-002): on a freshly migrated database the row does exist**, because the historical seed always creates `IT`; the flag simply moves to the customer's division when setup retires the seed. It is a zero-row no-op only on a database where `IT` was previously deleted.
 6. Backfill `task_categories` from evidence: `insert ... select distinct task_category from tasks where task_category is not null`. A legacy install gets `AFFILIATE` automatically; a database with no tasks gets nothing. No literal appears.
 7. Replace function bodies to use the capability predicate and to unblock `update_user_access` (order and compatibility in **Deploy Compatibility Matrix**).
 8. Add integrity triggers (capability write-guard, last-capability-division guard, reserved-role guard, provenance append-only guard).
@@ -267,7 +314,7 @@ Nothing is lost. After bootstrap, an administrator can delete each unreferenced 
 | Aspect | Declared `FRESH` | `LEGACY` / `UNKNOWN` (default) |
 | --- | --- | --- |
 | Migration behavior | Identical | Identical |
-| Origin division rows | Retired at setup under three gates | Kept, untouched, forever |
+| Origin division rows | Retired at setup under the seven gates | Kept, untouched, forever |
 | Origin collaboration rule | Retired at setup under the same gates | Kept and active |
 | Capability-bearing division | The customer's first real division, operator-named, fully editable | Existing `IT`, flagged by migration; no rename, no new row |
 | Task categories | Empty (no tasks existed to derive from) | Backfilled from real task data |
@@ -286,13 +333,32 @@ Retirement happens **only** in `npm run setup`, **only** inside the bootstrap tr
 | 1 | Operator has positively declared `FRESH` for this installation (interactive confirmation or explicit `--fresh-install`) | Positive provenance. Nothing is ever inferred |
 | 2 | `instance_bootstrap` is empty and `installation_provenance` is empty | The installation has never been provisioned; retirement is structurally one-shot |
 | 3 | **Evidence veto**: zero rows in `users`, `telegram_users`, `tasks`, `system_authority_assignments`; zero `audit_logs` rows whose `source` is not `'migration_seed'` | Any sign of use overrides the operator's declaration. Evidence can only refuse, never permit |
-| 4 | The row's `(code, name)` pair matches the historical `202608290001` starter pair exactly (e.g. `('GUDANG','Gudang')`), or the rule matches the exact `202608290005` pair | A customer row that reuses a code with a different name is never touched |
-| 5 | Zero inbound references: no `users.division_id`, no `tasks.owner_division_id` / `requesting_division_id`, no `division_collaboration_rules` endpoint, no `audit_logs` reference | Fail-safe even if gates 1–4 were all somehow wrong |
-| 6 | The proposed retirement list is printed to the operator before execution (interactive) or written to the log (non-interactive) | Human-visible, auditable |
+| 4 | The row's `(code, name)` pair matches the historical `202608290001` starter pair exactly (e.g. `('GUDANG','Gudang')`), with `active = true` and `provisioning_source is null`; or the rule matches the exact `202608290005` row (`ONPAGE_B2C → CONTENT_CREATOR`, scope `ALL`, allowed, no approval, active) | A customer row that reuses a code with a different name is never touched — it vetoes instead |
+| 5 | Zero **relational** references across all eight division foreign keys: `users.division_id`, `tasks.requesting_division_id`, `tasks.owner_division_id`, `division_collaboration_rules.source_division_id`, `division_collaboration_rules.target_division_id`, `task_source_integrations.requesting_division_id`, `notification_routing_rules.owner_division_id`, `critical_alerts.owner_division_id` | Fail-safe even if gates 1–4 were all somehow wrong |
+| 6 | **Audit rule (R-004)**: the only audit row permitted to reference a candidate division or the candidate rule is the historical `COLLABORATION_RULE_CREATED` row with `source = 'migration_seed'`. Any other audit row referencing a candidate — by `object_type`/`object_id` or by a division id inside `before_state`/`after_state` — is a veto | Append-only history is evidence, not a foreign key |
+| 7 | The proposed retirement list is printed to the operator before execution (interactive) or written to the log (non-interactive) | Human-visible, auditable |
 
-Every retired row produces an `audit_logs` entry with `source = 'setup_origin_seed_retirement'`, and `origin_seed_retired_at` / `origin_seed_retired_count` are stamped.
+**Exact retirement set.** Nine divisions and one rule — ten rows, no more and no fewer. Any missing expected row, any extra matching row, any changed field, or a final delete count other than 10 raises and rolls the whole transaction back.
 
-Deletion — rather than deactivation — is chosen deliberately for the retired rows. Deactivating them would leave `divisions.code` occupied, and `GUDANG`, `MANAGEMENT`, `FINANCE`-adjacent codes are exactly the ones a real Indonesian small business will want for itself; a permanently reserved but invisible code is a worse trap than a deleted row. Deletion is safe here precisely because gate 5 proves nothing references the row and gate 3 proves the installation has never been used.
+| Code | Name |
+| --- | --- |
+| `PURCHASING` | `Purchasing` |
+| `SALES_GROSIR` | `Sales Grosir` |
+| `DIGITAL_MARKETING` | `Digital Marketing` |
+| `CONTENT_CREATOR` | `Content Creator` |
+| `ONPAGE_B2C` | `On Page / B2C` |
+| `SHOPEE_LIVE` | `Shopee Live` |
+| `GUDANG` | `Gudang` |
+| `MANAGEMENT` | `Management` |
+| `IT` | `IT` |
+
+Nothing else is ever retired: no role, no permission, no role grant, no user, no task, no task category, no Telegram row, no audit row.
+
+**Ordering inside the transaction.** The rule is deleted first (it references two candidate divisions), then the nine divisions, and only then is the customer's first division created. Retiring before creating is what lets a customer claim `GUDANG`, `MANAGEMENT`, or any other retired code as their own — the unique index would otherwise reject it. `IT` is among the retired rows even though the migration flagged it capability-bearing; the last-capability guard does not fire because it is scoped to installations that already have bootstrap or authority state, and at this point neither exists.
+
+Every retired row produces an `audit_logs` entry with `source = 'setup_origin_seed_retirement'` recording its code and name, and `origin_seed_retired_at` / `origin_seed_retired_count = 10` are written with the provenance row. Audit history for retired rows is never deleted.
+
+Deletion — rather than deactivation — is chosen deliberately. Deactivating would leave `divisions.code` occupied, and `GUDANG`, `MANAGEMENT`, and `FINANCE`-adjacent codes are exactly the ones a real Indonesian small business will want for itself; a permanently reserved but invisible code is a worse trap than a deleted row. Deletion is safe here precisely because gates 5–6 prove nothing references the row and gate 3 proves the installation has never been used.
 
 ## Division Model
 
@@ -345,8 +411,8 @@ Constraints this model must satisfy, all of which are met:
 
 | Requirement | How it is met |
 | --- | --- |
-| No customer-facing CRUD may set it | Division create forces `false`; division PATCH rejects the field with `400`; a `before insert or update` trigger on `divisions` rejects any change not made inside the privileged setter (transaction-local marker via `set_config`/`current_setting`) |
-| Only a privileged SECURITY DEFINER path may change it | `set_division_system_authority(p_division_id, p_enabled, p_actor_user_id, p_source)`, requiring an active SYSTEM_ADMIN actor, refusing to unset the last capability-bearing division, writing an audit row. Setup calls it once during bootstrap under the existing advisory lock |
+| No customer-facing CRUD may set it | Division create forces `false`; division PATCH rejects the field with `400`; a `before insert or update` trigger on `divisions` rejects any change to the flag unless **`current_user` is the owner of `public.divisions`** — true only inside owner-defined `SECURITY DEFINER` functions, and never for a direct `service_role` write (R-005) |
+| Only a privileged SECURITY DEFINER path may change it | Two owner-defined entry points share one internal mutation routine: the public `set_division_system_authority(p_division_id, p_enabled, p_actor_user_id, p_source)`, which requires an active SYSTEM_ADMIN actor; and `provision_first_installation`, which is reachable only before any bootstrap exists. Both refuse to unset the last capability-bearing division once bootstrap/authority state exists, and both write a sanitized audit row |
 | It must not require a dedicated system division | The capability is set on whichever real division the customer already has — `IT` on a legacy install, the operator-named first division on a fresh one. No product-owned division exists (F-003) |
 | Existing IT admins remain valid during upgrade | The migration sets the capability on `IT` **before** replacing any function body, so eligibility is continuous with no window in which the predicate is false |
 | A division named `IT` grants nothing | The code no longer appears in any predicate. Creation forces the flag false and the trigger blocks direct writes |
@@ -369,6 +435,24 @@ Constraints this model must satisfy, all of which are met:
 
 **Application side.** All seven TypeScript IT-guards resolve one shared predicate — `actor.divisionGrantsSystemAuthority`, populated from the joined division row and implemented once in `src/auth/`. `countSystemAdminCandidates` filters on the capability. Test E asserts the SQL and TypeScript predicates agree on identical fixtures so they cannot silently diverge.
 
+The capability field is carried on the **actor read model** (`users`/`task-users` repositories) and on the admin division catalog DTO — **not** added as a required field on the shared `Division` governance type. This keeps unrelated fixtures across the existing suite valid and confines the change to the paths that actually make authorization decisions. An absent or undefined value is treated as `false` (fail-closed).
+
+### Capability lifecycle — P0-14 bridge behavior
+
+| Question | P0-14 answer |
+| --- | --- |
+| How does existing `IT` become capability-bearing? | One additive `update` in the migration, before any predicate is replaced. No rename, no new row |
+| Does the fresh first division get it automatically? | Yes — `provision_first_installation` enables it on the operator-named division as part of the same transaction. It is not a property of "being first"; it is an explicit, audited mutation |
+| Who can move it later? | An active SYSTEM_ADMIN, through `set_division_system_authority`. Handover order is: enable on the new division → move or assign authority → disable on the old one |
+| Who can remove it? | The same actor and function, except that the last active capability-bearing division cannot be unset, deactivated, or deleted while bootstrap/authority state exists |
+| May more than one division carry it? | **Yes.** The schema permits any number ≥ 1 once provisioned; multiple is required for a safe handover. The invariant is "at least one", never "exactly one" |
+| Is moving a SYSTEM_ADMIN between divisions allowed? | Yes, into any capability-bearing division. `protect_final_system_admin_user` still refuses to strand the final admin in a non-capability division or to deactivate them |
+| Division deletion/deactivation vs authority | Blocked for the last capability-bearing division; otherwise governed by the ordinary reference guards |
+| Are direct `service_role` writes still rejected? | Yes — by the `current_user` owner check in the write-guard trigger, which `service_role` cannot satisfy and cannot forge |
+| Pre-bootstrap scope | The last-capability guard is inactive until `instance_bootstrap` or an authority assignment exists. Before then there is no authority to strand, which is what allows `IT` to be retired inside the provisioning transaction |
+
+**P0-14 bridge versus P1-01 target.** P0-14 delivers only the bridge above: the literal `'IT'` disappears, the capability is data, and the trigger keeps enforcing candidacy. P1-01 owns the long-term model (eligibility reduced to "active user", enforcement moved to authenticated request-level admin identity) and is not designed here.
+
 ## Task Category Model
 
 Retained unchanged from revision 1; the review assessed it **SOUND**.
@@ -387,7 +471,9 @@ public.task_categories (
 The regex matches the existing `tasks.task_category` constraint exactly.
 
 - **No foreign key** from `tasks.task_category`. An FK would require rewriting a live table and would reject historical values. The column stays free-form text; the catalog is the *validation* authority, not a referential one.
-- **Write-side validation only**, in one shared validator replacing `TASK_CATEGORIES` across manual, CSV, and automation intake: if the active catalog is non-empty, the category must be an **active** catalog code or `null`; if the catalog is empty, the category must be `null`. Inactive categories block new writes.
+- **One rule, every write path.** `task_category` is **optional and nullable** everywhere. If the active catalog is empty, only `null`/omitted is accepted and any non-null value returns `TASK_INVALID_CATEGORY`. If the catalog is non-empty, `null`/omitted remains valid and a non-null value must match an **active** catalog code. Inactive and unknown codes are rejected. This one rule is enforced by one shared async validator in `TaskService`, which every canonical write reaches: manual HTTP create/update, CSV import, automation intake, and the ERP adapter path. Synchronous parsers do shape and format normalization only (trim, uppercase, regex) and never carry a value list. Telegram task creation already supplies `null` and is unaffected.
+- **Customers can work before configuring categories.** An empty catalog never blocks task creation; it only forbids categorising. A database failure in the validator fails **closed** and never falls back to a compiled list.
+- **Only category-changing writes validate.** Updating any other field of a task whose stored category is inactive or uncatalogued must succeed unchanged.
 - **Reads never validate.** Historical `AFFILIATE` tasks stay readable, listable, and reportable even after the category is deactivated or if it was never catalogued. Admin surfaces flag such values as "in use, not in catalog".
 - **Migration of history:** evidence-derived backfill (`select distinct task_category from tasks`). Legacy installs get `AFFILIATE`; a fresh database gets nothing.
 - **Customer management:** full CRUD; `code` immutable after creation; delete blocked when any task references the code — deactivate instead.
@@ -405,6 +491,14 @@ No workflow engine, no per-category behavior, no state machines.
 
 The fail-safe direction is correct: an existing install that never records provenance keeps its alias (`UNKNOWN` ⇒ available), and only an explicit `FRESH` declaration withholds it. When registered, the alias forwards to `TASK_STATUS` with `{division: CONTENT_CREATOR, category: AFFILIATE}` and returns the current response shape. It is removed at v1.1 with a CHANGELOG entry (P2-05).
 
+| Lineage | `TASK_STATUS` | `AFFILIATE_TASK_STATUS` |
+| --- | --- | --- |
+| `FRESH` | Registered | **Absent** — the route does not exist, regardless of what the customer names their divisions or categories |
+| `LEGACY` | Registered | Registered, existing contract preserved |
+| `UNKNOWN` (provenance absent) | Registered | Registered — UNKNOWN is treated as LEGACY for compatibility |
+
+**Where lineage is read.** Once, during application construction, by a provenance repository that maps a missing row to `UNKNOWN`; the result decides whether `reportsRoutes` registers the legacy path. Route registration is the simplest mechanism and introduces no per-request lookup and no mutable runtime state. Lineage is immutable, so a running process can never observe it change — with one benign, documented transient: if the service is started *before* first-admin provisioning, it registered the alias under `UNKNOWN` and keeps it until restart. The installation order in P0-16 is migrate → setup → start/restart the service, and release activation restarts the process, so a fresh customer never reaches steady state with the alias present. The exposure in the meantime is one admin-key-authenticated read-only route returning empty results.
+
 Authorization moves from `roleCode === "OWNER"` to the `report.view_cross_division` permission; division-scoped reporting uses the already-seeded `report.view_division`.
 
 ## Collaboration Rule Model
@@ -416,8 +510,8 @@ Only the origin of rules changes:
 - **Fresh default:** zero rules. Cross-division task operations are denied until configured; same-division work is unaffected. Fail-closed and documented as an onboarding step in P0-16.
 - **No-rule behavior:** unchanged — absence means denial.
 - **Inactive divisions:** a rule whose source or target is inactive is treated as absent (deny). Creating a rule referencing an inactive division is rejected with `DIVISION_INACTIVE`.
-- **CRUD:** `src/routes/collaboration-rules.routes.ts` and `collaboration-rule-management.service.ts` are already data-driven; only the IT actor guard changes to the capability predicate. Added validation: both divisions exist and are active, source ≠ target, no duplicate active triple, `requires_approval` implies `allowed`.
-- **Preset import:** optional, create-only, through the same service.
+- **P0-14 CRUD surface — exactly this and no more:** `GET` (list), `POST` (create), `PATCH /:id` (`allowed`, `requires_approval`, `active`), and `DELETE /:id` implemented as an **idempotent audited deactivation, never a physical delete**. Physical deletion is excluded so rule history and the immutable `migration_seed` audit trail survive. `src/routes/collaboration-rules.routes.ts` and `collaboration-rule-management.service.ts` are already data-driven; the IT actor guard changes to the capability predicate. Added validation: both divisions exist and are active, source ≠ target, no duplicate active triple, `requires_approval` implies `allowed`.
+- **Preset import:** not in P0-14. The preset *schema and sample* ship as data; applying a preset is deferred.
 - **Checker split:** `check-collaboration-schema.ts` keeps its static structural assertions and **drops** `LIVE_CONFIRMED_SEED` / `NO_SPECULATIVE_RULES`; those move to the opt-in legacy business-data checker excluded from fresh release archives, exactly as P0-10 did for staged-cutover validation.
 
 `task_scope` stays constrained to `'ALL'` (inventory open question 3 — answered: defer).
@@ -480,6 +574,17 @@ Because seed rows were created with the same names the dictionary returns, every
 2. The "division/role has no legacy compatibility mapping" rejections are **removed** — the blocker that makes customer-created divisions unusable today.
 3. The final-SYSTEM_ADMIN guard switches from `'IT'` to the capability.
 
+Everything else in the function is preserved: the six-argument signature, existence checks, inactive-division/role assignment refusal, the active-user completeness constraint, the advisory lock, all three audit branches, and the deterministic `Legacy user not found` failure when a legacy id is present but its row is missing.
+
+| Case | Behavior after P0-14 |
+| --- | --- |
+| Customer-created division or role | Assignable. No dictionary lookup gates it. The customer's `name` is written to the linked legacy display column |
+| Renamed legacy division or role | The normalized `name` wins; the compiled dictionary never overrides it. Propagates on the next access update |
+| Legacy Telegram user | Unchanged path: row found by `legacy_telegram_user_id`, display columns and `active` updated together |
+| `legacy_telegram_user_id is null` | The `telegram_users` update is skipped entirely; the normalized update, audits, and guards all still run |
+| Bootstrap administrator (no Telegram identity) | **Becomes manageable for the first time** — division, role, and active state can all be changed through the ordinary admin route. This closes the limitation ADR P0-11 documented and is a P0-14 acceptance criterion |
+| `p_division_id` / `p_role_id` null | No normalized row resolves; the dictionary is consulted, then `'UNASSIGNED'` — today's behavior exactly |
+
 The duplicate dictionary copies in `202608290002` and `202608290003` are left untouched (inventory open question 6 — answered: leave them; both are applied, the new function calls the current definition, and consolidating adds blast radius for no behavioral gain).
 
 **Legacy Telegram users** keep their rows, display columns, `legacy_telegram_user_id` links, and preference booleans. Reconciliation continues to run. The `UNASSIGNED` sentinel stays until legacy columns are retired post-v1.
@@ -502,7 +607,23 @@ first division name             (new)  e.g. "Management", "Sales", "HQ"
 fresh-install declaration       (new)  interactive confirm, or --fresh-install / --keep-existing-taxonomy
 ```
 
-Inside the existing bootstrap transaction, in order: write provenance → retire seed (if declared FRESH and all gates pass) → create the customer division (`provisioning_source = 'SETUP'`, fully editable, **not** system-managed) → `set_division_system_authority(...)` on it → create the administrator with reserved role `ADMIN` → grant `SYSTEM_ADMIN` → bootstrap marker → audit.
+**Division input.** `--division-name` is required in fresh mode. `--division-code` is optional; when omitted it is deterministically derived from the name (uppercase, spaces and separators to `_`, strip anything outside `[A-Z0-9_]`, leading letter enforced), then **displayed and confirmed** before the transaction runs. Either way the code must satisfy the existing `^[A-Z][A-Z0-9_]*$` contract and be unique, and it is immutable from the moment it commits. Because retirement precedes creation, a customer may claim `GUDANG`, `MANAGEMENT`, or any other retired seed code. In keep-existing mode the operator names an **existing active** division instead and no division is created.
+
+**Transaction order** (single RPC, single transaction, all-or-nothing):
+
+```
+eligibility + evidence veto + exact-identity + reference gates
+  → delete the one seed collaboration rule
+  → delete the nine seed divisions            (IT included; last-capability guard inactive pre-bootstrap)
+  → create the customer division              (provisioning_source = 'SETUP', capability initially false)
+  → enable capability on it                   (owner-executed internal path, R-005)
+  → create the administrator (reserved role ADMIN) + credential
+  → grant SYSTEM_ADMIN                        (candidate trigger now passes)
+  → insert the complete provenance row
+  → write the bootstrap marker and all audit rows
+```
+
+Retirement before creation is required for code reuse; capability enablement after creation is required so the candidate trigger passes. In keep-existing mode the two delete steps and the create step are skipped and the named existing division is resolved instead.
 
 Why this over the alternatives:
 
@@ -510,9 +631,26 @@ Why this over the alternatives:
 - **B (relax the active-user division constraint for SYSTEM_ADMIN users)** means weakening `202608290002:12`, an invariant that every downstream query, report, and routing path assumes. A weakened invariant is permanent; the bootstrap need is momentary.
 - **C (chosen)** requires no schema-constraint change, no new user state, and no product-owned division. The division created is one the customer genuinely wants and fully owns from day one — they can rename it, and they can delete it once the capability and its users have moved elsewhere. The operator was already being prompted for three values; a fourth is not a burden, and it makes onboarding start from the customer's real org chart.
 
-`bootstrap_first_admin` changes accordingly: the division is passed in (created in the same transaction) rather than looked up by literal code; the role lookup stays `roles.code = 'ADMIN'`, which is now a *product-reserved* role rather than origin taxonomy; `TAXONOMY_UNAVAILABLE` still raises when the reserved role is absent; the audit payload emits resolved codes instead of the hardcoded `'division_code','IT'`. The first administrator still never receives `OWNER`.
+### RPC shape — R-001
+
+The previous revision said the division is "passed in" to `bootstrap_first_admin` while also requiring that every replaced function keep its signature. Both cannot hold. **Resolution: two functions, no overload.**
+
+| Function | Signature | Role |
+| --- | --- | --- |
+| `bootstrap_first_admin(p_display_name, p_email, p_password_algorithm, p_password_hash)` | **Unchanged, four arguments** | Compatibility entry point for the old CLI. Body replaced only to resolve the single active capability-bearing division instead of literal `IT`. Raises `TAXONOMY_UNAVAILABLE` on zero or more than one match — it never guesses. Never creates or retires taxonomy, never writes provenance |
+| `provision_first_installation(p_display_name, p_email, p_password_algorithm, p_password_hash, p_lineage, p_division_code, p_division_name)` | **New, distinct name** | The P0-14 authoritative path: provenance, retirement, first division, capability, administrator, credential, authority, marker, audits — one transaction |
+
+An **overload** of `bootstrap_first_admin` was considered and rejected. PostgREST resolves overloads by the set of supplied argument names; a subset/superset pair is only unambiguous if the longer form has no defaults, which makes correctness depend on a schema detail no test would obviously cover, and it would leave two same-named function bodies for the destructive-SQL parser (R-003) to distinguish. A distinct name removes the entire `PGRST203` risk class and gives each function its own grant.
+
+The two functions share one internal helper for the security-sensitive identity/credential/authority steps, so there is exactly one implementation of first-administrator creation. Both are `SECURITY DEFINER` with pinned `search_path`, revoked from `public`/`anon`/`authenticated`, and executable by `service_role` only. Neither ever receives a plaintext password: the CLI hashes with scrypt in Node and passes only algorithm and hash, exactly as P0-12 established.
+
+In both paths the role lookup stays `roles.code = 'ADMIN'` — now a *product-reserved* role rather than origin taxonomy — `TAXONOMY_UNAVAILABLE` still raises when it is absent, and the audit payload emits resolved codes instead of the hardcoded `'division_code','IT'`. The first administrator receives `ADMIN` and `SYSTEM_ADMIN` and **never** `OWNER`.
 
 On a legacy install nothing about bootstrap matters — it already ran. After Stage C the bootstrap administrator becomes editable through `update_user_access` for the first time.
+
+### P0-12 invariants preserved
+
+Every P0-12 security property is carried forward unchanged: the `gwens_system_admin_invariant` advisory lock; eligibility requiring no bootstrap marker, no authority history including revoked rows, and no administrator credential; scrypt hashing in Node with no plaintext crossing the database boundary; one active user, one credential, one `SYSTEM_ADMIN`, one singleton marker, one sanitized audit record; no automatic re-arming; and no recovery path. P0-14 only widens what the transaction additionally does, never what it permits.
 
 ## Schema Changes Required
 
@@ -531,7 +669,7 @@ All additive. No column dropped, no constraint loosened, no table renamed, and *
 | 9 | `set_division_system_authority()` + capability write-guard trigger on `divisions` | B |
 | 10 | Last-capability-division guard trigger; reserved-role guard trigger | B |
 | 11 | `create or replace`: `validate_system_admin_candidate`, `assign_system_admin`, `protect_final_system_admin_user`, `assert_it_system_admin`, `update_user_access`, alert acknowledgment guard | B |
-| 12 | `create or replace bootstrap_first_admin` (division passed in; reserved-role lookup) | B |
+| 12 | `create or replace bootstrap_first_admin` (four-argument signature kept; capability lookup) and `create function provision_first_installation` (new, distinct name) plus the shared internal first-administrator helper and the read-only `preview_first_admin_setup` | B |
 | 13 | Evidence-derived `task_categories` backfill | C |
 
 Removed from the previous revision: `installation_profile` heuristic classifier, `divisions.system_managed`, `public.instance_settings`, `business_actor_user_id`, the `ADMINISTRATION` division insert, and every guarded `delete` in a migration.
@@ -578,6 +716,8 @@ Deferred to Phase 3: every UI screen (P3-03), custom role creation, role grant e
 
 ## Migration Phases
 
+**Stages A–C ship as ONE migration file**, `202609090002_implement_customer_taxonomy_transition.sql`. One file means one registry entry and one PostgreSQL transaction: DDL is transactional here, so the whole stage set either applies or does not, and the ordering requirement that `IT` be flagged *before* any predicate is replaced is guaranteed structurally rather than by convention. Two staged files would create a registry state in which stage A is applied and stage B is not — precisely the half-applied window that flagging-before-replacement exists to avoid, and a second failure point for the deploy gate. The one-file choice imposes one constraint: every index must be a plain `create index` (the tables are small), because `create index concurrently` cannot run inside a transaction.
+
 | Stage | Content | Destructive? |
 | --- | --- | --- |
 | **A — Expand schema** | Provenance table (empty), `task_categories` (empty), `divisions.grants_system_authority`, `divisions.provisioning_source`, `roles.system_managed`, `alert.acknowledge` permission + OWNER grant, reserved-role marking | No |
@@ -599,7 +739,7 @@ The existing release flow (P0-08) is: run migrations against the live database �
 | Old schema | New app | **No** | Not a supported ordering — the deploy gate runs migrations before activation and blocks activation on migration failure. New app reads `grants_system_authority`, `task_categories`, and `installation_provenance`, which do not exist yet |
 | **New schema (Stage A)** | **Old app** | **Yes** | Purely additive. New columns have defaults and are never named by old queries (repositories use explicit column lists). New tables are unreferenced. The new `alert.acknowledge` permission is inert until a guard reads it |
 | **New schema (Stage B)** | **Old app** | **Yes** | Every replaced function keeps its **exact signature**, so no old caller breaks. Behavior per function: `assign_system_admin` / `validate_system_admin_candidate` / `protect_final_system_admin_user` — on a legacy install `IT` was flagged earlier in the same migration, so an old caller passing an `IT` user still passes; on an install without `IT` there are no callers yet. `update_user_access` — strictly more permissive than before; every previously-accepted call is still accepted. Alert acknowledgment guard — `OWNER` holds `alert.acknowledge` by seed, so an old caller with an OWNER actor still passes. `assert_it_system_admin` — same predicate outcome on any install where `IT` exists |
-| **New schema (Stage B)** | **Old setup CLI** | **Yes, with a stated caveat** | `bootstrap_first_admin` keeps its signature but now requires a capability-bearing division. On a legacy install `IT` carries it, so an old, not-yet-bootstrapped legacy database still bootstraps. On a brand-new database no division carries it, so an old setup CLI raises `TAXONOMY_UNAVAILABLE` with zero writes — a fresh install is always performed with the matching release, so this ordering does not occur in practice, and it fails closed rather than creating bad state |
+| **New schema (Stage B)** | **Old setup CLI** | **Yes, but not a clean-provisioning path (R-002)** | `bootstrap_first_admin` keeps its four-argument signature and now resolves the single active capability-bearing division. **Correction of the previous revision:** the historical seed always creates `IT` and the migration flags it, so on a freshly migrated database the old CLI does **not** fail — it succeeds and places the administrator in `IT`, with provenance absent (`UNKNOWN` ⇒ legacy-compatible). Nothing is destroyed and no fake division is created; the install is simply legacy-shaped rather than clean. Clean commercial provisioning therefore *requires* the matching-release CLI, which the deploy flow guarantees by activating the release before setup is run. This is a documented operational requirement, not a safety hole |
 | **New schema (Stage C)** | **Old app** | **Yes** | `task_categories` is populated but only the new app reads it. The old app keeps validating against its compiled `["AFFILIATE"]`, which is a subset of the backfilled catalog on a legacy install — no write the old app accepts would be rejected by the new rules |
 | New schema | New app | **Yes** | Target state |
 | New schema + provenance declared FRESH | New app | **Yes** | Fresh commercial install |
@@ -658,11 +798,11 @@ Database-level constraints remain authoritative:
 
 **Customer:** a small online shop. Real divisions: `SALES`, `WAREHOUSE`, `FINANCE`. No IT department. No Administration department. No affiliate programme.
 
-**1. `npm run migrate`** — schema created; historical seeds present but unreachable (no user account exists, no authentication is possible); `installation_provenance` empty; `task_categories` empty (no tasks to derive from); no division carries `grants_system_authority` (there is no `IT` row on a clean database, so migration step 8 is a zero-row no-op).
+**1. `npm run migrate`** — schema created; historical seeds present but unreachable (no user account exists, no authentication is possible); `installation_provenance` empty; `task_categories` empty (no tasks to derive from). **The seeded `IT` division does exist and is flagged capability-bearing by the migration (R-002)** — this is transient state that setup removes, not something the customer ever sees.
 
-**2. `npm run setup`** — the operator supplies display name, email, password, and the first division name `Management`. Setup lists the nine seed divisions and the one seed rule as retirement candidates and asks whether this is a new installation for a new customer. The operator confirms. In one transaction: provenance `FRESH` recorded → all nine divisions and the one rule pass gates 3–5 and are deleted with audit rows → division `MANAGEMENT` / "Management" created (`provisioning_source = 'SETUP'`, fully editable, not system-managed) → capability set on it → administrator created with role `ADMIN` → `SYSTEM_ADMIN` granted → bootstrap marker written.
+**2. `npm run setup --fresh-install --division-name "Management"`** — the read-only preview lists the nine seed divisions and the one seed rule as retirement candidates with their exact codes and names, and the operator confirms this is a new installation for a new customer. Then, in one transaction: gates pass → the seed rule is deleted → the nine seed divisions (including `IT`) are deleted with audit rows → division `MANAGEMENT` / "Management" is created (`provisioning_source = 'SETUP'`, fully editable, not system-managed) → capability enabled on it → administrator created with role `ADMIN` → `SYSTEM_ADMIN` granted → provenance `FRESH` with retirement count 10 inserted → bootstrap marker and audits written. Had the shop wanted `GUDANG` as its first division name, that would also succeed, because retirement precedes creation.
 
-**State after migration, before onboarding:** no origin-company taxonomy is visible to anyone; there is no `ADMINISTRATION` division and no system-owned division of any kind; the bootstrap path is available and succeeds without an `IT` division.
+**State after migration, before onboarding:** no origin-company taxonomy is visible to anyone; there is no `ADMINISTRATION` division and no system-owned division of any kind; the bootstrap path is available and succeeds without any `IT` division remaining.
 
 **3. Onboarding** — the administrator creates `SALES`, `WAREHOUSE`, `FINANCE` through `POST /api/admin/divisions`; assigns users to them through `update_user_access` (which no longer consults the legacy dictionary for validation); optionally creates task categories or leaves the catalog empty; configures cross-division rules such as `SALES → WAREHOUSE`.
 
@@ -732,7 +872,7 @@ Test-fixture policy: fixtures define taxonomy through one shared catalog helper 
 
 - Database migrations are forward-only (D-014, `AI_HANDOFF.md`). Application rollback selects a previous release; it does not reverse schema.
 - **Migrations are now fully reversible in effect**, because they delete and deactivate nothing. Rolling the application back while the new columns, tables, and function bodies remain is safe: old code never reads the new columns, and every replaced function keeps its signature and accepts every previously valid call (see the Deploy Compatibility Matrix). This is a direct improvement over the previous revision, where a migration could delete rows.
-- The only irreversible action in P0-14 is setup-time seed retirement, which is operator-declared, printed before execution, gated six ways, restricted to provably unreferenced rows on a never-provisioned installation, and audited. Should it ever need undoing, the rows are origin-company data a commercial customer must not have; restoring an equivalent starting taxonomy is a preset import.
+- The only irreversible action in P0-14 is setup-time seed retirement, which is operator-declared, printed before execution, gated seven ways, restricted to provably unreferenced rows on a never-provisioned installation, and audited. Should it ever need undoing, the rows are origin-company data a commercial customer must not have; restoring an equivalent starting taxonomy is a preset import.
 - `installation_provenance` is append-only. Correcting a mistaken declaration requires a deliberate, audited, manually authorized forward migration — never a runtime action.
 
 ## Rejected Alternatives

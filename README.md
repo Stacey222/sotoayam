@@ -1,4 +1,4 @@
-# Gwens Automation Control
+# Sotoayam Automation Control
 
 Backend internal dan web admin sederhana untuk registrasi pengguna Telegram serta routing notifikasi dari n8n. Business logic recipient berada di backend, sehingga n8n hanya mengirim event dan tidak menyimpan Telegram Chat ID.
 

@@ -71,18 +71,30 @@ Historical operational assumptions are not universal product requirements. P0-14
 
 The release package allowlist now contains migration tooling and all migrations but no developer Supabase project identity. Deployment still creates link state from protected deploy-only environment variables; its test passes with no packaged `config.toml`. P0-15's required validation passed 605 tests with 17 opt-in disposable-database tests skipped, plus typecheck, build, contract tests, secret scan, focused packaging/deployment tests, a real archive content check, historical migration integrity, and diff whitespace validation. No live Supabase project or VPS was contacted. The pre-existing governance checker drift was subsequently reconciled without changing migrations or permission semantics: it now reconstructs foundation plus later permission/grant additions, and all governance checks pass.
 
+## P0-16 Clean-Room Rehearsal State
+
+P0-16 and Phase 0 are complete. `docs/deployment/clean-install.md` is the customer/operator guide and `docs/reviews/P0-16-clean-install-rehearsal.md` records the complete evidence.
+
+The release packaging fixes remain in the working tree: production-only installs use compiled `dist/scripts/migrate.js`, and the customer archive includes `.env.example` plus the installation and recovery guides while excluding developer Supabase identity and internal reviews.
+
+F-001 is resolved with an authorized disposable hosted Supabase target. The linked target and supplied target credentials agreed, its migration registry exactly matched all 15 local versions, and its public application schema contained the expected 28 tables. A data-only backup was restored deterministically by truncating all 28 application tables together without `CASCADE`, then applying the dump in the same transaction without disabling triggers. The committed restored state contained one `FRESH` provenance record, active `OPERATIONS`, one bootstrap marker, the active first administrator with `ADMIN`, an active `SYSTEM_ADMIN` assignment, and its credential record. A Node 24.20.0 application process configured only for that restored target returned `/health` HTTP 200 with Telegram polling, reminders, and critical-alert evaluation disabled, then shut down cleanly.
+
+No historical migration changed. The P0-16 restore acceptance contacted only the authorized disposable hosted target; no VPS or Telegram API was contacted. Disposable credentials are not stored in the repository. During closeout, the optional repository `check:migration-baseline` command also ran its built-in Supabase diagnostic and reversible-write check against the repository-configured environment; every substantive subcheck reported PASS and the reversible check cleaned up, while the aggregate command reported FAIL only because its source-control check requires a clean working tree.
+
+Final closeout validation passed: 612 tests passed with 17 documented opt-in database tests skipped, typecheck and build passed, all 9 contract tests passed, all 13 governance checks passed, and the final secret scan passed. Disposable credential values discovered in the uncommitted `.env.example` were removed; the file now contains blank template values only.
+
 ## Next Agent
-Recommended: Claude Code.
+Recommended: Claude Code architecture, then Codex implementation for P1-01.
 
 Next task:
-Author P0-16's clean installation guide against the now-clean customer package and current explicit setup flow.
+Start P1-01: design and implement real administrator identity with signed HTTP-only sessions, preserving the centralized fail-closed transitional API-key boundary until the approved migration design replaces it safely.
 
 Reason:
-P0-15 implementation and all local gates are green. The remaining Phase 0 documentation task is a clean installation guide, followed by Antigravity dry-run validation.
+Phase 0's commercial blockers are closed on evidence. P1-01 is the first planned Phase 1 item and replaces shared-key browser administration with the approved identity/session target from D-007.
 
 ## Pending Higher-Level Work
-- Write and validate the clean installation guide (P0-16).
-- Keep identity-based admin sessions, rate limiting, integration credentials, and other Phase 1 work outside P0-16.
+- Begin Phase 1 with P1-01 administrator identity and signed HTTP-only sessions.
+- Preserve remaining launch gates: Phase 4 clean-room install, upgrade/rollback, restore drill, and final security review are still separate pre-customer requirements.
 
 ## Agent Handoff Format
 Every agent completing a task should return:

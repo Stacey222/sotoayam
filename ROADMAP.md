@@ -1,6 +1,6 @@
 # SOTOAYAM ROADMAP
 Version: 1.0-draft  
-Current phase: Phase 0 — Critical blockers
+Current phase: Phase 1 — Security & Reliability
 
 Legend:
 - `[ ]` Not started
@@ -55,8 +55,9 @@ Legend:
   Note: customer archive excludes local Supabase project config while retaining all migrations; customer/operator docs are origin-clean except explicitly labeled compatibility identifiers, and internal origin records are labeled historical.
 
 ### Documentation
-- [ ] P0-16 Write and validate clean installation guide.
+- [x] P0-16 Write and validate clean installation guide.
   Owner: Claude Code author -> Antigravity dry-run
+  Note: complete. The customer guide and release packaging passed; a disposable hosted Supabase target matched all 15 migrations; the deterministic data-only restore committed in one transaction across all 28 application tables without `CASCADE` or disabled triggers; restored `FRESH` provenance, `OPERATIONS`, first `ADMIN`, active `SYSTEM_ADMIN`, credentials, and bootstrap marker were verified; and the restored-target application returned `/health` HTTP 200 on Node 24.20.0 with Telegram and schedulers disabled. See `docs/reviews/P0-16-clean-install-rehearsal.md`.
 
 ## Phase 1 — Security & Reliability
 
@@ -136,7 +137,7 @@ Legend:
 ## Launch Gate
 
 Do not accept payment for a production customer until:
-- [ ] all P0 tasks are closed;
+- [x] all P0 tasks are closed;
 - [ ] no unresolved P0 security/correctness finding remains;
 - [ ] clean-room install passes;
 - [ ] upgrade/rollback passes;

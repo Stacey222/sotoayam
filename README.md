@@ -22,8 +22,8 @@ Persyaratan: versi Node.js pada `.node-version` dan project Supabase.
 
 1. Install dependency: `npm install`.
 2. Salin nama variable dari `.env.example` ke `.env` milik lokal dan isi secret secara lokal. Jangan commit `.env`.
-3. Hubungkan Supabase CLI ke project yang dituju dengan project ref milik operator, lalu jalankan seluruh migration terurut dengan `npm run migrate`.
-4. Build aplikasi: `npm run build`.
+3. Build aplikasi: `npm run build`. Perintah migrasi memakai runner hasil build.
+4. Hubungkan Supabase CLI ke project yang dituju dengan project ref milik operator, lalu jalankan seluruh migration terurut dengan `npm run migrate`.
 5. Pilih mode setup secara eksplisit dan provision administrator pertama tepat sekali:
    - instalasi customer baru: `npm run setup -- --fresh-install --division-name "Operations" --division-code OPERATIONS`;
    - instalasi lama: `npm run setup -- --keep-existing-taxonomy --division-code EXISTING_DIVISION`.

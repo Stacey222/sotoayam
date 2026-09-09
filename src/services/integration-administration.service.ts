@@ -5,6 +5,7 @@ import { INTEGRATION_CAPABILITIES, type IntegrationCapabilityCode } from "../rep
 import type { SystemAuthorityRepository } from "../repositories/system-authority.repository.js";
 import type { TaskUsersRepository } from "../repositories/task-users.repository.js";
 import type { UserManagementService } from "./user-management.service.js";
+import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
 
 export class IntegrationAdministrationService {
   constructor(
@@ -61,8 +62,13 @@ export class IntegrationAdministrationService {
   private async authorizedActor(): Promise<number> {
     const actor = await this.taskUsers.findTrustedAdminActorUser();
     const user = await this.users.get(actor.id);
-    if (!user.active || user.division?.code !== "IT" || !await this.authorities.findActiveForUser(user.id)) {
-      throw new AppError(403, "INTEGRATION_ADMIN_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
+    if (!hasSystemAdminCapability({
+      active: user.active,
+      divisionId: user.division?.id ?? null,
+      roleId: user.role?.id ?? null,
+      divisionGrantsSystemAuthority: user.division?.grants_system_authority,
+    }) || !await this.authorities.findActiveForUser(user.id)) {
+      throw new AppError(403, "INTEGRATION_ADMIN_FORBIDDEN", "Active SYSTEM_ADMIN authority in an authority-capable division is required");
     }
     return user.id;
   }

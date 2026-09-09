@@ -69,9 +69,9 @@ Status: Approved target.
 
 ## D-011 — Customer taxonomy
 Decision: Divisions/roles/customer-operational taxonomy must become data/configuration rather than compile-time source.
-Status: Approved target.
+Status: Implemented for P0-14.
 
-Legacy mapping may remain as a compatibility adapter during transition.
+Customer divisions and task categories are stored data with stable codes and mutable display names. `SYSTEM_ADMIN` eligibility is attached to an explicitly guarded division capability rather than the literal `IT` code. Fresh setup requires positive `FRESH` lineage and an operator-supplied first division; legacy or absent provenance preserves compatibility adapters. The three baseline role codes remain system-managed, while custom roles and permission-grant editing remain deferred.
 
 ## D-012 — Branding configurability
 Decision: Sotoayam is a fixed product brand for v1.0.

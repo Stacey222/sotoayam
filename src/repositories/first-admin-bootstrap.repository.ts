@@ -13,6 +13,9 @@ export type FirstAdminBootstrapCode =
   | "TAXONOMY_UNAVAILABLE"
   | "INVALID_CREDENTIAL_MATERIAL"
   | "BOOTSTRAP_INPUT_UNAVAILABLE"
+  | "INVALID_INSTALLATION_LINEAGE"
+  | "FRESH_INSTALL_EVIDENCE_VETO"
+  | "FRESH_INSTALL_SEED_MISMATCH"
   | "BOOTSTRAP_TRANSACTION_FAILED";
 
 export const BOOTSTRAP_EXIT_CODES: Record<FirstAdminBootstrapCode, number> = {
@@ -26,6 +29,9 @@ export const BOOTSTRAP_EXIT_CODES: Record<FirstAdminBootstrapCode, number> = {
   TAXONOMY_UNAVAILABLE: 7,
   INVALID_CREDENTIAL_MATERIAL: 2,
   BOOTSTRAP_INPUT_UNAVAILABLE: 2,
+  INVALID_INSTALLATION_LINEAGE: 2,
+  FRESH_INSTALL_EVIDENCE_VETO: 8,
+  FRESH_INSTALL_SEED_MISMATCH: 8,
   BOOTSTRAP_TRANSACTION_FAILED: 1,
 };
 
@@ -51,6 +57,20 @@ export interface FirstAdminBootstrapResult {
   bootstrappedAt: string;
 }
 
+export type SetupLineage = "FRESH" | "LEGACY";
+
+export interface FirstAdminSetupPreview {
+  lineage: SetupLineage;
+  eligible: boolean;
+  evidence: Record<string, number>;
+  retirement_divisions: Array<{ code: string; name: string }>;
+  retirement_rule: Record<string, unknown> | null;
+}
+
+export interface FirstAdminSetupDivision { code: string; name: string }
+
+export interface FirstAdminProvisioningResult extends FirstAdminBootstrapResult { divisionCode: string }
+
 export interface FirstAdminBootstrapInput {
   displayName: string;
   email: string;
@@ -61,6 +81,9 @@ export interface FirstAdminBootstrapInput {
 export interface FirstAdminBootstrapRepository {
   getStatus(): Promise<FirstAdminBootstrapStatus>;
   bootstrap(input: FirstAdminBootstrapInput): Promise<FirstAdminBootstrapResult>;
+  preview?(lineage: SetupLineage): Promise<FirstAdminSetupPreview>;
+  resolveActiveDivision?(code: string): Promise<FirstAdminSetupDivision | null>;
+  provision?(input: FirstAdminBootstrapInput & { lineage: SetupLineage; divisionCode: string; divisionName: string }): Promise<FirstAdminProvisioningResult>;
 }
 
 interface BootstrapRow {
@@ -68,6 +91,8 @@ interface BootstrapRow {
   assignment_id: number;
   bootstrapped_at: string;
 }
+
+interface ProvisioningRow extends BootstrapRow { division_code: string }
 
 function mapDatabaseDiagnostic(error: DatabaseDiagnostic): FirstAdminBootstrapError {
   const message = error.message ?? "";
@@ -89,6 +114,16 @@ function mapDatabaseDiagnostic(error: DatabaseDiagnostic): FirstAdminBootstrapEr
   }
   if (message.includes("INVALID_CREDENTIAL_MATERIAL")) {
     return new FirstAdminBootstrapError("INVALID_CREDENTIAL_MATERIAL", "Credential material is invalid");
+  }
+  if (message.includes("INVALID_INSTALLATION_LINEAGE")) {
+    return new FirstAdminBootstrapError("INVALID_INSTALLATION_LINEAGE", "Installation lineage must be selected explicitly");
+  }
+  if (message.includes("FRESH_INSTALL_EVIDENCE_VETO")) {
+    return new FirstAdminBootstrapError("FRESH_INSTALL_EVIDENCE_VETO", "Existing installation evidence blocks fresh taxonomy retirement");
+  }
+  if (message.includes("FRESH_INSTALL_SEED_MISMATCH") || message.includes("FRESH_INSTALL_REFERENCE_VETO")
+    || message.includes("FRESH_INSTALL_AUDIT_VETO") || message.includes("FRESH_INSTALL_RETIREMENT_FAILED")) {
+    return new FirstAdminBootstrapError("FRESH_INSTALL_SEED_MISMATCH", "Origin taxonomy does not exactly match the safe retirement set");
   }
   if (["PGRST202", "PGRST205", "42883", "42P01"].includes(error.code ?? "")) {
     return new FirstAdminBootstrapError("INCOMPATIBLE_SCHEMA", "First-administrator schema is unavailable; apply migrations first");
@@ -130,6 +165,31 @@ export class SupabaseFirstAdminBootstrapRepository implements FirstAdminBootstra
     if (error) throw mapDatabaseDiagnostic(error);
     const row = data as BootstrapRow;
     return { userId: Number(row.user_id), assignmentId: Number(row.assignment_id), bootstrappedAt: row.bootstrapped_at };
+  }
+
+  async preview(lineage: SetupLineage): Promise<FirstAdminSetupPreview> {
+    const { data, error } = await this.client.rpc("preview_first_admin_setup", { p_lineage: lineage });
+    if (error) throw mapDatabaseDiagnostic(error);
+    return data as FirstAdminSetupPreview;
+  }
+
+  async resolveActiveDivision(code: string): Promise<FirstAdminSetupDivision | null> {
+    const { data, error } = await this.client.from("divisions").select("code,name")
+      .eq("code", code).eq("active", true).maybeSingle();
+    if (error) throw mapDatabaseDiagnostic(error);
+    return data as FirstAdminSetupDivision | null;
+  }
+
+  async provision(input: FirstAdminBootstrapInput & { lineage: SetupLineage; divisionCode: string; divisionName: string }): Promise<FirstAdminProvisioningResult> {
+    const { data, error } = await this.client.rpc("provision_first_installation", {
+      p_display_name: input.displayName, p_email: input.email,
+      p_password_algorithm: input.passwordAlgorithm, p_password_hash: input.passwordHash,
+      p_lineage: input.lineage, p_division_code: input.divisionCode, p_division_name: input.divisionName,
+    }).single();
+    if (error) throw mapDatabaseDiagnostic(error);
+    const row = data as ProvisioningRow;
+    return { userId: Number(row.user_id), assignmentId: Number(row.assignment_id),
+      bootstrappedAt: row.bootstrapped_at, divisionCode: row.division_code };
   }
 }
 

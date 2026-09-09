@@ -23,7 +23,7 @@ export interface IntegrationAdministrationRepository {
 }
 
 function databaseError(message: string, error: { code?: string; message?: string; details?: string; hint?: string }): Error {
-  if (error.code === "42501") return new AppError(403, "INTEGRATION_ADMIN_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
+  if (error.code === "42501") return new AppError(403, "INTEGRATION_ADMIN_FORBIDDEN", "Active SYSTEM_ADMIN authority in an authority-capable division is required");
   if (error.code === "P0002") return new AppError(404, "INTEGRATION_NOT_FOUND", error.message ?? "Integration state was not found");
   if (error.code === "23505") return new AppError(409, "INTEGRATION_DUPLICATE", "Integration identity or capability already exists");
   if (["23503", "23514", "22023"].includes(error.code ?? "")) return new AppError(400, "INTEGRATION_INVALID", error.message ?? message);

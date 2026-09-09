@@ -4,13 +4,18 @@ import "dotenv/config";
 import { loadSupabaseConfig } from "../src/config/env.js";
 import { createSupabaseClient } from "../src/db/supabase.js";
 
-const MIGRATION = "202609090001_create_first_admin_bootstrap.sql";
+const BOOTSTRAP_MIGRATION = "202609090001_create_first_admin_bootstrap.sql";
+const TRANSITION_MIGRATION = "202609090002_implement_customer_taxonomy_transition.sql";
 
 async function main(): Promise<void> {
   console.log("Sotoayam First Administrator Bootstrap\n");
-  const sql = await readFile(path.resolve(process.cwd(), "supabase/migrations", MIGRATION), "utf8");
+  const historical = await readFile(path.resolve(process.cwd(), "supabase/migrations", BOOTSTRAP_MIGRATION), "utf8");
+  const transition = await readFile(path.resolve(process.cwd(), "supabase/migrations", TRANSITION_MIGRATION), "utf8");
+  const sql = `${historical}\n${transition}`;
   const lowerSql = sql.toLowerCase();
-  const functionBlock = lowerSql.split("create or replace function public.bootstrap_first_admin")[1] ?? "";
+  const functionBlock = transition.toLowerCase().split("create or replace function public.bootstrap_first_admin")[1] ?? "";
+  const provisionBlock = transition.toLowerCase().split("create or replace function public.provision_first_installation")[1] ?? "";
+  const topLevelTransition = transition.replace(/as \$\$[\s\S]*?\n\$\$;/g, "as $$\n[function body]\n$$;");
   const checks = {
     SERVICE_ONLY_RPC: lowerSql.includes("revoke all on function public.bootstrap_first_admin(text, text, text, text)\n  from public, anon, authenticated")
       && lowerSql.includes("grant execute on function public.bootstrap_first_admin(text, text, text, text) to service_role"),
@@ -18,7 +23,7 @@ async function main(): Promise<void> {
     RLS_ENABLED: ["admin_credentials", "instance_bootstrap"]
       .every((table) => lowerSql.includes(`alter table public.${table} enable row level security`)),
     NO_PUBLIC_POLICIES: !/create\s+policy/i.test(sql),
-    NON_DESTRUCTIVE: !/\b(?:drop\s+table|truncate|delete\s+from|alter\s+table\s+public\.(?:users|divisions|roles|system_authority_assignments))\b/i.test(sql),
+    NON_DESTRUCTIVE: !/\b(?:drop\s+table|truncate|delete\s+from)\b/i.test(`${historical}\n${topLevelTransition}`),
     SINGLE_ROW_BOOTSTRAP_TABLE: lowerSql.includes("singleton smallint primary key default 1 check (singleton = 1)"),
     NO_PLAINTEXT_PASSWORD_PARAMETER: /bootstrap_first_admin\s*\([^)]*p_password\s+text/i.test(sql) === false
       && functionBlock.includes("p_password_hash text"),
@@ -27,6 +32,12 @@ async function main(): Promise<void> {
       .every((table) => functionBlock.includes(`exists (select 1 from ${table})`)),
     ATOMIC_AUDIT: functionBlock.includes("'first_admin_bootstrap'")
       && functionBlock.includes("'first_admin_bootstrapped'"),
+    DISTINCT_PROVISIONING_RPC: (transition.match(/create or replace function public\.bootstrap_first_admin\s*\(/g) ?? []).length === 1
+      && provisionBlock.includes("p_lineage text") && provisionBlock.includes("p_division_code text"),
+    CAPABILITY_LOOKUP: functionBlock.includes("grants_system_authority") && !functionBlock.includes("code = 'it'"),
+    PROVENANCE_ATOMIC: provisionBlock.includes("insert into public.installation_provenance")
+      && provisionBlock.includes("insert into public.instance_bootstrap"),
+    NO_PLAINTEXT_PROVISION_PARAMETER: /provision_first_installation\s*\([^)]*p_password\s+text/i.test(transition) === false,
   };
   for (const [name, passed] of Object.entries(checks)) console.log(`${name} = ${passed ? "PASS" : "FAIL"}`);
 

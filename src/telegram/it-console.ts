@@ -6,6 +6,7 @@ import type { TelegramInlineButton } from "../services/telegram.service.js";
 import type { ManagedUser, UserManagementStatus } from "../user-management/types.js";
 import type { CollaborationRuleReader } from "../services/collaboration-rule-management.service.js";
 import { normalizeBusinessUserCode } from "../identity/business-user-code.js";
+import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
 
 export interface TelegramConsoleResponse {
   text: string;
@@ -108,7 +109,12 @@ export class TelegramItConsoleService implements TelegramItConsole {
     const channel = await this.channels.findByExternalIdentity("TELEGRAM", String(externalTelegramId));
     if (!channel?.active) return null;
     const user = await this.users.get(channel.user_id).catch(() => null);
-    if (!user?.active || user.division?.code !== "IT") return null;
+    if (!user || !hasSystemAdminCapability({
+      active: user.active,
+      divisionId: user.division?.id ?? null,
+      roleId: user.role?.id ?? null,
+      divisionGrantsSystemAuthority: user.division?.grants_system_authority,
+    })) return null;
     const authority = await this.authorities.findActiveForUser(user.id);
     return authority ? { userId: user.id } : null;
   }

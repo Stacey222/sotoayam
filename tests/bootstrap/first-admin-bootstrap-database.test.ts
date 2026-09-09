@@ -139,8 +139,10 @@ describe.skipIf(!runLive)("first-administrator PostgreSQL invariants", () => {
         select id,'SYSTEM_ADMIN',now() from fixture_user;`,
       `with fixture_user as (${fixtureUser}) insert into public.instance_bootstrap(singleton,first_admin_user_id,source)
         select 1,id,'fixture' from fixture_user;`,
-      "update public.divisions set code='IT_MISSING' where code='IT';",
-      "update public.roles set code='ADMIN_MISSING' where code='ADMIN';",
+      "update public.divisions set active=false where code='IT';",
+      `alter table public.roles disable trigger protect_reserved_role_lifecycle;
+       update public.roles set active=false where code='ADMIN';
+       alter table public.roles enable trigger protect_reserved_role_lifecycle;`,
     ];
     for (const fixture of cases) {
       const attempt = await sql(url, `begin; ${fixture} ${bootstrapSql("Rollback Installer", "rollback@example.com")}`);
@@ -185,8 +187,8 @@ describe.skipIf(!runLive)("first-administrator PostgreSQL invariants", () => {
       "perform pg_advisory_xact_lock(hashtextextended('gwens_system_admin_invariant', 0));",
       "-- advisory lock removed by structural-backstop integration test",
     ).replace(
-      "  select divisions.id into administrative_division_id",
-      "  perform pg_sleep(1);\n\n  select divisions.id into administrative_division_id",
+      "  select count(*), min(id) into candidate_count, administrative_division_id",
+      "  perform pg_sleep(1);\n\n  select count(*), min(id) into candidate_count, administrative_division_id",
     );
     expect(withoutLock).not.toContain("perform pg_advisory_xact_lock");
     expect(withoutLock).toContain("perform pg_sleep(1)");

@@ -16,6 +16,7 @@ import { systemAuthorityRoutes } from "../../src/routes/system-authority.routes.
 import { internalTaskIngestionRoutes, csvImportRoutes } from "../../src/routes/task-ingestion.routes.js";
 import { tasksRoutes } from "../../src/routes/tasks.routes.js";
 import { usersRoutes } from "../../src/routes/users.routes.js";
+import { taxonomyRoutes } from "../../src/routes/taxonomy.routes.js";
 
 const config: AppConfig = {
   supabaseUrl: "https://example.supabase.co",
@@ -54,6 +55,7 @@ const adminRouteGroups = [
   reportsRoutes,
   criticalAlertsRoutes,
   adminCriticalAlertRoutes,
+  taxonomyRoutes,
 ];
 
 async function sourceFiles(directory: string): Promise<string[]> {
@@ -145,7 +147,7 @@ describe("admin route boundaries", () => {
   });
 
   it("marks every admin route group as a centralized admin scope", () => {
-    expect(adminRouteGroups).toHaveLength(11);
+    expect(adminRouteGroups).toHaveLength(12);
     for (const routes of adminRouteGroups) expect(isAdminRouteScope(routes)).toBe(true);
   });
 

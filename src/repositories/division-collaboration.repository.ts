@@ -30,9 +30,11 @@ export class SupabaseDivisionCollaborationRepository implements DivisionCollabor
   constructor(private readonly client: SupabaseClient) {}
 
   async findActiveRule(sourceDivisionId: number, targetDivisionId: number, scope: CollaborationTaskScope): Promise<DivisionCollaborationRule | null> {
-    const { data, error: queryError } = await this.client.from("division_collaboration_rules").select("*")
+    const { data, error: queryError } = await this.client.from("division_collaboration_rules")
+      .select("*,source_division:divisions!division_collaboration_rules_source_division_id_fkey!inner(active),target_division:divisions!division_collaboration_rules_target_division_id_fkey!inner(active)")
       .eq("source_division_id", sourceDivisionId).eq("target_division_id", targetDivisionId)
-      .eq("task_scope", scope).eq("active", true).maybeSingle();
+      .eq("task_scope", scope).eq("active", true)
+      .eq("source_division.active", true).eq("target_division.active", true).maybeSingle();
     if (queryError) throw error("Unable to resolve collaboration policy", queryError);
     return data as DivisionCollaborationRule | null;
   }

@@ -4,6 +4,7 @@ import type { UserManagementService } from "../services/user-management.service.
 import type { UserManagementStatus } from "../user-management/types.js";
 import type { TaskActorResolver } from "../services/task-actor.service.js";
 import { parsePositiveId } from "../validation.js";
+import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
 
 export interface AdminUserManagementRoutesOptions {
   service: UserManagementService;
@@ -52,8 +53,8 @@ export const adminUserManagementRoutes = defineAdminRoutes<AdminUserManagementRo
   app.patch<{ Params: { id: string } }>("/:id/business-user-code", async (request) => {
     if (!options.actorResolver) throw new AppError(503, "BUSINESS_USER_CODE_ADMIN_UNAVAILABLE", "Business user code administration is unavailable");
     const actor = await options.actorResolver.resolveTrustedActor();
-    if (!actor.active || actor.divisionCode !== "IT") {
-      throw new AppError(403, "BUSINESS_USER_CODE_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
+    if (!hasSystemAdminCapability(actor)) {
+      throw new AppError(403, "BUSINESS_USER_CODE_FORBIDDEN", "Active SYSTEM_ADMIN authority in an authority-capable division is required");
     }
     const value = record(request.body);
     if (Object.keys(value).some((key) => !["business_user_code", "confirm_change"].includes(key))

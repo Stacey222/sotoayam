@@ -4,7 +4,9 @@ import { createSupabaseClient } from "../src/db/supabase.js";
 import { loadConfig } from "../src/config/env.js";
 import { buildApp } from "../src/app.js";
 
-const migration = await readFile(path.resolve(process.cwd(), "supabase/migrations/202608290003_create_it_user_management.sql"), "utf8");
+const historical = await readFile(path.resolve(process.cwd(), "supabase/migrations/202608290003_create_it_user_management.sql"), "utf8");
+const transition = await readFile(path.resolve(process.cwd(), "supabase/migrations/202609090002_implement_customer_taxonomy_transition.sql"), "utf8");
+const migration = `${historical}\n${transition}`;
 const appSource = await readFile(path.resolve(process.cwd(), "src/app.ts"), "utf8");
 const uiSource = await readFile(path.resolve(process.cwd(), "public/app.js"), "utf8");
 const pass = (value: boolean) => value ? "PASS" : "FAIL";
@@ -15,17 +17,22 @@ const checks: Record<string, boolean> = {
   NO_AUTO_ASSIGNMENT: !migration.split("create or replace function public.assign_system_admin")[0]?.includes("insert into public.system_authority_assignments"),
   PROTECTED_API: appSource.includes("/api/admin/users") && appSource.includes("adminApiKey"),
   DYNAMIC_UI_CATALOGS: uiSource.includes("/api/admin/users/catalogs") && !uiSource.includes("Sales Grosir"),
+  CAPABILITY_CANDIDATES: transition.includes("public.is_system_authority_candidate")
+    && transition.includes("divisions.grants_system_authority"),
+  NORMALIZED_DISPLAY_PRECEDENCE: transition.includes("coalesce(division_row.name, public.legacy_division_value")
+    && transition.includes("coalesce(role_row.name, public.legacy_role_value"),
 };
 
 const config = loadConfig();
 const client = createSupabaseClient(config);
-const [{ count: total }, { count: active }, { count: pending }, { count: assignedInactive }, { count: itUsers }, { count: candidates }, { count: systemAdmins }] = await Promise.all([
+const [{ count: total }, { count: active }, { count: pending }, { count: assignedInactive }, { count: capabilityUsers }, { count: candidates }, { count: systemAdmins }] = await Promise.all([
   client.from("users").select("id", { count: "exact", head: true }),
   client.from("users").select("id", { count: "exact", head: true }).eq("active", true),
   client.from("users").select("id", { count: "exact", head: true }).eq("active", false).or("division_id.is.null,role_id.is.null"),
   client.from("users").select("id", { count: "exact", head: true }).eq("active", false).not("division_id", "is", null).not("role_id", "is", null),
-  client.from("users").select("id,divisions!inner(code)", { count: "exact", head: true }).eq("divisions.code", "IT"),
-  client.from("users").select("id,divisions!inner(code)", { count: "exact", head: true }).eq("active", true).eq("divisions.code", "IT"),
+  client.from("users").select("id,divisions!inner(grants_system_authority)", { count: "exact", head: true }).eq("divisions.grants_system_authority", true),
+  client.from("users").select("id,divisions!inner(active,grants_system_authority)", { count: "exact", head: true })
+    .eq("active", true).eq("divisions.active", true).eq("divisions.grants_system_authority", true),
   client.from("system_authority_assignments").select("id", { count: "exact", head: true }).eq("authority_code", "SYSTEM_ADMIN").is("revoked_at", null),
 ]);
 
@@ -46,15 +53,15 @@ try {
   await app.close();
 }
 
-console.log("Sotoayam IT User Management\n");
+console.log("Sotoayam User Management\n");
 for (const [name, value] of Object.entries(checks)) console.log(`${name} = ${pass(value)}`);
 console.log(`PENDING_USERS = ${pending ?? 0}`);
 console.log(`ACTIVE_USERS = ${active ?? 0}`);
 console.log(`INACTIVE_USERS = ${assignedInactive ?? 0}`);
-console.log(`IT_DIVISION_USERS = ${itUsers ?? 0}`);
+console.log(`AUTHORITY_CAPABLE_DIVISION_USERS = ${capabilityUsers ?? 0}`);
 console.log(`SYSTEM_ADMIN_CANDIDATE_COUNT = ${candidates ?? 0}`);
 console.log(`ACTIVE_SYSTEM_ADMINS = ${systemAdmins ?? 0}`);
 console.log(`TOTAL_USERS = ${total ?? 0}`);
-console.log(`SYSTEM_ADMIN_BOOTSTRAP = ${(candidates ?? 0) === 0 && (systemAdmins ?? 0) === 0 ? "WAITING_FOR_IT_USER_ASSIGNMENT" : "READY"}`);
+console.log(`SYSTEM_ADMIN_BOOTSTRAP = ${(candidates ?? 0) === 0 && (systemAdmins ?? 0) === 0 ? "WAITING_FOR_AUTHORITY_CAPABLE_USER" : "READY"}`);
 console.log(`\nRESULT = ${pass(Object.values(checks).every(Boolean))}`);
 if (!Object.values(checks).every(Boolean)) process.exitCode = 1;

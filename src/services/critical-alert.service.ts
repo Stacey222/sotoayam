@@ -13,21 +13,21 @@ export class CriticalAlertService {
     private readonly now: () => Date = () => new Date(),
   ) {}
   async list(actor: TaskActor, severity?: PersistedAlertSeverity) {
-    this.assertOwner(actor);
+    this.assertPermission(actor, "alert.view_critical");
     return (await this.alerts.listActive(severity)).map((item) => this.safe(item));
   }
   async get(actor: TaskActor, id: number) {
-    this.assertOwner(actor);
+    this.assertPermission(actor, "alert.view_critical");
     const alert = await this.alerts.findById(id);
     if (!alert) throw new AppError(404, "CRITICAL_ALERT_NOT_FOUND", "Critical alert not found");
     return this.safe(alert);
   }
   async acknowledge(actor: TaskActor, id: number) {
-    this.assertOwner(actor);
+    this.assertPermission(actor, "alert.acknowledge");
     return this.safe(await this.alerts.acknowledge(id, actor.id));
   }
   async automationStatus(actor: TaskActor): Promise<AutomationStatus> {
-    this.assertOwner(actor);
+    this.assertPermission(actor, "automation_status.view_business");
     const [scheduler, evaluator, failed, integrations] = await Promise.all([
       this.signals.reminderSchedulerState(), this.alerts.evaluatorState(), this.signals.failedDeliveryCount(), this.signals.activeIntegrationCount(),
     ]);
@@ -40,7 +40,13 @@ export class CriticalAlertService {
       reminderScheduler: reminder, criticalAlertEvaluator: critical, notificationDelivery: failed > 0 ? "DEGRADED" : "HEALTHY", activeIntegrations: integrations };
   }
   assertOwner(actor: TaskActor): void {
-    if (!actor.active || actor.divisionId === null || actor.roleId === null || actor.roleCode !== "OWNER") throw new AppError(403, "OWNER_ALERT_FORBIDDEN", "Active normalized OWNER authority is required");
+    if (!actor.active || actor.divisionId === null || actor.roleId === null
+      || !actor.permissions.has("alert.view_critical")) throw new AppError(403, "OWNER_ALERT_FORBIDDEN", "Required alert permission is unavailable");
+  }
+  private assertPermission(actor: TaskActor, permission: string): void {
+    if (!actor.active || actor.divisionId === null || actor.roleId === null || !actor.permissions.has(permission)) {
+      throw new AppError(403, "OWNER_ALERT_FORBIDDEN", "Required alert permission is unavailable");
+    }
   }
   private operationalState(status: string, completedAt: string | null, staleMinutes: number): "HEALTHY" | "DEGRADED" | "UNHEALTHY" {
     if (status === "FAILED") return "UNHEALTHY";

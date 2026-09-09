@@ -35,12 +35,20 @@ New admin route groups must use `defineAdminRoutes` and be added to the security
 
 External routed deliveries reuse the existing claim, retry/backoff, permanent-failure, and stale-recovery machinery. Missing `event_id` remains legacy-compatible and explicitly non-idempotent. Implementation-time reconciliation was complete: 5 normalized users, 5 Telegram-linked users, 5 mapped, 0 unmapped.
 
-## First Administrator Bootstrap State
-P0-11 and P0-12 are complete. `npm run setup` is the supported first-administrator bootstrap command and executes compiled `dist/src/cli/setup.js` after production dependency pruning.
+## First Administrator Bootstrap and Taxonomy State
+P0-11 through P0-14 are implemented. `npm run setup` is the supported first-administrator bootstrap command and executes compiled `dist/src/cli/setup.js` after production dependency pruning.
 
 Bootstrap eligibility is enforced by database state under the existing system-authority advisory lock: no permanent bootstrap marker, no historical authority assignment (including revoked rows), and no administrator credential. The transaction atomically creates one active normalized user, one scrypt credential, one `SYSTEM_ADMIN` assignment, the singleton marker, and one sanitized audit record. It cannot re-arm automatically and is not a recovery path.
 
-The operator supplies display name, normalized email, and password only. Telegram is not required. The first administrator receives the temporary compatibility taxonomy `IT` / `ADMIN` and never receives `OWNER`; P0-13/P0-14 own removal of that bridge. The Telegram-less bootstrap user remains ineligible for `update_user_access` until that compatibility work. HTTP administrator access still uses centralized `ADMIN_API_KEY` authorization until P1-01 implements sessions.
+Setup now requires an explicit, mutually exclusive `--fresh-install` or `--keep-existing-taxonomy` declaration (or the equivalent interactive choice), prints a read-only preview before collecting the password, and requires a division choice. Fresh setup accepts a customer-owned division code/name and retires the exact unreferenced origin seed only inside the locked provisioning transaction; any operational evidence vetoes retirement. Legacy setup binds the first administrator to an existing active division. Telegram is not required, the role remains `ADMIN`, and the administrator never receives `OWNER`.
+
+`installation_provenance` is an append-only singleton. `FRESH` disables the historical report alias; absent provenance is treated as `UNKNOWN` and therefore legacy-compatible. Divisions and task categories are data-backed, arbitrary active task categories validate across canonical write paths, and generic task-status reporting accepts division/category/status/time-window filters. The three baseline roles remain system-managed; only display-name rename is exposed. Custom roles and permission-grant editing remain out of scope.
+
+Provenance is read once during application startup. A fresh instance necessarily starts before setup with absent/`UNKNOWN` provenance and may register the benign legacy report alias for that first process lifetime; restart the service after successful fresh setup so `FRESH` route registration takes effect. Authorization and provisioning safety do not depend on that alias.
+
+`SYSTEM_ADMIN` eligibility no longer depends on the literal `IT` taxonomy. It requires an active authority assignment, active user/division, and the division's guarded `grants_system_authority` capability. Direct service-role capability writes and removal of the last post-bootstrap capable division are rejected. HTTP administrator access still uses centralized `ADMIN_API_KEY` authorization until P1-01 implements sessions.
+
+P0-14 adds exactly one forward migration, `202609090002_implement_customer_taxonomy_transition.sql`, bringing the repository total to 15. All 14 historical migration hashes remain unchanged. Validation used only disposable local PostgreSQL: 17 database tests passed explicitly; the full suite with one worker passed 602 tests and skipped those same 17 opt-in database tests. The default parallel suite hit only pre-existing 5-second Windows shell-startup timeouts in two deployment test files; both files pass in isolation. Typecheck, build, contract tests, secret scan, and diff checks passed. No live Supabase project or VPS was contacted.
 
 Operational incident during P0-12 validation: a local mock intended for `npm run migrate` was shadowed by npm's real local Supabase CLI. The existing linked project applied `202609080001_create_notification_event_intake.sql` and `202609090001_create_first_admin_bootstrap.sql`. No setup/bootstrap RPC was called and no VPS deployment occurred. Do not rename or rewrite those applied migration files; reconcile the linked migration registry before any future migration operation.
 
@@ -59,21 +67,21 @@ Fresh-customer installation defaults are separated from the historical staged cu
 
 Operational worker flags remain explicit customer choices: safe preparation values do not silently enable Telegram polling, reminders, or critical-alert evaluation, and fresh installation no longer forces the original all-disabled cutover state. The fresh host and business-timezone fallbacks are `127.0.0.1` and `UTC`; existing installations retain compatibility through explicit environment values.
 
-Historical operational assumptions are not universal product requirements. Remaining customer taxonomy hardcoding is deferred to P0-13/P0-14, and broader private operational documentation cleanup remains P0-15.
+Historical operational assumptions are not universal product requirements. P0-14 moved customer taxonomy to data while retaining provenance-gated compatibility; broader private operational documentation cleanup remains P0-15.
 
 ## Next Agent
-Recommended: Claude Code.
+Recommended: Antigravity.
 
 Next task:
-P0-13 design the transition of divisions, roles, and customer taxonomy from source to data.
+Perform the independent adversarial review of the P0-14 implementation and its migration/setup safety gates.
 
 Reason:
-P0-11/P0-12 are complete. The temporary `IT` / `ADMIN` bootstrap bridge is the next installation blocker in roadmap order.
+P0-14 implementation, focused tests, full validation, and disposable PostgreSQL rehearsals are green. The roadmap explicitly requires adversarial review before proceeding to P0-15.
 
 ## Pending Higher-Level Work
-After P0-12:
-- taxonomy-as-data;
-- install documentation.
+After P0-14 review:
+- remove private/founder operational state from product documentation (P0-15);
+- write and validate the clean installation guide (P0-16).
 
 ## Agent Handoff Format
 Every agent completing a task should return:

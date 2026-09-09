@@ -7,7 +7,7 @@ import type { ImportBatchRepository, TaskSourceIntegration } from "../repositori
 import type { TaskDirectoryRepository } from "../repositories/task-users.repository.js";
 import { normalizeBusinessUserCode } from "../identity/business-user-code.js";
 import type { TaskActor, TaskCategory, TaskPriority } from "../tasks/types.js";
-import { TASK_CATEGORIES, TASK_PRIORITIES } from "../tasks/types.js";
+import { TASK_PRIORITIES } from "../tasks/types.js";
 import type { TaskService } from "./task.service.js";
 
 export class TaskIngestionService {
@@ -114,7 +114,7 @@ export class TaskIngestionService {
     if (!TASK_PRIORITIES.includes(priority as TaskPriority)) throw new AppError(400, "INVALID_PRIORITY", "Task priority is invalid");
     if (row.deadline && !isStrictDate(row.deadline)) throw new AppError(400, "INVALID_DEADLINE", "Deadline must use YYYY-MM-DD");
     const taskCategory = row.task_category ? row.task_category.toUpperCase() : null;
-    if (taskCategory && !TASK_CATEGORIES.includes(taskCategory as never)) throw new AppError(400, "TASK_INVALID_CATEGORY", "Task category is not supported");
+    if (taskCategory && !/^[A-Z][A-Z0-9_]{0,49}$/.test(taskCategory)) throw new AppError(400, "TASK_INVALID_CATEGORY", "Task category is not supported");
     return {
       title: row.title, ownerDivision: row.owner_division, description: row.description || null,
       priority: priority as TaskPriority, assignee: row.assignee || null,

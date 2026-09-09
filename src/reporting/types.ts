@@ -4,6 +4,12 @@ export const REPORT_WINDOWS = ["TODAY", "LAST_7_DAYS", "LAST_30_DAYS"] as const;
 export type ReportWindow = typeof REPORT_WINDOWS[number];
 export type ReportDrillDown = "BLOCKED" | "OVERDUE" | "UPCOMING";
 
+export interface TaskStatusReportFilters {
+  division?: string;
+  taskCategory?: string;
+  statuses?: TaskStatus[];
+}
+
 export interface ReportTaskItem {
   id: number;
   title: string;
@@ -30,6 +36,13 @@ export interface AffiliateTaskStatusReport {
   completionRate: number | null;
   excludedCancelled: number;
   excludedDraft: number;
+}
+
+export interface TaskStatusReport extends Omit<AffiliateTaskStatusReport, "definition" | "division" | "taskCategory"> {
+  definition: "TASK_STATUS";
+  division: string | null;
+  taskCategory: string | null;
+  statuses: TaskStatus[] | null;
 }
 
 export interface ReportDrillDownResult {

@@ -2,11 +2,16 @@ import type { Division, Role, SystemAuthorityAssignment } from "../governance/ty
 
 export type UserManagementStatus = "pending" | "active" | "inactive";
 
+export interface ManagedDivision extends Division {
+  grants_system_authority?: boolean;
+  provisioning_source?: "CUSTOMER" | "PRESET" | "SETUP" | null;
+}
+
 export interface ManagedUser {
   id: number;
   display_name: string | null;
   business_user_code: string | null;
-  division: Division | null;
+  division: ManagedDivision | null;
   role: Role | null;
   active: boolean;
   telegram_connected: boolean;

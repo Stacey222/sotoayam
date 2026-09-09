@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sotoayam.local/schemas/taxonomy-preset-1.0.0.json",
+  "title": "Sotoayam Taxonomy Preset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "preset_code", "name", "divisions", "task_categories", "collaboration_rules"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "preset_code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,99}$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "divisions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/catalogEntry" },
+      "uniqueItems": true
+    },
+    "task_categories": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/categoryEntry" },
+      "uniqueItems": true
+    },
+    "collaboration_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_division", "target_division", "task_scope", "allowed", "requires_approval"],
+        "properties": {
+          "source_division": { "$ref": "#/$defs/divisionCode" },
+          "target_division": { "$ref": "#/$defs/divisionCode" },
+          "task_scope": { "const": "ALL" },
+          "allowed": { "type": "boolean" },
+          "requires_approval": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "divisionCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,99}$" },
+    "categoryCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,49}$" },
+    "catalogEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "name"],
+      "properties": {
+        "code": { "$ref": "#/$defs/divisionCode" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 }
+      }
+    },
+    "categoryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "name"],
+      "properties": {
+        "code": { "$ref": "#/$defs/categoryCode" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 }
+      }
+    }
+  }
+}

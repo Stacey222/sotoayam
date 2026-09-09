@@ -43,6 +43,8 @@ function main(): void {
     { name: "SOURCE_CONTROL", passed: sourceControlReady() },
     { name: "TYPECHECK", passed: run(npm, ["run", "typecheck"]) },
     { name: "LEGACY_CONTRACT", passed: run(npm, ["run", "test:contract"]) },
+    { name: "TAXONOMY_TRANSITION_STATIC", passed: run(npm, ["exec", "--", "vitest", "run",
+      "tests/migration/historical-migration-integrity.test.ts", "tests/taxonomy/p0-14-compatibility.test.ts"]) },
     { name: "SCHEMA_COMPATIBILITY", passed: run(npm, ["run", "check:schema"]) },
     { name: "GOVERNANCE_FOUNDATION", passed: run(npm, ["run", "check:governance-schema"]) },
     { name: "IDENTITY_FOUNDATION", passed: run(npm, ["run", "check:identity-schema"]) },

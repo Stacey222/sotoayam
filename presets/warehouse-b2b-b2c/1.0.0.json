@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "preset_code": "WAREHOUSE_B2B_B2C",
+  "name": "Warehouse B2B and B2C Example",
+  "divisions": [
+    { "code": "WAREHOUSE", "name": "Warehouse" },
+    { "code": "SALES_B2B", "name": "Sales B2B" },
+    { "code": "SALES_B2C", "name": "Sales B2C" }
+  ],
+  "task_categories": [
+    { "code": "FULFILLMENT", "name": "Fulfillment" },
+    { "code": "SALES_ORDER", "name": "Sales Order" }
+  ],
+  "collaboration_rules": [
+    { "source_division": "SALES_B2B", "target_division": "WAREHOUSE", "task_scope": "ALL", "allowed": true, "requires_approval": false },
+    { "source_division": "SALES_B2C", "target_division": "WAREHOUSE", "task_scope": "ALL", "allowed": true, "requires_approval": false }
+  ]
+}

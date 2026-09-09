@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { SystemAuthorityAssignment } from "../governance/types.js";
+import type { AdminDivision, SystemAuthorityAssignment } from "../governance/types.js";
 import { governanceDatabaseError } from "./governance-database-error.js";
 
 export interface SystemAuthorityRepository {
@@ -7,6 +7,7 @@ export interface SystemAuthorityRepository {
   countActive(): Promise<number>;
   assign(userId: number, reason: string): Promise<SystemAuthorityAssignment>;
   revoke(userId: number, reason: string): Promise<SystemAuthorityAssignment>;
+  setDivisionCapability?(divisionId: number, enabled: boolean, actorUserId: number): Promise<AdminDivision>;
 }
 
 export class SupabaseSystemAuthorityRepository implements SystemAuthorityRepository {
@@ -45,5 +46,13 @@ export class SupabaseSystemAuthorityRepository implements SystemAuthorityReposit
     }).single();
     if (error) throw governanceDatabaseError("Unable to revoke SYSTEM_ADMIN", error);
     return data as SystemAuthorityAssignment;
+  }
+
+  async setDivisionCapability(divisionId: number, enabled: boolean, actorUserId: number): Promise<AdminDivision> {
+    const { data, error } = await this.client.rpc("set_division_system_authority", {
+      p_division_id: divisionId, p_enabled: enabled, p_actor_user_id: actorUserId, p_source: "system_authority_api",
+    }).single();
+    if (error) throw governanceDatabaseError("Unable to update division authority capability", error);
+    return data as AdminDivision;
   }
 }

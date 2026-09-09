@@ -13,6 +13,12 @@ import type { TaskRelationshipsRepository } from "../../src/repositories/task-re
 import type { TaskUsersRepository } from "../../src/repositories/task-users.repository.js";
 import type { NewTaskRecord, TasksRepository, TaskUpdateRecord } from "../../src/repositories/tasks.repository.js";
 import type { SystemAuthorityRepository } from "../../src/repositories/system-authority.repository.js";
+
+const legacyCategoryValidator = { validate: async (value: string | null | undefined) => {
+  if (value === undefined || value === null) return null;
+  if (value === "AFFILIATE") return value;
+  throw new AppError(400, "TASK_INVALID_CATEGORY", "Task category is not supported");
+} };
 import type { UserManagementRepository } from "../../src/repositories/user-management.repository.js";
 import { CollaborationRuleManagementService } from "../../src/services/collaboration-rule-management.service.js";
 import { DivisionCollaborationService } from "../../src/services/division-collaboration.service.js";
@@ -25,7 +31,7 @@ import type { AccessUpdate, ManagedUser, UserManagementStatus } from "../../src/
 const migrationPath = path.resolve(process.cwd(), "supabase/migrations/202608290005_create_division_collaboration_rules.sql");
 const now = "2026-08-29T00:00:00.000Z";
 const division = (id: number, code: string): Division => ({ id, code, name: code, active: true, created_at: now, updated_at: now });
-const source = division(10, "ONPAGE_B2C"); const target = division(20, "CONTENT_CREATOR"); const other = division(30, "SALES_GROSIR"); const itDivision = division(40, "IT");
+const source = division(10, "ONPAGE_B2C"); const target = division(20, "CONTENT_CREATOR"); const other = division(30, "SALES_GROSIR"); const itDivision = { ...division(40, "IT"), grants_system_authority: true };
 const role = (id: number, code: string): Role => ({ id, code, name: code, active: true, created_at: now, updated_at: now });
 const roles = [role(1, "STAFF"), role(2, "ADMIN"), role(3, "OWNER")];
 const perms = (...values: string[]) => new Set(values);
@@ -65,7 +71,7 @@ class Activities implements TaskActivitiesRepository {
   async findForTask(id: number) { return this.rows.filter((r) => r.task_id === id); }
 }
 class TaskUsers implements TaskUsersRepository {
-  rows: TaskUser[] = [actor(), actor({ id: 2, divisionId: 20 }), actor({ id: 3, divisionId: 20, active: false }), actor({ id: 4, divisionId: null, roleId: null }), actor({ id: 9, divisionId: 40, roleId: 2, roleCode: "ADMIN" })];
+  rows: TaskUser[] = [actor(), actor({ id: 2, divisionId: 20 }), actor({ id: 3, divisionId: 20, active: false }), actor({ id: 4, divisionId: null, roleId: null }), actor({ id: 9, divisionId: 40, roleId: 2, roleCode: "ADMIN", divisionGrantsSystemAuthority: true })];
   trustedId = 9;
   async findById(id: number) { return this.rows.find((r) => r.id === id) ?? null; }
   async findTrustedAdminActorUser() { return this.rows.find((r) => r.id === this.trustedId)!; }
@@ -77,7 +83,7 @@ const relationships: TaskRelationshipsRepository = { findExact: vi.fn().mockReso
 function taskHarness(ruleOverrides?: Partial<DivisionCollaborationRule>) {
   const rules = new Rules(); if (ruleOverrides) rules.seed(ruleOverrides);
   const tasks = new Tasks(); const users = new TaskUsers(); const activities = new Activities(); const audit = new Audit();
-  const service = new TaskService(tasks, users, activities, relationships, audit, new TaskAuthorizationService(), () => new Date(now), new DivisionCollaborationService(rules));
+  const service = new TaskService(tasks, users, activities, relationships, audit, new TaskAuthorizationService(), () => new Date(now), new DivisionCollaborationService(rules), legacyCategoryValidator);
   return { service, rules, tasks, users, activities, audit };
 }
 
@@ -88,11 +94,11 @@ class ManagedUsers implements UserManagementRepository {
   async updateBusinessUserCode() { return this.value; }
 }
 class Catalog<T extends Division | Role> { constructor(readonly rows: T[]) {} async findAll(options: { activeOnly?: boolean } = {}) { return options.activeOnly ? this.rows.filter((r) => r.active) : this.rows; } async findByCode(code: string) { return this.rows.find((r) => r.code === code) ?? null; } }
-function managementHarness(options: { authority?: boolean; normalized?: Partial<ManagedUser> } = {}) {
+function managementHarness(options: { authority?: boolean; normalized?: Partial<ManagedUser>; divisionRows?: Division[] } = {}) {
   const rules = new Rules(); const taskUsers = new TaskUsers(); const managed = new ManagedUsers(); managed.value = { ...managed.value, ...options.normalized };
   const authority: SystemAuthorityAssignment = { id: 1, user_id: 9, authority_code: "SYSTEM_ADMIN", granted_at: now, granted_by_user_id: null, revoked_at: null, revoked_by_user_id: null, reason: null, created_at: now, updated_at: now };
   const authorities: SystemAuthorityRepository = { findActiveForUser: vi.fn().mockResolvedValue(options.authority === false ? null : authority), countActive: vi.fn(), assign: vi.fn(), revoke: vi.fn() };
-  const audit = new Audit(); const divisionsRepo = new Catalog([source, target, other, itDivision]) as unknown as DivisionsRepository;
+  const audit = new Audit(); const divisionsRepo = new Catalog(options.divisionRows ?? [source, target, other, itDivision]) as unknown as DivisionsRepository;
   const users = new UserManagementService(managed, divisionsRepo, new Catalog(roles) as RolesRepository);
   return { service: new CollaborationRuleManagementService(rules, divisionsRepo, taskUsers, users, authorities, audit), rules, audit, managed };
 }
@@ -126,4 +132,16 @@ describe("Slice 4 Cross-Divisi collaboration", () => {
   it("28. duplicate active rule rejected", async () => { const h = managementHarness(); h.rules.seed(); await expect(h.service.create({ sourceDivisionId: 10, targetDivisionId: 20, taskScope: "ALL", allowed: true, requiresApproval: false })).rejects.toMatchObject({ code: "COLLABORATION_DUPLICATE_RULE" }); });
   it("29. source=target rejected", async () => { await expect(managementHarness().service.create({ sourceDivisionId: 10, targetDivisionId: 10, taskScope: "ALL", allowed: true, requiresApproval: false })).rejects.toMatchObject({ code: "COLLABORATION_INVALID_TARGET_DIVISION" }); });
   it("30. migration enables RLS and creates no public policy", async () => { const sql = await readFile(migrationPath, "utf8"); expect(sql).toContain("enable row level security"); expect(sql).not.toMatch(/create\s+policy/i); });
+  it("31. rejects creation against an inactive endpoint", async () => {
+    const inactiveTarget = { ...target, active: false };
+    await expect(managementHarness({ divisionRows: [source, inactiveTarget, other, itDivision] }).service.create({
+      sourceDivisionId: 10, targetDivisionId: 20, taskScope: "ALL", allowed: true, requiresApproval: false,
+    })).rejects.toMatchObject({ code: "COLLABORATION_INVALID_TARGET_DIVISION" });
+  });
+  it("32. checker is structural and runtime lookup denies inactive endpoints", async () => {
+    const checker = await readFile(path.resolve("scripts/check-collaboration-schema.ts"), "utf8");
+    const repository = await readFile(path.resolve("src/repositories/division-collaboration.repository.ts"), "utf8");
+    expect(checker).not.toMatch(/LIVE_CONFIRMED_SEED|NO_SPECULATIVE_RULES|rows\.length\s*===\s*1/);
+    expect(repository).toContain(".eq(\"source_division.active\", true).eq(\"target_division.active\", true)");
+  });
 });

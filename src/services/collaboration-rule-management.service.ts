@@ -6,6 +6,7 @@ import type { DivisionCollaborationRepository } from "../repositories/division-c
 import type { SystemAuthorityRepository } from "../repositories/system-authority.repository.js";
 import type { TaskUsersRepository } from "../repositories/task-users.repository.js";
 import type { UserManagementService } from "./user-management.service.js";
+import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
 
 export interface CollaborationRuleReader { list(): Promise<CollaborationRuleView[]> }
 
@@ -48,6 +49,13 @@ export class CollaborationRuleManagementService implements CollaborationRuleRead
     const allowed = input.allowed ?? current.allowed;
     const requiresApproval = input.requiresApproval ?? current.requires_approval;
     if (!allowed && requiresApproval) throw new AppError(400, "COLLABORATION_NOT_ALLOWED", "A denied rule cannot require approval");
+    if (input.active === true && !current.active) {
+      await this.validateRelation(current.source_division_id, current.target_division_id);
+      const duplicate = await this.rules.findActiveRule(current.source_division_id, current.target_division_id, current.task_scope);
+      if (duplicate && duplicate.id !== current.id) {
+        throw new AppError(409, "COLLABORATION_DUPLICATE_RULE", "An active collaboration rule already exists");
+      }
+    }
     const updated = await this.rules.updateRule(id, input);
     await this.audit.append({
       actor_type: "USER", actor_user_id: actorId,
@@ -63,11 +71,16 @@ export class CollaborationRuleManagementService implements CollaborationRuleRead
   private async authorizedActor(): Promise<number> {
     const actor = await this.taskUsers.findTrustedAdminActorUser();
     const normalized = await this.users.get(actor.id);
-    if (!normalized.active || normalized.division?.code !== "IT") {
-      throw new AppError(403, "COLLABORATION_GOVERNANCE_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
+    if (!hasSystemAdminCapability({
+      active: normalized.active,
+      divisionId: normalized.division?.id ?? null,
+      roleId: normalized.role?.id ?? null,
+      divisionGrantsSystemAuthority: normalized.division?.grants_system_authority,
+    })) {
+      throw new AppError(403, "COLLABORATION_GOVERNANCE_FORBIDDEN", "Active SYSTEM_ADMIN authority in an authority-capable division is required");
     }
     if (!await this.authorities.findActiveForUser(normalized.id)) {
-      throw new AppError(403, "COLLABORATION_GOVERNANCE_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
+      throw new AppError(403, "COLLABORATION_GOVERNANCE_FORBIDDEN", "Active SYSTEM_ADMIN authority in an authority-capable division is required");
     }
     return normalized.id;
   }

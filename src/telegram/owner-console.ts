@@ -17,7 +17,12 @@ const button = (text: string, callback_data: string): TelegramInlineButton => ({
 const unavailable = (): TelegramConsoleResponse => ({ text: "Perintah tidak tersedia." });
 
 export class TelegramOwnerConsoleService implements TelegramOwnerConsole {
-  constructor(private readonly actors: TelegramTaskActorResolver, private readonly reports: ReportingService, private readonly alerts?: CriticalAlertService) {}
+  constructor(
+    private readonly actors: TelegramTaskActorResolver,
+    private readonly reports: ReportingService,
+    private readonly alerts?: CriticalAlertService,
+    private readonly legacyAffiliateReportEnabled = true,
+  ) {}
 
   async open(externalTelegramId: number): Promise<TelegramConsoleResponse> {
     const actor = await this.owner(externalTelegramId);
@@ -28,6 +33,7 @@ export class TelegramOwnerConsoleService implements TelegramOwnerConsole {
     const actor = await this.owner(externalTelegramId);
     if (!actor || data.length > 64) return unavailable();
     if (data === "oc:m") return this.mainMenu();
+    if (!this.legacyAffiliateReportEnabled && /^(?:oc:r|oc:d|oc:w|oc:v:|oc:l:)/.test(data)) return unavailable();
     if (data === "oc:r") return this.divisionMenu();
     if (data === "oc:d") return this.reportMenu();
     if (data === "oc:w") return this.windowMenu();
@@ -60,11 +66,13 @@ export class TelegramOwnerConsoleService implements TelegramOwnerConsole {
   }
 
   private mainMenu(): TelegramConsoleResponse {
-    return { text: "Sotoayam Owner Console", inlineKeyboard: [
-      [button("Business Report", "oc:r")],
+    const inlineKeyboard: TelegramInlineButton[][] = [];
+    if (this.legacyAffiliateReportEnabled) inlineKeyboard.push([button("Business Report", "oc:r")]);
+    inlineKeyboard.push(
       [button("Critical Alerts", "oc:c"), button("Approval", "oc:a")],
       [button("Automation Status", "oc:s")],
-    ] };
+    );
+    return { text: "Sotoayam Owner Console", inlineKeyboard };
   }
   private divisionMenu(): TelegramConsoleResponse {
     return { text: "Business Report\n\nPilih Divisi:", inlineKeyboard: [[button("CONTENT_CREATOR", "oc:d")], [button("Back", "oc:m")]] };

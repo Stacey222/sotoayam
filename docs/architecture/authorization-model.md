@@ -11,7 +11,7 @@ active authenticated user
 AND explicit permission from the user's one active business Role
 AND resource scope (own / home Divisi / cross-Divisi)
 AND active collaboration rule when creating cross-Divisi work
-AND SYSTEM_ADMIN authority only for protected governance operations
+AND SYSTEM_ADMIN authority in an active authority-capable Divisi only for protected governance operations
 ```
 
 `OWNER`, `ADMIN`, and `SYSTEM_ADMIN` are not aliases for “allow everything.” Service-role access to PostgreSQL also does not authorize the caller; backend services must enforce these rules before querying or mutating data.
@@ -61,7 +61,7 @@ Codes are explicit capabilities. Creating a role with no role-permission rows gr
 
 Legend: **Allow** means the listed permission and scope conditions must pass; **No** means the role alone cannot perform it; **Rule** adds collaboration policy; **Authority** requires active `SYSTEM_ADMIN` assignment.
 
-| Action | STAFF | ADMIN | OWNER | IT + SYSTEM_ADMIN |
+| Action | STAFF | ADMIN | OWNER | Authority-capable Divisi + SYSTEM_ADMIN |
 |---|---|---|---|---|
 | View own assigned/created tasks | Allow: `TASK_VIEW_OWN` | Allow | Allow if involved, otherwise role permission | Allow if involved; authority alone adds nothing |
 | Create same-Divisi task | Allow: `TASK_CREATE`, home scope | Allow: home scope | Allow only with explicit task permission | Allow only with explicit task permission |
@@ -72,14 +72,14 @@ Legend: **Allow** means the listed permission and scope conditions must pass; **
 | View requesting-Divisi progress | Allow: `TASK_VIEW_REQUESTED`, requester scope | Allow: requester home Divisi | Allow with cross-Divisi permission | Only with business permission |
 | View another Divisi business report | No | No | Allow: `REPORT_VIEW_OWNER`/cross-Divisi | No by technical authority alone |
 | View Owner reports | No | No unless separately granted | Allow: registered report capability | No by technical authority alone |
-| View technical monitoring | No | No | Business-level automation status only | Allow: IT home Divisi + `TECH_MONITOR_VIEW` |
-| Manage users | No | No | No | Allow: IT + `USER_MANAGE` |
-| Manage Divisi | No | No | No | Allow: IT + `DIVISION_MANAGE` |
-| Manage roles | No | No | No | Allow: IT + `ROLE_MANAGE`; permission grants require stronger check |
-| Manage role permissions | No | No | No | Allow: IT + `PERMISSION_MANAGE` + Authority |
-| Manage notification routing | No | No | No | Allow: IT + `ROUTING_MANAGE` |
-| Manage alert thresholds | No | No | No | Allow: IT + `THRESHOLD_MANAGE` |
-| Manage collaboration rules | No | No | No | Allow: IT + `COLLABORATION_RULE_MANAGE` |
+| View technical monitoring | No | No | Business-level automation status only | Allow with `TECH_MONITOR_VIEW`; authority alone adds no report scope |
+| Manage users | No | No | No | Allow: capability + Authority + `USER_MANAGE` |
+| Manage Divisi | No | No | No | Allow: capability + Authority + `DIVISION_MANAGE` |
+| Manage roles | No | No | No | Allow: capability + Authority + `ROLE_MANAGE`; permission grants require stronger check |
+| Manage role permissions | No | No | No | Allow: capability + Authority + `PERMISSION_MANAGE` |
+| Manage notification routing | No | No | No | Allow: capability + Authority + `ROUTING_MANAGE` |
+| Manage alert thresholds | No | No | No | Allow: capability + Authority + `THRESHOLD_MANAGE` |
+| Manage collaboration rules | No | No | No | Allow: capability + Authority + `COLLABORATION_RULE_MANAGE` |
 | Grant/revoke `SYSTEM_ADMIN` | No | No | No | Authority + `SYSTEM_AUTHORITY_MANAGE`; mandatory audit and continuity invariant |
 
 ## Role baselines
@@ -89,8 +89,8 @@ These are seed proposals; each becomes explicit `role_permissions` rows and is r
 - **STAFF**: own-task view, task create, assigned-task update/complete, notes/evidence, optionally import.
 - **ADMIN**: STAFF plus Divisi task/report visibility and scoped assignment. It receives no technical administration permissions.
 - **OWNER**: cross-Divisi registered business reports, material alert/approval capabilities, and business-level automation status. It does not inherit every route or technical log.
-- **IT role**: technical monitoring and explicitly granted configuration permissions. Being in Divisi IT alone grants nothing.
-- **SYSTEM_ADMIN assignment**: enables protected governance checks but no implicit business data scope.
+- **Authority-capable Divisi**: the guarded `divisions.grants_system_authority` capability makes active users in that customer-owned division eligible for `SYSTEM_ADMIN`; no literal Divisi code or name is authoritative.
+- **SYSTEM_ADMIN assignment**: enables protected governance checks only when the user and authority-capable division are active, and grants no implicit business data scope.
 
 ## Resource rules
 
@@ -104,14 +104,16 @@ These are seed proposals; each becomes explicit `role_permissions` rows and is r
 
 ### Reports
 
-- A report catalog entry declares its required permission and allowed scope.
+- A report catalog entry declares its required permission and allowed scope. The generic `TASK_STATUS` report accepts optional division, task-category, status, and time-window filters.
 - Authorization occurs before the report handler queries a source.
 - Output includes source and freshness; stale output is labeled.
-- OWNER accesses registered business reports, never arbitrary SQL or raw provider APIs.
+- OWNER accesses registered business reports through explicit `report.view_division` or `report.view_cross_division` permission, never arbitrary SQL or raw provider APIs.
+- The historical `AFFILIATE_TASK_STATUS` alias is compatibility-only: it is absent for explicitly fresh installations and retained for legacy or unknown provenance.
 
 ### Configuration
 
-- Only an active IT user with the action permission may change users, routing, thresholds, or collaboration rules.
+- Only an active SYSTEM_ADMIN in an active authority-capable Divisi, with the action permission where applicable, may change users, taxonomy, routing, thresholds, or collaboration rules.
+- Division capability changes run through owner-defined guarded database functions. Direct service-role writes and removal of the last post-bootstrap capable division are rejected.
 - Permission-model changes and system-authority transfer additionally require `SYSTEM_ADMIN`.
 - Every mutation records actor, target, before/after, source, and time.
 
@@ -120,7 +122,7 @@ These are seed proposals; each becomes explicit `role_permissions` rows and is r
 A service transaction should enforce:
 
 1. grant target is an active authenticated user;
-2. actor has active `SYSTEM_ADMIN` plus `SYSTEM_AUTHORITY_MANAGE`;
+2. actor has active `SYSTEM_ADMIN`, belongs to an active authority-capable Divisi, and has `SYSTEM_AUTHORITY_MANAGE`;
 3. revocation cannot leave zero active system administrators unless an explicit, separately controlled emergency procedure exists;
 4. grant and revocation are audited atomically;
 5. authority is never inferred from Telegram Chat ID, role name, or personal identity.

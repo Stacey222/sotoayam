@@ -10,11 +10,11 @@ import type { TaskSourceIntegration } from "../../src/repositories/task-ingestio
 import type { TaskUsersRepository } from "../../src/repositories/task-users.repository.js";
 import { IntegrationAdministrationService } from "../../src/services/integration-administration.service.js";
 import { UserManagementService } from "../../src/services/user-management.service.js";
-import type { BusinessUserCodeUpdate, ManagedUser } from "../../src/user-management/types.js";
+import type { BusinessUserCodeUpdate, ManagedDivision, ManagedUser } from "../../src/user-management/types.js";
 
 const migrationPath = path.resolve(process.cwd(), "supabase/migrations/202609020001_create_business_identity_and_integration_capabilities.sql");
 const now = "2026-09-02T00:00:00.000Z";
-const itDivision: Division = { id: 1, code: "IT", name: "IT", active: true, created_at: now, updated_at: now };
+const itDivision: ManagedDivision = { id: 1, code: "IT", name: "IT", active: true, grants_system_authority: true, created_at: now, updated_at: now };
 const role: Role = { id: 1, code: "ADMIN", name: "Admin", active: true, created_at: now, updated_at: now };
 const managed = (overrides: Partial<ManagedUser> = {}): ManagedUser => ({ id: 1, display_name: "Operator", business_user_code: null,
   division: itDivision, role, active: true, telegram_connected: true, created_at: now, updated_at: now, ...overrides });
@@ -58,11 +58,11 @@ class Integrations implements IntegrationAdministrationRepository {
   async revokeCapability(id: number) { const value = this.capabilities.find((item) => item.integration_id === id && item.revoked_at === null); if (!value) throw new AppError(404, "INTEGRATION_NOT_FOUND", "missing"); value.revoked_at = now; return value; }
 }
 
-function adminHarness(options: { division?: Division; authority?: boolean; active?: boolean } = {}) {
+function adminHarness(options: { division?: ManagedDivision; authority?: boolean; active?: boolean } = {}) {
   const integrations = new Integrations(); integrations.values.push({ id: 1, code: "SYNC", name: "Sync", source: "AUTOMATION", requesting_division_id: 1, active: false });
   const user = managed({ division: options.division ?? itDivision, active: options.active ?? true });
   const users = { get: async () => user } as unknown as UserManagementService;
-  const taskUsers = { findTrustedAdminActorUser: async () => ({ id: 1, displayName: "Operator", active: user.active, divisionId: user.division?.id ?? null, divisionCode: user.division?.code ?? null, roleId: 1, roleCode: "ADMIN" }), findById: vi.fn() } as unknown as TaskUsersRepository;
+  const taskUsers = { findTrustedAdminActorUser: async () => ({ id: 1, displayName: "Operator", active: user.active, divisionId: user.division?.id ?? null, divisionCode: user.division?.code ?? null, divisionGrantsSystemAuthority: user.division?.grants_system_authority, roleId: 1, roleCode: "ADMIN" }), findById: vi.fn() } as unknown as TaskUsersRepository;
   const assignment: SystemAuthorityAssignment = { id: 1, user_id: 1, authority_code: "SYSTEM_ADMIN", granted_at: now, granted_by_user_id: null, revoked_at: null, revoked_by_user_id: null, reason: null, created_at: now, updated_at: now };
   const authorities = { findActiveForUser: async () => options.authority === false ? null : assignment, countActive: vi.fn(), assign: vi.fn(), revoke: vi.fn() } as SystemAuthorityRepository;
   const divisions = { findAll: async () => [itDivision], findByCode: async (code: string) => code === "IT" ? itDivision : null, create: vi.fn() };
@@ -72,8 +72,8 @@ function adminHarness(options: { division?: Division; authority?: boolean; activ
 describe("Stage 2 integration capability governance", () => {
   it("allows active IT SYSTEM_ADMIN to manage only the supported capability and keeps duplicate grants idempotent", async () => { const h = adminHarness(); expect((await h.service.grantCapability(1, "TASK_CREATE")).capability_code).toBe("TASK_CREATE"); await h.service.grantCapability(1, "TASK_CREATE"); expect(h.integrations.capabilities).toHaveLength(1); await expect(h.service.grantCapability(1, "TASK_READ")).rejects.toMatchObject({ code: "INTEGRATION_CAPABILITY_UNSUPPORTED" }); });
   it("denies OWNER/business authority without SYSTEM_ADMIN", async () => { await expect(adminHarness({ authority: false }).service.list()).rejects.toMatchObject({ code: "INTEGRATION_ADMIN_FORBIDDEN" }); });
-  it("denies SYSTEM_ADMIN outside IT and inactive SYSTEM_ADMIN", async () => {
-    const management = { ...itDivision, id: 2, code: "MANAGEMENT" };
+  it("denies SYSTEM_ADMIN outside an authority-capable division and inactive SYSTEM_ADMIN", async () => {
+    const management = { ...itDivision, id: 2, code: "MANAGEMENT", grants_system_authority: false };
     await expect(adminHarness({ division: management }).service.list()).rejects.toMatchObject({ code: "INTEGRATION_ADMIN_FORBIDDEN" });
     await expect(adminHarness({ active: false }).service.list()).rejects.toMatchObject({ code: "INTEGRATION_ADMIN_FORBIDDEN" });
   });

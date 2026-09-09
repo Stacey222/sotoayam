@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import Fastify from "fastify";
+import { AppError } from "../../src/errors.js";
 import { parseTaskCsv, CSV_MAX_BYTES, CSV_MAX_ROWS } from "../../src/ingestion/csv-parser.js";
 import { csvImportRoutes, internalTaskIngestionRoutes } from "../../src/routes/task-ingestion.routes.js";
 import type { AuditLog, AuditLogInput, Division } from "../../src/governance/types.js";
@@ -12,6 +13,12 @@ import type { NewTaskRecord, TasksRepository, TaskUpdateRecord } from "../../src
 import type { TaskActivitiesRepository } from "../../src/repositories/task-activities.repository.js";
 import type { TaskRelationshipsRepository } from "../../src/repositories/task-relationships.repository.js";
 import type { TaskUsersRepository } from "../../src/repositories/task-users.repository.js";
+
+const legacyCategoryValidator = { validate: async (value: string | null | undefined) => {
+  if (value === undefined || value === null) return null;
+  if (value === "AFFILIATE") return value;
+  throw new AppError(400, "TASK_INVALID_CATEGORY", "Task category is not supported");
+} };
 import { DivisionCollaborationService } from "../../src/services/division-collaboration.service.js";
 import { TaskAuthorizationService } from "../../src/services/task-authorization.service.js";
 import { TaskIngestionService } from "../../src/services/task-ingestion.service.js";
@@ -72,7 +79,7 @@ function harness(options: { collaboration?: "allow" | "deny" | "approval" } = {}
     findById: async () => null, listRules: async () => [], createRule: async () => { throw new Error("unused"); },
     updateRule: async () => { throw new Error("unused"); }, deactivateRule: async () => { throw new Error("unused"); },
   });
-  const core = new TaskService(tasks, users, activities, relationships, audit, new TaskAuthorizationService(), () => new Date(now), collaboration);
+  const core = new TaskService(tasks, users, activities, relationships, audit, new TaskAuthorizationService(), () => new Date(now), collaboration, legacyCategoryValidator);
   return { service: new TaskIngestionService(core, divisions, batches, audit, users), tasks, batches, audit, core };
 }
 

@@ -45,10 +45,11 @@ Legend:
   Owner: Claude Code
 - [x] P0-12 Implement `npm run setup` first-admin bootstrap.
   Owner: Codex
-- [ ] P0-13 Design transition of divisions/roles/customer taxonomy from source to data.
+- [x] P0-13 Design transition of divisions/roles/customer taxonomy from source to data.
   Owner: Claude Code
-- [ ] P0-14 Implement install-time taxonomy/config migration with compatibility adapter.
+- [x] P0-14 Implement install-time taxonomy/config migration with compatibility adapter.
   Owner: Codex -> Antigravity review
+  Note: implementation and disposable-PostgreSQL acceptance gates pass; adversarial review remains the next independent gate.
 - [ ] P0-15 Remove private/founder operational state from product documentation.
   Owner: Z.AI inventory -> Codex execute
 

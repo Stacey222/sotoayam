@@ -1,7 +1,7 @@
 import { AppError } from "../errors.js";
 import type { ReportingRepository } from "../repositories/reporting.repository.js";
 import { reportTimeRange } from "../reporting/time-window.js";
-import type { AffiliateTaskStatusReport, ReportDrillDown, ReportDrillDownResult, ReportTaskItem, ReportWindow } from "../reporting/types.js";
+import type { AffiliateTaskStatusReport, ReportDrillDown, ReportDrillDownResult, ReportTaskItem, ReportWindow, TaskStatusReport, TaskStatusReportFilters } from "../reporting/types.js";
 import type { Task, TaskActor } from "../tasks/types.js";
 
 const ACTIVE_STATUSES = new Set(["OPEN", "IN_PROGRESS", "BLOCKED"]);
@@ -15,10 +15,10 @@ export class ReportingService {
   ) {}
 
   async affiliateTaskStatus(actor: TaskActor, window: ReportWindow): Promise<AffiliateTaskStatusReport> {
-    this.assertOwner(actor);
+    this.assertReportAccess(actor, { division: "CONTENT_CREATOR", taskCategory: "AFFILIATE" });
     const now = this.now();
     const range = reportTimeRange(window, now, this.timeZone);
-    const tasks = await this.repository.findAffiliateTasks(range.start.toISOString(), range.end.toISOString());
+    const tasks = await this.query({ division: "CONTENT_CREATOR", taskCategory: "AFFILIATE" }, range.start.toISOString(), range.end.toISOString());
     const included = tasks.filter((task) => task.status !== "CANCELLED" && task.status !== "DRAFT");
     const completed = included.filter((task) => task.status === "COMPLETED").length;
     return {
@@ -37,11 +37,46 @@ export class ReportingService {
     };
   }
 
-  async drillDown(actor: TaskActor, window: ReportWindow, kind: ReportDrillDown, requestedPage: number): Promise<ReportDrillDownResult> {
-    this.assertOwner(actor);
+  async taskStatus(actor: TaskActor, filters: TaskStatusReportFilters, window: ReportWindow): Promise<TaskStatusReport> {
+    this.assertReportAccess(actor, filters);
     const now = this.now();
     const range = reportTimeRange(window, now, this.timeZone);
-    const tasks = await this.repository.findAffiliateTasks(range.start.toISOString(), range.end.toISOString());
+    const tasks = await this.query(filters, range.start.toISOString(), range.end.toISOString());
+    const included = tasks.filter((task) => task.status !== "CANCELLED" && task.status !== "DRAFT");
+    const completed = included.filter((task) => task.status === "COMPLETED").length;
+    return {
+      definition: "TASK_STATUS", division: filters.division ?? null, taskCategory: filters.taskCategory ?? null,
+      statuses: filters.statuses ?? null, window, timeZone: this.timeZone,
+      startAt: range.start.toISOString(), endAt: range.end.toISOString(), total: included.length,
+      open: included.filter((task) => task.status === "OPEN").length,
+      inProgress: included.filter((task) => task.status === "IN_PROGRESS").length,
+      blocked: included.filter((task) => task.status === "BLOCKED").length, completed,
+      overdue: included.filter((task) => this.overdue(task, now)).length,
+      upcomingDeadlines: included.filter((task) => this.upcoming(task, now)).length,
+      completionRate: included.length === 0 ? null : Number(((completed / included.length) * 100).toFixed(1)),
+      excludedCancelled: tasks.filter((task) => task.status === "CANCELLED").length,
+      excludedDraft: tasks.filter((task) => task.status === "DRAFT").length,
+    };
+  }
+
+  async drillDown(actor: TaskActor, window: ReportWindow, kind: ReportDrillDown, requestedPage: number): Promise<ReportDrillDownResult> {
+    this.assertReportAccess(actor, { division: "CONTENT_CREATOR", taskCategory: "AFFILIATE" });
+    const now = this.now();
+    const range = reportTimeRange(window, now, this.timeZone);
+    const tasks = await this.query({ division: "CONTENT_CREATOR", taskCategory: "AFFILIATE" }, range.start.toISOString(), range.end.toISOString());
+    const selected = tasks.filter((task) => kind === "BLOCKED" ? task.status === "BLOCKED"
+      : kind === "OVERDUE" ? this.overdue(task, now) : this.upcoming(task, now));
+    const pages = Math.max(1, Math.ceil(selected.length / PAGE_SIZE));
+    const page = Math.min(Math.max(requestedPage, 0), pages - 1);
+    return { kind, window, page, pages, total: selected.length,
+      items: selected.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((task) => this.item(task)) };
+  }
+
+  async taskStatusDrillDown(actor: TaskActor, filters: TaskStatusReportFilters, window: ReportWindow, kind: ReportDrillDown, requestedPage: number): Promise<ReportDrillDownResult> {
+    this.assertReportAccess(actor, filters);
+    const now = this.now();
+    const range = reportTimeRange(window, now, this.timeZone);
+    const tasks = await this.query(filters, range.start.toISOString(), range.end.toISOString());
     const selected = tasks.filter((task) => kind === "BLOCKED" ? task.status === "BLOCKED"
       : kind === "OVERDUE" ? this.overdue(task, now) : this.upcoming(task, now));
     const pages = Math.max(1, Math.ceil(selected.length / PAGE_SIZE));
@@ -51,9 +86,25 @@ export class ReportingService {
   }
 
   assertOwner(actor: TaskActor): void {
-    if (!actor.active || actor.divisionId === null || actor.roleId === null || actor.roleCode !== "OWNER") {
+    if (!actor.active || actor.divisionId === null || actor.roleId === null
+      || (!actor.permissions.has("report.view_division") && !actor.permissions.has("report.view_cross_division"))) {
       throw new AppError(403, "OWNER_REPORT_FORBIDDEN", "Active normalized OWNER authority is required");
     }
+  }
+
+  private assertReportAccess(actor: TaskActor, filters: TaskStatusReportFilters): void {
+    this.assertOwner(actor);
+    const crossDivision = !filters.division || filters.division !== actor.divisionCode;
+    const permission = crossDivision ? "report.view_cross_division" : "report.view_division";
+    if (!actor.permissions.has(permission)) throw new AppError(403, "OWNER_REPORT_FORBIDDEN", "Required report permission is unavailable");
+  }
+
+  private query(filters: TaskStatusReportFilters, startAt: string, endAt: string): Promise<Task[]> {
+    if (this.repository.findTasksForReport) return this.repository.findTasksForReport(filters, startAt, endAt);
+    if (filters.division === "CONTENT_CREATOR" && filters.taskCategory === "AFFILIATE" && this.repository.findAffiliateTasks) {
+      return this.repository.findAffiliateTasks(startAt, endAt);
+    }
+    throw new AppError(503, "REPORT_DEFINITION_UNAVAILABLE", "Generic task status reporting is unavailable");
   }
 
   private overdue(task: Task, now: Date): boolean {

@@ -1,7 +1,6 @@
 export const TASK_STATUSES = ["DRAFT", "OPEN", "IN_PROGRESS", "BLOCKED", "COMPLETED", "CANCELLED"] as const;
 export const TASK_PRIORITIES = ["LOW", "NORMAL", "HIGH", "URGENT"] as const;
 export const TASK_SOURCES = ["MANUAL", "CSV_IMPORT", "AUTOMATION", "ERP", "AI_ASSISTED"] as const;
-export const TASK_CATEGORIES = ["AFFILIATE"] as const;
 export const TASK_ACTIVITY_TYPES = ["COMMENT", "STATUS_CHANGE", "EVIDENCE", "ASSIGNMENT_CHANGE"] as const;
 export const TASK_VISIBILITIES = ["SHARED", "INTERNAL"] as const;
 export const TASK_EVIDENCE_TYPES = ["NONE", "URL", "FILE_REFERENCE", "TEXT"] as const;
@@ -10,7 +9,7 @@ export const TASK_RELATIONSHIP_TYPES = ["PARENT_OF", "CHILD_OF", "BLOCKS", "BLOC
 export type TaskStatus = typeof TASK_STATUSES[number];
 export type TaskPriority = typeof TASK_PRIORITIES[number];
 export type TaskSource = typeof TASK_SOURCES[number];
-export type TaskCategory = typeof TASK_CATEGORIES[number];
+export type TaskCategory = string;
 export type TaskActivityType = typeof TASK_ACTIVITY_TYPES[number];
 export type TaskVisibility = typeof TASK_VISIBILITIES[number];
 export type TaskEvidenceType = typeof TASK_EVIDENCE_TYPES[number];
@@ -47,6 +46,7 @@ export interface TaskUser {
   active: boolean;
   divisionId: number | null;
   divisionCode?: string | null;
+  divisionGrantsSystemAuthority?: boolean;
   roleId: number | null;
   roleCode: string | null;
 }

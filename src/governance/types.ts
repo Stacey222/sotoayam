@@ -11,6 +11,28 @@ export interface Division extends GovernanceCatalogEntry {}
 export interface Role extends GovernanceCatalogEntry {}
 export interface Permission extends GovernanceCatalogEntry {}
 
+export type InstallationLineage = "FRESH" | "LEGACY" | "UNKNOWN";
+
+export interface AdminDivision extends Division {
+  grants_system_authority: boolean;
+  provisioning_source: "CUSTOMER" | "PRESET" | "SETUP" | null;
+}
+
+export interface ManagedRole extends Role {
+  system_managed: boolean;
+}
+
+export interface TaskCategoryCatalogEntry extends GovernanceCatalogEntry {}
+
+export interface InstallationProvenance {
+  lineage: Exclude<InstallationLineage, "UNKNOWN">;
+  declared_at: string;
+  declaration_source: "setup_cli";
+  evidence: Record<string, number>;
+  origin_seed_retired_at: string | null;
+  origin_seed_retired_count: number | null;
+}
+
 export interface SystemAuthorityAssignment {
   id: number;
   user_id: number;

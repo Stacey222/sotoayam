@@ -4,6 +4,7 @@ import type { OwnerActorResolver, TaskActorResolver } from "../services/task-act
 import type { CriticalAlertService } from "../services/critical-alert.service.js";
 import type { CriticalAlertEvaluatorService } from "../services/critical-alert-evaluator.service.js";
 import type { PersistedAlertSeverity } from "../alerts/types.js";
+import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
 
 export const criticalAlertsRoutes = defineAdminRoutes<{ service: CriticalAlertService; actorResolver: OwnerActorResolver; adminApiKey?: string }>(async (app, options) => {
   app.get("/", async (request) => {
@@ -20,7 +21,7 @@ export const criticalAlertsRoutes = defineAdminRoutes<{ service: CriticalAlertSe
 export const adminCriticalAlertRoutes = defineAdminRoutes<{ evaluator: CriticalAlertEvaluatorService; actorResolver: TaskActorResolver; adminApiKey?: string }>(async (app, options) => {
   app.addHook("preHandler", async () => {
     const actor = await options.actorResolver.resolveTrustedActor();
-    if (!actor.active || actor.divisionId === null || actor.divisionCode !== "IT" || actor.roleId === null) throw new AppError(403, "CRITICAL_ALERT_OPERATIONS_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
+    if (!hasSystemAdminCapability(actor)) throw new AppError(403, "CRITICAL_ALERT_OPERATIONS_FORBIDDEN", "Active SYSTEM_ADMIN authority in an authority-capable division is required");
   });
   app.post("/evaluate", async (request) => {
     if ((request.query as { dry_run?: unknown }).dry_run !== "true") throw new AppError(400, "DRY_RUN_REQUIRED", "Operational evaluation requires dry_run=true");

@@ -1,17 +1,3 @@
-export const DIVISIONS = [
-  "Purchasing",
-  "Sales Grosir",
-  "Digital Marketing",
-  "Content Creator",
-  "On Page / B2C",
-  "Live Shopee",
-  "Gudang",
-  "Management",
-  "IT",
-] as const;
-
-export const ROLES = ["Staff", "Admin", "PIC", "Supervisor", "Manager", "Owner"] as const;
-
 export const NOTIFICATION_PREFERENCE_BY_TYPE = {
   STOCK_CRITICAL: "stock_alert",
   PURCHASE_RECOMMENDATION: "purchase_alert",
@@ -32,8 +18,6 @@ export const NOTIFICATION_PREFERENCES = [
   "system_error",
 ] as const;
 
-export type Division = (typeof DIVISIONS)[number];
-export type UserRole = (typeof ROLES)[number];
 export type NotificationType = keyof typeof NOTIFICATION_PREFERENCE_BY_TYPE;
 export type NotificationPreference = (typeof NOTIFICATION_PREFERENCES)[number];
 

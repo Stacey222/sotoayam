@@ -28,6 +28,8 @@ import { SupabaseReminderChannelsRepository, SupabaseReminderNotificationsReposi
 import { SupabaseReportingRepository } from "./repositories/reporting.repository.js";
 import { SupabaseCriticalAlertsRepository, SupabaseCriticalAlertSignalsRepository } from "./repositories/critical-alerts.repository.js";
 import { SupabaseIntegrationAdministrationRepository } from "./repositories/integration-administration.repository.js";
+import { SupabaseTaskCategoriesRepository } from "./repositories/task-categories.repository.js";
+import { SupabaseInstallationProvenanceRepository } from "./repositories/installation-provenance.repository.js";
 import { SupabaseNotificationIntakeRepository, type NotificationIntakeRepository } from "./repositories/notification-intake.repository.js";
 import { adminUserManagementRoutes } from "./routes/admin-user-management.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
@@ -41,6 +43,7 @@ import { adminNotificationsRoutes } from "./routes/admin-notifications.routes.js
 import { reportsRoutes } from "./routes/reports.routes.js";
 import { adminCriticalAlertRoutes, criticalAlertsRoutes } from "./routes/critical-alerts.routes.js";
 import { integrationAdministrationRoutes } from "./routes/integration-administration.routes.js";
+import { taxonomyRoutes } from "./routes/taxonomy.routes.js";
 import { NotificationService } from "./services/notification.service.js";
 import { NotificationIntakeService } from "./services/notification-intake.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
@@ -64,6 +67,8 @@ import { ReportingService } from "./services/reporting.service.js";
 import { CriticalAlertEvaluatorService } from "./services/critical-alert-evaluator.service.js";
 import { CriticalAlertService } from "./services/critical-alert.service.js";
 import { IntegrationAdministrationService } from "./services/integration-administration.service.js";
+import { TaskCategoryService } from "./services/task-category.service.js";
+import { TaxonomyManagementService } from "./services/taxonomy-management.service.js";
 import {
   TelegramRegistrationService,
   type TelegramRegistrationWriter,
@@ -109,8 +114,8 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
             if (!legacyUser) throw new AppError(404, "NORMALIZED_USER_NOT_FOUND", "Injected user access state not found");
             return resolveUserAccessState({
               active: legacyUser.active,
-              divisionId: legacyUser.division === "UNASSIGNED" ? null : 1,
-              roleId: legacyUser.role === "UNASSIGNED" ? null : 1,
+              divisionId: null,
+              roleId: null,
               divisionCode: legacyUser.division === "UNASSIGNED" ? null : legacyUser.division,
               roleCode: legacyUser.role === "UNASSIGNED" ? null : legacyUser.role.toUpperCase(),
             });
@@ -126,10 +131,12 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     ? new NotificationIntakeService(resolver, telegramSender, app.log, notificationIntakeRepository, reminderNotifications)
     : new NotificationService(resolver, telegramSender, app.log);
   app.log.info({ persistedNotificationIntake }, "Notification intake configured");
-  const userManagementService = client ? new UserManagementService(
+  const divisionsRepository = client ? new SupabaseDivisionsRepository(client) : undefined;
+  const rolesRepository = client ? new SupabaseRolesRepository(client) : undefined;
+  const userManagementService = client && divisionsRepository && rolesRepository ? new UserManagementService(
     new SupabaseUserManagementRepository(client),
-    new SupabaseDivisionsRepository(client),
-    new SupabaseRolesRepository(client),
+    divisionsRepository,
+    rolesRepository,
   ) : undefined;
   const systemAuthorityService = client ? new SystemAuthorityService(
     new SupabaseUsersRepository(client), new SupabaseSystemAuthorityRepository(client),
@@ -137,11 +144,16 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const taskUsers = client ? new SupabaseTaskUsersRepository(client) : undefined;
   const collaborationRepository = client ? new SupabaseDivisionCollaborationRepository(client) : undefined;
   const permissionsRepository = client ? new SupabasePermissionsRepository(client) : undefined;
-  const divisionsRepository = client ? new SupabaseDivisionsRepository(client) : undefined;
+  const taskCategoryService = client ? new TaskCategoryService(new SupabaseTaskCategoriesRepository(client)) : undefined;
+  const taxonomyManagementService = divisionsRepository && rolesRepository
+    ? new TaxonomyManagementService(divisionsRepository, rolesRepository) : undefined;
+  const installationLineage = client
+    ? await new SupabaseInstallationProvenanceRepository(client).getLineage()
+    : "UNKNOWN" as const;
   const taskService = client && taskUsers && collaborationRepository ? new TaskService(
     new SupabaseTasksRepository(client), taskUsers, new SupabaseTaskActivitiesRepository(client),
     new SupabaseTaskRelationshipsRepository(client), new SupabaseAuditRepository(client), new TaskAuthorizationService(),
-    undefined, new DivisionCollaborationService(collaborationRepository),
+    undefined, new DivisionCollaborationService(collaborationRepository), taskCategoryService,
   ) : undefined;
   const taskIngestionService = client && taskService && divisionsRepository ? new TaskIngestionService(
     taskService, divisionsRepository, new SupabaseImportBatchRepository(client), new SupabaseAuditRepository(client), taskUsers!,
@@ -207,7 +219,7 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     )
     : undefined;
   const ownerConsole = telegramTaskActor && reportingService
-    ? new TelegramOwnerConsoleService(telegramTaskActor, reportingService, criticalAlertService)
+    ? new TelegramOwnerConsoleService(telegramTaskActor, reportingService, criticalAlertService, installationLineage !== "FRESH")
     : undefined;
   const bot = new TelegramBot(
     options.config.telegramBotToken,
@@ -265,6 +277,11 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     prefix: "/api/admin/system-authority",
     service: systemAuthorityService,
     adminApiKey: options.config.adminApiKey,
+    actorResolver: taskUsers && permissionsRepository ? new TrustedTaskActorService(taskUsers, permissionsRepository) : undefined,
+  });
+  if (taxonomyManagementService && taskCategoryService && taskUsers && permissionsRepository) await app.register(taxonomyRoutes, {
+    prefix: "/api/admin", service: taxonomyManagementService, categories: taskCategoryService,
+    actorResolver: new TrustedTaskActorService(taskUsers, permissionsRepository), adminApiKey: options.config.adminApiKey,
   });
   if (collaborationManagementService) await app.register(collaborationRulesRoutes, {
     prefix: "/api/admin/collaboration-rules",
@@ -298,11 +315,12 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   }
   if (reportingService && taskUsers) {
     await app.register(reportsRoutes, { prefix: "/api/reports", service: reportingService,
-      actorResolver: new TrustedOwnerActorService(taskUsers), adminApiKey: options.config.adminApiKey });
+      actorResolver: new TrustedOwnerActorService(taskUsers, permissionsRepository!), adminApiKey: options.config.adminApiKey,
+      legacyAliasEnabled: installationLineage !== "FRESH" });
   }
   if (criticalAlertService && taskUsers) {
     await app.register(criticalAlertsRoutes, { prefix: "/api/alerts", service: criticalAlertService,
-      actorResolver: new TrustedOwnerActorService(taskUsers), adminApiKey: options.config.adminApiKey });
+      actorResolver: new TrustedOwnerActorService(taskUsers, permissionsRepository!), adminApiKey: options.config.adminApiKey });
   }
   if (criticalAlertEvaluator && taskUsers && permissionsRepository) {
     await app.register(adminCriticalAlertRoutes, { prefix: "/api/admin/alerts", evaluator: criticalAlertEvaluator,

@@ -22,14 +22,15 @@ export class TrustedTaskActorService implements TaskActorResolver {
 }
 
 export class TrustedOwnerActorService implements OwnerActorResolver {
-  constructor(private readonly users: TaskUsersRepository) {}
+  constructor(private readonly users: TaskUsersRepository, private readonly permissions: PermissionsRepository) {}
   async resolveOwnerActor(): Promise<TaskActor> {
     if (!this.users.findTrustedOwnerActorUser) throw new AppError(503, "OWNER_ACTOR_UNAVAILABLE", "Owner actor resolver is unavailable");
     const user = await this.users.findTrustedOwnerActorUser();
     if (!user.active || user.divisionId === null || user.roleId === null || user.roleCode !== "OWNER") {
       throw new AppError(503, "OWNER_ACTOR_UNAVAILABLE", "Active normalized OWNER authority is unavailable");
     }
-    return { ...user, permissions: new Set() };
+    const permissions = await this.permissions.findForRoleCode(user.roleCode);
+    return { ...user, permissions: new Set(permissions.filter((item) => item.active).map((item) => item.code)) };
   }
 }
 

@@ -24,6 +24,7 @@ export const OPERATIONAL_PERMISSIONS = [
   "alert.view_division",
   "report.view_cross_division",
   "alert.view_critical",
+  "alert.acknowledge",
   "approval.view",
   "approval.decide",
   "automation_status.view_business",
@@ -64,6 +65,7 @@ export const ROLE_PERMISSION_SEEDS = {
   OWNER: [
     "report.view_cross_division",
     "alert.view_critical",
+    "alert.acknowledge",
     "approval.view",
     "approval.decide",
     "automation_status.view_business",

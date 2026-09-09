@@ -31,6 +31,22 @@ class BootstrapRepository implements FirstAdminBootstrapRepository {
     if (this.failure) throw this.failure;
     return { userId: 41, assignmentId: 73, bootstrappedAt: new Date(0).toISOString() };
   }
+  async preview(lineage: "FRESH" | "LEGACY") {
+    return { lineage, eligible: this.status.eligible, evidence: {
+      users: 0, telegram_users: 0, tasks: 0, non_migration_seed_audit_logs: 0,
+      extra_or_modified_seed_divisions: 0, non_origin_collaboration_rules: 0,
+      users_division_refs: 0, task_requesting_division_refs: 0, task_owner_division_refs: 0,
+      collaboration_source_division_refs: 1, collaboration_target_division_refs: 1,
+      integration_requesting_division_refs: 0, routing_owner_division_refs: 0, alert_owner_division_refs: 0,
+    }, retirement_divisions: Array.from({ length: 9 }, (_, id) => ({ code: `SEED_${id}`, name: `Seed ${id}` })),
+    retirement_rule: { task_scope: "ALL" } };
+  }
+  async resolveActiveDivision(code: string) { return code === "IT" ? { code, name: "IT" } : null; }
+  async provision(input: FirstAdminBootstrapInput & { lineage: "FRESH" | "LEGACY"; divisionCode: string }) {
+    this.input = input;
+    if (this.failure) throw this.failure;
+    return { userId: 41, assignmentId: 73, bootstrappedAt: new Date(0).toISOString(), divisionCode: input.divisionCode };
+  }
 }
 
 function streamText(stream: PassThrough): () => string {
@@ -125,6 +141,22 @@ describe("first-administrator input and service contract", () => {
 });
 
 describe("first-administrator repository contract", () => {
+  it("calls the distinct seven-argument provisioning RPC with hashed credentials only", async () => {
+    const single = vi.fn().mockResolvedValue({ data: {
+      user_id: 41, assignment_id: 73, bootstrapped_at: new Date(0).toISOString(), division_code: "OPERATIONS",
+    }, error: null });
+    const rpc = vi.fn().mockReturnValue({ single });
+    const repository = new SupabaseFirstAdminBootstrapRepository({ rpc } as unknown as SupabaseClient);
+    await expect(repository.provision({ displayName: "Installer", email: "installer@example.com",
+      passwordAlgorithm: "scrypt", passwordHash: "encoded-value", lineage: "FRESH",
+      divisionCode: "OPERATIONS", divisionName: "Operations" })).resolves.toMatchObject({ divisionCode: "OPERATIONS" });
+    expect(rpc).toHaveBeenCalledWith("provision_first_installation", expect.objectContaining({
+      p_lineage: "FRESH", p_division_code: "OPERATIONS", p_division_name: "Operations",
+      p_password_hash: "encoded-value",
+    }));
+    expect(rpc.mock.calls[0]?.[1]).not.toHaveProperty("p_password");
+  });
+
   it("calls the single atomic RPC with no plaintext password field", async () => {
     const single = vi.fn().mockResolvedValue({
       data: { user_id: 41, assignment_id: 73, bootstrapped_at: new Date(0).toISOString() }, error: null,
@@ -160,9 +192,52 @@ describe("first-administrator repository contract", () => {
 });
 
 describe("setup CLI contract", () => {
+  it("requires one explicit lineage flag outside an interactive terminal", async () => {
+    const harness = cliHarness();
+    const exit = await runSetup(["--name", "Installer", "--email", "installer@example.com"], harness.io, harness.dependencies);
+    expect(exit).toBe(2);
+    expect(harness.errors()).toContain("INVALID_INSTALLATION_LINEAGE");
+    expect(harness.dependencies.promptSecret).not.toHaveBeenCalled();
+  });
+
+  it("rejects mutually exclusive lineage flags", async () => {
+    const harness = cliHarness();
+    const exit = await runSetup(["--fresh-install", "--keep-existing-taxonomy"], harness.io, harness.dependencies);
+    expect(exit).toBe(2);
+    expect(harness.errors()).toContain("mutually exclusive");
+  });
+
+  it("resolves an existing active division before collecting a legacy-mode password", async () => {
+    const harness = cliHarness(undefined, { SOTOAYAM_BOOTSTRAP_ADMIN_PASSWORD: "environment-password-strong-99" });
+    const resolve = vi.spyOn(harness.repository, "resolveActiveDivision");
+    const exit = await runSetup(["--keep-existing-taxonomy", "--division-code", "IT",
+      "--name", "Installer", "--email", "installer@example.com"], harness.io, harness.dependencies);
+    expect(exit).toBe(0);
+    expect(resolve).toHaveBeenCalledWith("IT");
+    expect(harness.repository.input).toMatchObject({ lineage: "LEGACY", divisionCode: "IT" });
+  });
+
+  it("fails a missing legacy division and fresh evidence veto before password collection", async () => {
+    const missing = cliHarness();
+    const missingExit = await runSetup(["--keep-existing-taxonomy", "--division-code", "MISSING",
+      "--name", "Installer", "--email", "installer@example.com"], missing.io, missing.dependencies);
+    expect(missingExit).toBe(7);
+    expect(missing.dependencies.promptSecret).not.toHaveBeenCalled();
+
+    const veto = cliHarness();
+    const preview = await veto.repository.preview("FRESH");
+    vi.spyOn(veto.repository, "preview").mockResolvedValue({ ...preview, evidence: { ...preview.evidence, users: 1 } });
+    const vetoExit = await runSetup(["--fresh-install", "--division-name", "Operations", "--division-code", "OPERATIONS",
+      "--name", "Installer", "--email", "installer@example.com"], veto.io, veto.dependencies);
+    expect(vetoExit).toBe(8);
+    expect(veto.errors()).toContain("FRESH_INSTALL_EVIDENCE_VETO");
+    expect(veto.dependencies.promptSecret).not.toHaveBeenCalled();
+  });
+
   it("uses password-file before environment and never prints secret material", async () => {
     const harness = cliHarness(undefined, { SOTOAYAM_BOOTSTRAP_ADMIN_PASSWORD: "environment-password-strong-99" });
     const exit = await runSetup([
+      "--fresh-install", "--division-name", "Operations", "--division-code", "OPERATIONS",
       "--name", "Installer", "--email", "installer@example.com", "--password-file", "protected.txt",
     ], harness.io, harness.dependencies);
     expect(exit).toBe(0);
@@ -175,7 +250,7 @@ describe("setup CLI contract", () => {
 
   it("uses the environment before the interactive secret prompt", async () => {
     const harness = cliHarness(undefined, { SOTOAYAM_BOOTSTRAP_ADMIN_PASSWORD: "environment-password-strong-99" });
-    const exit = await runSetup(["--name", "Installer", "--email", "installer@example.com"], harness.io, harness.dependencies);
+    const exit = await runSetup(["--fresh-install", "--division-name", "Operations", "--division-code", "OPERATIONS", "--name", "Installer", "--email", "installer@example.com"], harness.io, harness.dependencies);
     expect(exit).toBe(0);
     expect(harness.dependencies.promptSecret).not.toHaveBeenCalled();
     expect(await verifyPassword("environment-password-strong-99", harness.repository.input!.passwordHash)).toBe(true);
@@ -204,17 +279,17 @@ describe("setup CLI contract", () => {
   it("refuses an existing installation before collecting a password", async () => {
     const harness = cliHarness();
     harness.repository.status = { eligible: false, existingUserId: 41, completedAt: new Date(0).toISOString() };
-    const exit = await runSetup(["--name", "Installer", "--email", "installer@example.com"], harness.io, harness.dependencies);
+    const exit = await runSetup(["--fresh-install", "--division-name", "Operations", "--division-code", "OPERATIONS", "--name", "Installer", "--email", "installer@example.com"], harness.io, harness.dependencies);
     expect(exit).toBe(3);
     expect(harness.dependencies.promptSecret).not.toHaveBeenCalled();
     expect(harness.dependencies.readPasswordFile).not.toHaveBeenCalled();
     expect(harness.errors()).toContain("FIRST_ADMIN_ALREADY_EXISTS");
-    expect(harness.errors()).toContain("user_id=41");
+    expect(harness.output()).toContain("SETUP_PREVIEW");
   });
 
   it("fails closed without a password source on non-TTY stdin", async () => {
     const harness = cliHarness();
-    const exit = await runSetup(["--name", "Installer", "--email", "installer@example.com"], harness.io, harness.dependencies);
+    const exit = await runSetup(["--fresh-install", "--division-name", "Operations", "--division-code", "OPERATIONS", "--name", "Installer", "--email", "installer@example.com"], harness.io, harness.dependencies);
     expect(exit).toBe(2);
     expect(harness.errors()).toContain("BOOTSTRAP_INPUT_UNAVAILABLE");
     expect(harness.repository.input).toBeUndefined();
@@ -223,7 +298,7 @@ describe("setup CLI contract", () => {
   it("returns stable mapped transaction failures without a stack or secret", async () => {
     const harness = cliHarness(undefined, { SOTOAYAM_BOOTSTRAP_ADMIN_PASSWORD: "environment-password-strong-99" });
     harness.repository.failure = new FirstAdminBootstrapError("TAXONOMY_UNAVAILABLE", "Required administrative taxonomy is unavailable");
-    const exit = await runSetup(["--name", "Installer", "--email", "installer@example.com"], harness.io, harness.dependencies);
+    const exit = await runSetup(["--fresh-install", "--division-name", "Operations", "--division-code", "OPERATIONS", "--name", "Installer", "--email", "installer@example.com"], harness.io, harness.dependencies);
     expect(exit).toBe(7);
     expect(harness.errors()).toBe("TAXONOMY_UNAVAILABLE: Required administrative taxonomy is unavailable\n");
     expect(harness.errors()).not.toContain("environment-password-strong-99");

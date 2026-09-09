@@ -17,8 +17,8 @@ export interface UserManagementRepository {
   updateBusinessUserCode(id: number, update: BusinessUserCodeUpdate, source: string, actorUserId: number): Promise<ManagedUser>;
 }
 
-const selection = "id,display_name,business_user_code,division_id,role_id,active,legacy_telegram_user_id,created_at,updated_at,divisions(id,code,name,active,created_at,updated_at),roles(id,code,name,active,created_at,updated_at),user_channels(channel_type,active)";
-const legacySelection = "id,display_name,division_id,role_id,active,legacy_telegram_user_id,created_at,updated_at,divisions(id,code,name,active,created_at,updated_at),roles(id,code,name,active,created_at,updated_at),user_channels(channel_type,active)";
+const selection = "id,display_name,business_user_code,division_id,role_id,active,legacy_telegram_user_id,created_at,updated_at,divisions(id,code,name,active,grants_system_authority,provisioning_source,created_at,updated_at),roles(id,code,name,active,created_at,updated_at),user_channels(channel_type,active)";
+const legacySelection = "id,display_name,division_id,role_id,active,legacy_telegram_user_id,created_at,updated_at,divisions(id,code,name,active,grants_system_authority,provisioning_source,created_at,updated_at),roles(id,code,name,active,created_at,updated_at),user_channels(channel_type,active)";
 const missingBusinessCodeColumn = (error: DatabaseDiagnostic | null): boolean => ["PGRST204", "42703"].includes(error?.code ?? "");
 
 function databaseError(message: string, error: DatabaseDiagnostic): Error {
@@ -26,7 +26,7 @@ function databaseError(message: string, error: DatabaseDiagnostic): Error {
     return new AppError(400, "VALIDATION_ERROR", error.message ?? message);
   }
   if (error.code === "23505") return new AppError(409, "BUSINESS_USER_CODE_DUPLICATE", "Business user code is already assigned");
-  if (error.code === "42501") return new AppError(403, "BUSINESS_USER_CODE_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
+  if (error.code === "42501") return new AppError(403, "BUSINESS_USER_CODE_FORBIDDEN", "Active SYSTEM_ADMIN authority in an authority-capable division is required");
   if (error.code === "P0002") return new AppError(404, "NOT_FOUND", error.message ?? message);
   if (error.code === "P0001") return new AppError(409, "GOVERNANCE_INVARIANT", error.message ?? message);
   return new DatabaseError(message, error);

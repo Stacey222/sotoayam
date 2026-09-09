@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AppError } from "../../src/errors.js";
 import type { AuditLog, AuditLogInput } from "../../src/governance/types.js";
 import type { AuditRepository } from "../../src/repositories/audit.repository.js";
 import type { NewTaskActivity, TaskActivitiesRepository } from "../../src/repositories/task-activities.repository.js";
@@ -13,6 +14,12 @@ import { TelegramRegistrationService } from "../../src/services/telegram-registr
 import { reconcileIdentitySnapshots } from "../../src/services/identity-reconciliation.service.js";
 import { isTaskOverdue } from "../../src/tasks/task-lifecycle.js";
 import type { Task, TaskActivity, TaskActor, TaskFilters, TaskReadModel, TaskRelationship, TaskUser } from "../../src/tasks/types.js";
+
+const legacyCategoryValidator = { validate: async (value: string | null | undefined) => {
+  if (value === undefined || value === null) return null;
+  if (value === "AFFILIATE") return value;
+  throw new AppError(400, "TASK_INVALID_CATEGORY", "Task category is not supported");
+} };
 import { TelegramBot } from "../../src/telegram/bot.js";
 import type { TelegramUser } from "../../src/types/index.js";
 
@@ -60,7 +67,7 @@ class MemoryAudit implements AuditRepository {
 
 describe("Slice 3 Task Core acceptance", () => {
   let tasks: MemoryTasks; let users: MemoryUsers; let activities: MemoryActivities; let relationships: MemoryRelationships; let audit: MemoryAudit; let service: TaskService;
-  beforeEach(() => { tasks = new MemoryTasks(); users = new MemoryUsers(); activities = new MemoryActivities(); relationships = new MemoryRelationships(); audit = new MemoryAudit(); service = new TaskService(tasks, users, activities, relationships, audit, new TaskAuthorizationService(), () => fixedNow); });
+  beforeEach(() => { tasks = new MemoryTasks(); users = new MemoryUsers(); activities = new MemoryActivities(); relationships = new MemoryRelationships(); audit = new MemoryAudit(); service = new TaskService(tasks, users, activities, relationships, audit, new TaskAuthorizationService(), () => fixedNow, undefined, legacyCategoryValidator); });
 
   it("1. creates a valid manual task", async () => { const result = await service.createManual(staff(), { title: "Manual" }); expect(result).toMatchObject({ title: "Manual", source: "MANUAL", status: "OPEN" }); });
   it("writes AFFILIATE only through canonical TaskService", async () => { expect((await service.createManual(staff(), { title: "Affiliate", taskCategory: "AFFILIATE" })).task_category).toBe("AFFILIATE"); });

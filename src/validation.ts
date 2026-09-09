@@ -1,9 +1,7 @@
 import { AppError } from "./errors.js";
 import {
-  DIVISIONS,
   NOTIFICATION_PREFERENCE_BY_TYPE,
   NOTIFICATION_PREFERENCES,
-  ROLES,
   type NotificationEvent,
   type UserFilters,
   type UserUpdate,
@@ -34,10 +32,10 @@ export function parseUserFilters(query: unknown): UserFilters {
     filters.status = query.status as UserFilters["status"];
   }
   if (query.division !== undefined) {
-    if (typeof query.division !== "string" || !DIVISIONS.includes(query.division as never)) {
+    if (typeof query.division !== "string" || !query.division.trim() || query.division.trim().length > 120) {
       validationError("Invalid division filter");
     }
-    filters.division = query.division;
+    filters.division = query.division.trim();
   }
   if (query.active !== undefined) {
     if (query.active !== "true" && query.active !== "false") validationError("Invalid active filter");
@@ -61,14 +59,14 @@ export function parseUserUpdate(body: unknown): UserUpdate {
     update.name = body.name.trim();
   }
   if (body.division !== undefined) {
-    if (typeof body.division !== "string" || !DIVISIONS.includes(body.division as never)) {
+    if (typeof body.division !== "string" || !body.division.trim() || body.division.trim().length > 120) {
       validationError("Invalid division");
     }
-    update.division = body.division;
+    update.division = body.division.trim();
   }
   if (body.role !== undefined) {
-    if (typeof body.role !== "string" || !ROLES.includes(body.role as never)) validationError("Invalid role");
-    update.role = body.role;
+    if (typeof body.role !== "string" || !body.role.trim() || body.role.trim().length > 120) validationError("Invalid role");
+    update.role = body.role.trim();
   }
   for (const field of ["active", ...NOTIFICATION_PREFERENCES] as const) {
     if (body[field] !== undefined) {

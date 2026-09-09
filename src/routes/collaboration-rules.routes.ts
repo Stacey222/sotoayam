@@ -39,4 +39,7 @@ export const collaborationRulesRoutes = defineAdminRoutes<CollaborationRulesRout
       active: value.active === undefined ? undefined : boolean(value.active, "active"),
     }) };
   });
+  app.delete<{ Params: { id: string } }>("/:id", async (request) => ({
+    success: true, data: await options.service.deactivate(parsePositiveId(request.params.id)),
+  }));
 });

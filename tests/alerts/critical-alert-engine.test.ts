@@ -15,7 +15,8 @@ import { TelegramOwnerConsoleService } from "../../src/telegram/owner-console.js
 import type { TaskActor } from "../../src/tasks/types.js";
 
 const NOW = new Date("2026-09-01T12:00:00.000Z");
-const owner = (overrides: Partial<TaskActor> = {}): TaskActor => ({ id: 9, active: true, divisionId: 10, divisionCode: "MANAGEMENT", roleId: 3, roleCode: "OWNER", permissions: new Set(), ...overrides });
+const owner = (overrides: Partial<TaskActor> = {}): TaskActor => ({ id: 9, active: true, divisionId: 10, divisionCode: "MANAGEMENT", roleId: 3, roleCode: "OWNER",
+  permissions: new Set(["alert.view_critical", "alert.acknowledge", "automation_status.view_business", "report.view_cross_division"]), ...overrides });
 const task = (overrides: Partial<AlertTaskSignal> = {}): AlertTaskSignal => ({ id: 1, title: "Safe task", status: "OPEN", priority: "NORMAL", deadline: null, task_category: null, owner_division_id: 20, ...overrides });
 
 class Signals implements CriticalAlertSignalsRepository {
@@ -88,7 +89,7 @@ describe("deterministic Critical Alert evaluator", () => {
 
 describe("OWNER alert authorization and lifecycle", () => {
   it("allows cross-Divisi OWNER visibility without internal activities", async () => { const alerts = new Alerts(); await seed(alerts); const result = await alertService(new Signals(), alerts).list(owner()); expect(result[0]?.ownerDivisionId).toBe(20); expect(JSON.stringify(result)).not.toMatch(/activity|dedupe|external_id/i); });
-  it("denies non-OWNER and SYSTEM_ADMIN-only access", async () => { const service = alertService(); await expect(service.list(owner({ roleCode: "STAFF" }))).rejects.toMatchObject({ code: "OWNER_ALERT_FORBIDDEN" }); await expect(service.list(owner({ roleCode: "ADMIN", divisionCode: "IT" }))).rejects.toMatchObject({ code: "OWNER_ALERT_FORBIDDEN" }); });
+  it("denies actors without alert permissions", async () => { const service = alertService(); await expect(service.list(owner({ roleCode: "STAFF", permissions: new Set() }))).rejects.toMatchObject({ code: "OWNER_ALERT_FORBIDDEN" }); await expect(service.list(owner({ roleCode: "ADMIN", divisionCode: "IT", permissions: new Set() }))).rejects.toMatchObject({ code: "OWNER_ALERT_FORBIDDEN" }); });
   it("acknowledgement does not resolve", async () => { const alerts = new Alerts(); await seed(alerts); const result = await alertService(new Signals(), alerts).acknowledge(owner(), 1); expect(result.status).toBe("ACKNOWLEDGED"); expect(alerts.rows[0]?.resolved_at).toBeNull(); });
   it("protects alert APIs with OWNER authorization", async () => { const alerts = new Alerts(); await seed(alerts); const app = Fastify(); await app.register(criticalAlertsRoutes, { service: alertService(new Signals(), alerts), actorResolver: { resolveOwnerActor: async () => owner() }, adminApiKey: "key" }); expect((await app.inject({ method: "GET", url: "/", headers: { "x-admin-api-key": "key" } })).statusCode).toBe(200); expect((await app.inject({ method: "POST", url: "/1/acknowledge", headers: { "x-admin-api-key": "key" } })).json().data.status).toBe("ACKNOWLEDGED"); await app.close(); });
 });

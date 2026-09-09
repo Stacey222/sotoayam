@@ -10,6 +10,7 @@ import { systemAuthorityRoutes } from "../../src/routes/system-authority.routes.
 import { csvImportRoutes } from "../../src/routes/task-ingestion.routes.js";
 import { tasksRoutes } from "../../src/routes/tasks.routes.js";
 import { usersRoutes } from "../../src/routes/users.routes.js";
+import { taxonomyRoutes } from "../../src/routes/taxonomy.routes.js";
 
 const ADMIN_API_KEY = "regression-admin-key";
 
@@ -35,12 +36,25 @@ const trustedActor = {
   active: true,
   divisionId: 1,
   divisionCode: "IT",
+  divisionGrantsSystemAuthority: true,
   roleId: 1,
   roleCode: "ADMIN",
   permissions: new Set<string>(),
 };
 
 const routeCases: RouteCase[] = [
+  {
+    routeGroup: "taxonomy",
+    endpoint: "/divisions",
+    register: async (app, adminApiKey, downstream, secondaryAuthorization) => {
+      await app.register(taxonomyRoutes, {
+        service: { listDivisions: downstream } as never,
+        categories: {} as never,
+        actorResolver: { resolveTrustedActor: secondaryAuthorization },
+        ...(adminApiKey === undefined ? {} : { adminApiKey }),
+      });
+    },
+  },
   {
     routeGroup: "users",
     endpoint: "/",

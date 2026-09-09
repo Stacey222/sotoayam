@@ -2,7 +2,7 @@ import { AppError } from "../errors.js";
 import { parsePositiveId } from "../validation.js";
 import {
   TASK_ACTIVITY_TYPES, TASK_EVIDENCE_TYPES, TASK_PRIORITIES, TASK_RELATIONSHIP_TYPES,
-  TASK_STATUSES, TASK_VISIBILITIES, TASK_CATEGORIES, type AddTaskActivityInput, type CreateTaskInput,
+  TASK_STATUSES, TASK_VISIBILITIES, type AddTaskActivityInput, type CreateTaskInput,
   type EvidenceInput, type TaskFilters, type TaskPriority, type TaskRelationshipType,
   type TaskStatus, type TransitionTaskInput, type UpdateTaskInput,
 } from "./types.js";
@@ -56,10 +56,14 @@ export function parseUpdateTask(bodyValue: unknown): UpdateTaskInput {
 
 function category(value: unknown): CreateTaskInput["taskCategory"] {
   if (value === undefined || value === null) return value as null | undefined;
-  if (typeof value !== "string" || !TASK_CATEGORIES.includes(value as never)) {
+  if (typeof value !== "string") {
     throw new AppError(400, "TASK_INVALID_CATEGORY", "Task category is not supported");
   }
-  return value as CreateTaskInput["taskCategory"];
+  const normalized = value.trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9_]{0,49}$/.test(normalized)) {
+    throw new AppError(400, "TASK_INVALID_CATEGORY", "Task category is not supported");
+  }
+  return normalized;
 }
 
 export function parseTransition(bodyValue: unknown): TransitionTaskInput {

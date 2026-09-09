@@ -11,6 +11,12 @@ import type { TaskRelationshipsRepository } from "../../src/repositories/task-re
 import type { TaskDirectoryRepository, TaskUsersRepository } from "../../src/repositories/task-users.repository.js";
 import type { NewTaskRecord, TasksRepository, TaskUpdateRecord } from "../../src/repositories/tasks.repository.js";
 import type { UserChannelsRepository } from "../../src/repositories/user-channels.repository.js";
+
+const legacyCategoryValidator = { validate: async (value: string | null | undefined) => {
+  if (value === undefined || value === null) return null;
+  if (value === "AFFILIATE") return value;
+  throw new AppError(400, "TASK_INVALID_CATEGORY", "Task category is not supported");
+} };
 import { DivisionCollaborationService } from "../../src/services/division-collaboration.service.js";
 import { TelegramRegistrationService } from "../../src/services/telegram-registration.service.js";
 import { TelegramTaskActorService, type TelegramTaskActorResolver } from "../../src/services/task-actor.service.js";
@@ -104,7 +110,7 @@ const relationships: TaskRelationshipsRepository = {
 function harness() {
   const tasks = new MemoryTasks(); const activities = new MemoryActivities(); const audit = new MemoryAudit();
   const directory = new MemoryDirectory(); const divisions = new MemoryDivisions(); const rules = new MemoryRules(); const actors = new MutableActors();
-  const service = new TaskService(tasks, directory, activities, relationships, audit, new TaskAuthorizationService(), () => new Date(now), new DivisionCollaborationService(rules));
+  const service = new TaskService(tasks, directory, activities, relationships, audit, new TaskAuthorizationService(), () => new Date(now), new DivisionCollaborationService(rules), legacyCategoryValidator);
   const console = new TelegramTaskConsoleService(service, actors, directory, divisions, rules, () => new Date(now));
   return { console, service, tasks, activities, audit, directory, divisions, rules, actors };
 }

@@ -1,6 +1,6 @@
 import { AppError } from "../errors.js";
 import type { TaskIntakeRequest } from "./types.js";
-import { TASK_CATEGORIES, TASK_PRIORITIES } from "../tasks/types.js";
+import { TASK_PRIORITIES } from "../tasks/types.js";
 
 export function parseAutomationIntake(value: unknown): TaskIntakeRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new AppError(400, "VALIDATION_ERROR", "Request body must be an object");
@@ -22,7 +22,7 @@ export function parseAutomationIntake(value: unknown): TaskIntakeRequest {
     throw new AppError(400, "INVALID_DEADLINE", "Deadline must use YYYY-MM-DD");
   }
   const taskCategory = optional("task_category")?.toUpperCase();
-  if (taskCategory && !TASK_CATEGORIES.includes(taskCategory as never)) throw new AppError(400, "TASK_INVALID_CATEGORY", "Task category is not supported");
+  if (taskCategory && !/^[A-Z][A-Z0-9_]{0,49}$/.test(taskCategory)) throw new AppError(400, "TASK_INVALID_CATEGORY", "Task category is not supported");
   return { source: "AUTOMATION", title: body.title, ownerDivision: body.owner_division,
     description: optional("description"), priority: priority as TaskIntakeRequest["priority"],
     assignee: optional("assignee"), deadline, externalReference: optional("external_reference"),

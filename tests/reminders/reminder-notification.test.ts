@@ -37,7 +37,7 @@ describe("deterministic reminder policy", () => {
 });
 
 class Users implements TaskUsersRepository {
-  rows: TaskUser[] = [{ id: 2, displayName: "Assignee", active: true, divisionId: 10, divisionCode: "IT", roleId: 1, roleCode: "STAFF" }];
+  rows: TaskUser[] = [{ id: 2, displayName: "Assignee", active: true, divisionId: 10, divisionCode: "IT", divisionGrantsSystemAuthority: true, roleId: 1, roleCode: "STAFF" }];
   async findById(id: number) { return this.rows.find((row) => row.id === id) ?? null; }
   async findTrustedAdminActorUser() { return this.rows[0]!; }
 }
@@ -106,7 +106,7 @@ describe("evaluator persistence boundaries", () => {
 describe("IT operational API", () => {
   it("requires the shared key before resolving SYSTEM_ADMIN", async () => { const app = Fastify(); const resolver = { resolveTrustedActor: vi.fn() }; await app.register(adminNotificationsRoutes, { service: {} as never, actorResolver: resolver as never, adminApiKey: "admin-key" }); const response = await app.inject({ method: "GET", url: "/status" }); expect(response.statusCode).toBe(401); expect(resolver.resolveTrustedActor).not.toHaveBeenCalled(); await app.close(); });
   it("returns bounded safe status to the trusted normalized authority", async () => { const app = Fastify(); const operationalActor: TaskActor = { ...new Users().rows[0]!, permissions: new Set() }; const service = { status: vi.fn().mockResolvedValue({ pending: 0 }), recent: vi.fn(), dryRun: vi.fn() }; await app.register(adminNotificationsRoutes, { service: service as never, actorResolver: { resolveTrustedActor: async () => operationalActor }, adminApiKey: "admin-key" }); const response = await app.inject({ method: "GET", url: "/status", headers: { "x-admin-api-key": "admin-key" } }); expect(response.statusCode).toBe(200); expect(response.json().data).toEqual({ pending: 0 }); await app.close(); });
-  it("explicitly rejects a SYSTEM_ADMIN actor outside IT", async () => { const app = Fastify(); const operationalActor: TaskActor = { ...new Users().rows[0]!, divisionCode: "SALES", permissions: new Set() }; await app.register(adminNotificationsRoutes, { service: { status: vi.fn() } as never, actorResolver: { resolveTrustedActor: async () => operationalActor }, adminApiKey: "admin-key" }); const response = await app.inject({ method: "GET", url: "/status", headers: { "x-admin-api-key": "admin-key" } }); expect(response.statusCode).toBe(403); await app.close(); });
+  it("explicitly rejects a SYSTEM_ADMIN actor outside an authority-capable division", async () => { const app = Fastify(); const operationalActor: TaskActor = { ...new Users().rows[0]!, divisionCode: "SALES", divisionGrantsSystemAuthority: false, permissions: new Set() }; await app.register(adminNotificationsRoutes, { service: { status: vi.fn() } as never, actorResolver: { resolveTrustedActor: async () => operationalActor }, adminApiKey: "admin-key" }); const response = await app.inject({ method: "GET", url: "/status", headers: { "x-admin-api-key": "admin-key" } }); expect(response.statusCode).toBe(403); await app.close(); });
 });
 
 describe("Slice 7 migration and compatibility contract", () => {

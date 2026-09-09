@@ -23,9 +23,10 @@ export class SupabaseUsersRepository implements UsersRepository {
   async countSystemAdminCandidates(): Promise<number> {
     const { count, error } = await this.client
       .from("users")
-      .select("id, divisions!inner(code)", { count: "exact", head: true })
+      .select("id, divisions!inner(active,grants_system_authority)", { count: "exact", head: true })
       .eq("active", true)
-      .eq("divisions.code", "IT");
+      .eq("divisions.active", true)
+      .eq("divisions.grants_system_authority", true);
     if (error) throw governanceDatabaseError("Unable to count system authority candidates", error);
     return count ?? 0;
   }

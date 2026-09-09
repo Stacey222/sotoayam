@@ -9,10 +9,10 @@ import type {
   AddTaskActivityInput, CreateTaskInput, EvidenceInput, Task, TaskActor, TaskFilters,
   TaskReadModel, TaskRelationshipType, TransitionTaskInput, UpdateTaskInput,
 } from "../tasks/types.js";
-import { TASK_CATEGORIES } from "../tasks/types.js";
 import type { TaskIntakeContext, TaskIntakeOutcome, TaskIntakeRequest } from "../ingestion/types.js";
 import { TaskAuthorizationService } from "./task-authorization.service.js";
 import type { CollaborationPolicyResolver } from "./division-collaboration.service.js";
+import type { TaskCategoryValidator } from "./task-category.service.js";
 
 export class TaskService {
   constructor(
@@ -24,6 +24,7 @@ export class TaskService {
     private readonly authorization: TaskAuthorizationService,
     private readonly now: () => Date = () => new Date(),
     private readonly collaboration?: CollaborationPolicyResolver,
+    private readonly categories?: TaskCategoryValidator,
   ) {}
 
   async createManual(actor: TaskActor, input: CreateTaskInput): Promise<TaskReadModel> {
@@ -43,7 +44,7 @@ export class TaskService {
       priority: input.priority ?? "NORMAL",
       source: "MANUAL",
       source_reference: null,
-      task_category: this.category(input.taskCategory),
+      task_category: await this.category(input.taskCategory),
       created_by_user_id: actor.id,
       integration_id: null,
       import_batch_id: null,
@@ -86,7 +87,7 @@ export class TaskService {
     try { task = await this.tasks.create({
       title: this.title(input.title), description: this.description(input.description), status: "OPEN",
       priority: input.priority ?? "NORMAL", source: input.source, source_reference: externalReference,
-      task_category: this.category(input.taskCategory),
+      task_category: await this.category(input.taskCategory),
       created_by_user_id: context.kind === "HUMAN_IMPORT" ? context.actorUserId : null,
       integration_id: context.kind === "HUMAN_IMPORT" ? null : context.integrationId,
       import_batch_id: context.batchId,
@@ -137,7 +138,7 @@ export class TaskService {
     this.title(input.title);
     this.description(input.description);
     this.deadline(input.deadline);
-    this.category(input.taskCategory);
+    await this.category(input.taskCategory);
     await this.validateAssignee(input.assignedToUserId ?? null, input.ownerDivisionId);
     const externalReference = this.externalReference(input.externalReference);
     const origin = context.kind === "HUMAN_IMPORT"
@@ -170,7 +171,7 @@ export class TaskService {
     if (input.description !== undefined) update.description = this.description(input.description);
     if (input.priority !== undefined) update.priority = input.priority;
     if (input.deadline !== undefined) update.deadline = this.deadline(input.deadline);
-    if (input.taskCategory !== undefined) update.task_category = this.category(input.taskCategory);
+    if (input.taskCategory !== undefined) update.task_category = await this.category(input.taskCategory);
     let assignmentChanged = false;
     if (input.assignedToUserId !== undefined) {
       const assignee = await this.validateAssignee(input.assignedToUserId, task.owner_division_id);
@@ -277,10 +278,10 @@ export class TaskService {
     if (value.length > 10000) throw new AppError(400, "VALIDATION_ERROR", "Task description is too long");
     return value.trim();
   }
-  private category(value: Task["task_category"] | undefined): Task["task_category"] {
+  private async category(value: Task["task_category"] | undefined): Promise<Task["task_category"]> {
     if (value === undefined || value === null) return null;
-    if (!TASK_CATEGORIES.includes(value)) throw new AppError(400, "TASK_INVALID_CATEGORY", "Task category is not supported");
-    return value;
+    if (!this.categories) throw new AppError(503, "TASK_CATEGORY_CATALOG_UNAVAILABLE", "Task category catalog is unavailable");
+    return this.categories.validate(value);
   }
   private deadline(value: string | null | undefined): string | null {
     if (value === undefined || value === null || value === "") return null;

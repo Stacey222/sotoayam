@@ -2,6 +2,7 @@ import { defineAdminRoutes } from "../auth/admin-authorization.js";
 import { AppError } from "../errors.js";
 import type { TaskActorResolver } from "../services/task-actor.service.js";
 import type { NotificationOperationsService } from "../services/notification-operations.service.js";
+import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
 
 export interface AdminNotificationsRoutesOptions {
   service: NotificationOperationsService; actorResolver: TaskActorResolver; adminApiKey?: string;
@@ -10,8 +11,8 @@ export interface AdminNotificationsRoutesOptions {
 export const adminNotificationsRoutes = defineAdminRoutes<AdminNotificationsRoutesOptions>(async (app, options) => {
   app.addHook("preHandler", async () => {
     const actor = await options.actorResolver.resolveTrustedActor();
-    if (!actor.active || actor.divisionId === null || actor.divisionCode !== "IT" || actor.roleId === null) {
-      throw new AppError(403, "NOTIFICATION_OPERATIONS_FORBIDDEN", "Active IT SYSTEM_ADMIN authority is required");
+    if (!hasSystemAdminCapability(actor)) {
+      throw new AppError(403, "NOTIFICATION_OPERATIONS_FORBIDDEN", "Active SYSTEM_ADMIN authority in an authority-capable division is required");
     }
   });
   app.get("/status", async () => ({ success: true, data: await options.service.status() }));

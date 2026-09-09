@@ -68,16 +68,22 @@ export class UserManagementService {
     let divisionId = user.division?.id ?? null;
     let roleId = user.role?.id ?? null;
     if (update.division !== undefined) {
-      const code = mapLegacyDivision(update.division);
-      if (code === undefined) throw new AppError(400, "VALIDATION_ERROR", "Invalid division");
-      divisionId = code === null ? null : (await this.divisions.findByCode(code))?.id ?? null;
-      if (code !== null && divisionId === null) throw new AppError(400, "VALIDATION_ERROR", "Division not found");
+      const value = update.division.trim();
+      const catalog = await this.divisions.findAll();
+      const normalized = catalog.find((item) => item.name === value || item.code === value.toUpperCase());
+      const fallbackCode = normalized ? undefined : mapLegacyDivision(value);
+      if (!normalized && fallbackCode === undefined) throw new AppError(400, "VALIDATION_ERROR", "Invalid division");
+      divisionId = normalized?.id ?? (fallbackCode === null ? null : (await this.divisions.findByCode(fallbackCode!))?.id ?? null);
+      if (fallbackCode !== null && divisionId === null) throw new AppError(400, "VALIDATION_ERROR", "Division not found");
     }
     if (update.role !== undefined) {
-      const code = mapLegacyRole(update.role);
-      if (code === undefined) throw new AppError(400, "VALIDATION_ERROR", "Invalid role");
-      roleId = code === null ? null : (await this.roles.findByCode(code))?.id ?? null;
-      if (code !== null && roleId === null) throw new AppError(400, "VALIDATION_ERROR", "Role not found");
+      const value = update.role.trim();
+      const catalog = await this.roles.findAll();
+      const normalized = catalog.find((item) => item.name === value || item.code === value.toUpperCase());
+      const fallbackCode = normalized ? undefined : mapLegacyRole(value);
+      if (!normalized && fallbackCode === undefined) throw new AppError(400, "VALIDATION_ERROR", "Invalid role");
+      roleId = normalized?.id ?? (fallbackCode === null ? null : (await this.roles.findByCode(fallbackCode!))?.id ?? null);
+      if (fallbackCode !== null && roleId === null) throw new AppError(400, "VALIDATION_ERROR", "Role not found");
     }
     await this.updateAccess(user.id, {
       division_id: divisionId,

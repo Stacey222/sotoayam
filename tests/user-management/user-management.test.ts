@@ -92,7 +92,7 @@ describe("Slice 2.5 user management acceptance", () => {
   it("32. rejects invalid and numeric-only business identifiers", async () => { users.values = [user()]; await expect(service.updateBusinessUserCode(1, { business_user_code: "12345", confirm_change: false }, "test", 9)).rejects.toMatchObject({ code: "BUSINESS_USER_CODE_INVALID" }); });
   it("33. protects code administration with shared key plus active IT SYSTEM_ADMIN resolution", async () => {
     users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service, adminApiKey: "safe-key",
-      actorResolver: { resolveTrustedActor: async () => ({ id: 9, displayName: "IT", active: true, divisionId: 1, divisionCode: "IT", roleId: 2, roleCode: "ADMIN", permissions: new Set() }) } });
+      actorResolver: { resolveTrustedActor: async () => ({ id: 9, displayName: "IT", active: true, divisionId: 1, divisionCode: "IT", divisionGrantsSystemAuthority: true, roleId: 2, roleCode: "ADMIN", permissions: new Set() }) } });
     const response = await app.inject({ method: "PATCH", url: "/api/admin/users/1/business-user-code", headers: { "x-admin-api-key": "safe-key" }, payload: { business_user_code: "GW-IT-001", confirm_change: false } });
     expect(response.statusCode).toBe(200); expect(response.json().data.business_user_code).toBe("GW-IT-001"); await app.close();
   });

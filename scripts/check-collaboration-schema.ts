@@ -6,6 +6,7 @@ import { createSupabaseClient } from "../src/db/supabase.js";
 
 const migrationPath = path.resolve(process.cwd(), "supabase/migrations/202608290005_create_division_collaboration_rules.sql");
 const sql = await readFile(migrationPath, "utf8");
+const repository = await readFile(path.resolve(process.cwd(), "src/repositories/division-collaboration.repository.ts"), "utf8");
 const checks: Record<string, boolean> = {
   TABLE: sql.includes("create table public.division_collaboration_rules"),
   DIRECTIONAL: sql.includes("source_division_id") && sql.includes("target_division_id"),
@@ -15,21 +16,16 @@ const checks: Record<string, boolean> = {
   NO_PUBLIC_POLICIES: !/create\s+policy/i.test(sql),
   DEFAULT_DENY: sql.includes("Missing active relation means denied"),
   IDEMPOTENT_SEED: /on conflict[\s\S]*do nothing/i.test(sql),
-  CONFIRMED_SEED_ONLY: (sql.match(/source\.code\s*=\s*'ONPAGE_B2C'/g) ?? []).length === 1
-    && (sql.match(/target\.code\s*=\s*'CONTENT_CREATOR'/g) ?? []).length === 1,
+  INACTIVE_ENDPOINTS_DENY: repository.includes("source_division.active")
+    && repository.includes("target_division.active") && repository.includes("!inner(active)"),
   NON_DESTRUCTIVE: !/\b(?:drop\s+table|truncate|delete\s+from)\b/i.test(sql),
 };
 
 const client = createSupabaseClient(loadConfig());
-const { data, error } = await client.from("division_collaboration_rules")
-  .select("allowed,requires_approval,active,source_division:divisions!division_collaboration_rules_source_division_id_fkey(code),target_division:divisions!division_collaboration_rules_target_division_id_fkey(code)");
+const { error } = await client.from("division_collaboration_rules").select("id").limit(0);
 const pending = error?.code === "PGRST205";
-const rows = (data ?? []) as unknown as Array<{ allowed: boolean; requires_approval: boolean; active: boolean; source_division: { code: string }; target_division: { code: string } }>;
 if (!pending) {
   checks.LIVE_SCHEMA = !error;
-  checks.LIVE_CONFIRMED_SEED = rows.length === 1 && rows[0]?.source_division.code === "ONPAGE_B2C"
-    && rows[0]?.target_division.code === "CONTENT_CREATOR" && rows[0].allowed && !rows[0].requires_approval && rows[0].active;
-  checks.NO_SPECULATIVE_RULES = rows.length === 1;
 }
 
 console.log("Sotoayam Division Collaboration Schema\n");

@@ -11,11 +11,11 @@ import { TelegramRegistrationService } from "../../src/services/telegram-registr
 import { UserManagementService } from "../../src/services/user-management.service.js";
 import { TelegramBot } from "../../src/telegram/bot.js";
 import { TelegramItConsoleService } from "../../src/telegram/it-console.js";
-import type { AccessUpdate, BusinessUserCodeUpdate, ManagedUser, UserManagementStatus } from "../../src/user-management/types.js";
+import type { AccessUpdate, BusinessUserCodeUpdate, ManagedDivision, ManagedUser, UserManagementStatus } from "../../src/user-management/types.js";
 
 const now = "2026-08-29T00:00:00.000Z";
-const divisions: Division[] = [
-  { id: 10, code: "IT", name: "Information Technology", active: true, created_at: now, updated_at: now },
+const divisions: ManagedDivision[] = [
+  { id: 10, code: "IT", name: "Information Technology", active: true, grants_system_authority: true, created_at: now, updated_at: now },
   { id: 20, code: "CONTENT_CREATOR", name: "Content Creator", active: true, created_at: now, updated_at: now },
 ];
 const roles: Role[] = [

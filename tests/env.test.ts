@@ -169,4 +169,48 @@ describe("Supabase server credential validation", () => {
       expect(loadConfig().adminApiKey).toHaveLength(33);
     });
   });
+
+  describe("administrator session configuration", () => {
+    beforeEach(() => {
+      vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+      vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+      vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+      vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    });
+
+    it("uses the approved TTL, secure-cookie, proxy, and fallback defaults", () => {
+      vi.stubEnv("SESSION_ABSOLUTE_TTL_SECONDS", "");
+      vi.stubEnv("SESSION_IDLE_TTL_SECONDS", "");
+      vi.stubEnv("SESSION_COOKIE_SECURE", "");
+      vi.stubEnv("TRUST_PROXY", "");
+      vi.stubEnv("ADMIN_API_KEY_FALLBACK_ENABLED", "");
+      expect(loadConfig()).toMatchObject({ sessionAbsoluteTtlSeconds: 43_200,
+        sessionIdleTtlSeconds: 3_600, sessionCookieSecure: true,
+        trustProxy: false, adminApiKeyFallbackEnabled: true });
+    });
+
+    it("allows insecure development cookies only on loopback", () => {
+      vi.stubEnv("SESSION_COOKIE_SECURE", "false");
+      vi.stubEnv("HOST", "localhost");
+      vi.stubEnv("TRUST_PROXY", "false");
+      expect(loadConfig().sessionCookieSecure).toBe(false);
+      vi.stubEnv("HOST", "0.0.0.0");
+      expect(() => loadConfig()).toThrow("SESSION_COOKIE_SECURE=false requires a loopback HOST and TRUST_PROXY=false");
+    });
+
+    it("rejects insecure cookies when proxy trust is enabled, including on loopback", () => {
+      vi.stubEnv("SESSION_COOKIE_SECURE", "false");
+      vi.stubEnv("HOST", "127.0.0.1");
+      vi.stubEnv("TRUST_PROXY", "true");
+      expect(() => loadConfig()).toThrow("SESSION_COOKIE_SECURE=false requires a loopback HOST and TRUST_PROXY=false");
+    });
+
+    it("bounds absolute and idle session lifetimes", () => {
+      vi.stubEnv("SESSION_ABSOLUTE_TTL_SECONDS", "899");
+      expect(() => loadConfig()).toThrow("Invalid environment variable: SESSION_ABSOLUTE_TTL_SECONDS");
+      vi.stubEnv("SESSION_ABSOLUTE_TTL_SECONDS", "900");
+      vi.stubEnv("SESSION_IDLE_TTL_SECONDS", "901");
+      expect(() => loadConfig()).toThrow("Invalid environment variable: SESSION_IDLE_TTL_SECONDS");
+    });
+  });
 });

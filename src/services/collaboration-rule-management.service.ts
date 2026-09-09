@@ -20,13 +20,13 @@ export class CollaborationRuleManagementService implements CollaborationRuleRead
     private readonly audit: AuditRepository,
   ) {}
 
-  async list(): Promise<CollaborationRuleView[]> {
-    await this.authorizedActor();
+  async list(actorUserId?: number): Promise<CollaborationRuleView[]> {
+    await this.authorizedActor(actorUserId);
     return this.rules.listRules();
   }
 
-  async create(input: CreateCollaborationRuleInput): Promise<CollaborationRuleView> {
-    const actorId = await this.authorizedActor();
+  async create(input: CreateCollaborationRuleInput, actorUserId?: number): Promise<CollaborationRuleView> {
+    const actorId = await this.authorizedActor(actorUserId);
     await this.validateRelation(input.sourceDivisionId, input.targetDivisionId);
     if (!input.allowed && input.requiresApproval) {
       throw new AppError(400, "COLLABORATION_NOT_ALLOWED", "A denied rule cannot require approval");
@@ -42,8 +42,8 @@ export class CollaborationRuleManagementService implements CollaborationRuleRead
     return created;
   }
 
-  async update(id: number, input: UpdateCollaborationRuleInput): Promise<CollaborationRuleView> {
-    const actorId = await this.authorizedActor();
+  async update(id: number, input: UpdateCollaborationRuleInput, actorUserId?: number): Promise<CollaborationRuleView> {
+    const actorId = await this.authorizedActor(actorUserId);
     const current = await this.required(id);
     const wasActive = current.active;
     const allowed = input.allowed ?? current.allowed;
@@ -66,11 +66,11 @@ export class CollaborationRuleManagementService implements CollaborationRuleRead
     return updated;
   }
 
-  deactivate(id: number): Promise<CollaborationRuleView> { return this.update(id, { active: false }); }
+  deactivate(id: number, actorUserId?: number): Promise<CollaborationRuleView> { return this.update(id, { active: false }, actorUserId); }
 
-  private async authorizedActor(): Promise<number> {
-    const actor = await this.taskUsers.findTrustedAdminActorUser();
-    const normalized = await this.users.get(actor.id);
+  private async authorizedActor(actorUserId?: number): Promise<number> {
+    const id = actorUserId ?? (await this.taskUsers.findTrustedAdminActorUser()).id;
+    const normalized = await this.users.get(id);
     if (!hasSystemAdminCapability({
       active: normalized.active,
       divisionId: normalized.division?.id ?? null,

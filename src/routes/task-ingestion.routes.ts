@@ -5,7 +5,7 @@ import { CSV_MAX_BYTES } from "../ingestion/csv-parser.js";
 import { parseAutomationIntake } from "../ingestion/automation-validation.js";
 import type { TaskSourceIntegrationsRepository } from "../repositories/task-ingestion.repository.js";
 import { secureEqual } from "../security.js";
-import type { TaskActorResolver } from "../services/task-actor.service.js";
+import { resolveAdminActor, type TaskActorResolver } from "../services/task-actor.service.js";
 import type { TaskIngestionService } from "../services/task-ingestion.service.js";
 
 export interface CsvImportRoutesOptions { service: TaskIngestionService; actorResolver: TaskActorResolver; adminApiKey?: string }
@@ -17,7 +17,7 @@ export const csvImportRoutes = defineAdminRoutes<CsvImportRoutesOptions>(async (
     if (typeof request.body !== "string") throw new AppError(400, "CSV_CONTENT_TYPE_REQUIRED", "Use text/csv with a UTF-8 CSV body");
     const dryRun = booleanQuery(request.query.dry_run);
     const safeLabel = importLabel(request.headers["x-import-label"]);
-    const actor = await options.actorResolver.resolveTrustedActor();
+    const actor = await resolveAdminActor(options.actorResolver, request.adminPrincipal);
     return { success: true, data: await options.service.importCsv(actor, request.body, { dryRun, safeLabel }) };
   });
 });

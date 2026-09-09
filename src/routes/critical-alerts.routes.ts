@@ -1,12 +1,19 @@
 import { defineAdminRoutes } from "../auth/admin-authorization.js";
 import { AppError } from "../errors.js";
-import type { OwnerActorResolver, TaskActorResolver } from "../services/task-actor.service.js";
+import { resolveAdminActor, type OwnerActorResolver, type TaskActorResolver } from "../services/task-actor.service.js";
 import type { CriticalAlertService } from "../services/critical-alert.service.js";
 import type { CriticalAlertEvaluatorService } from "../services/critical-alert-evaluator.service.js";
 import type { PersistedAlertSeverity } from "../alerts/types.js";
 import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
 
-export const criticalAlertsRoutes = defineAdminRoutes<{ service: CriticalAlertService; actorResolver: OwnerActorResolver; adminApiKey?: string }>(async (app, options) => {
+export const criticalAlertsRoutes = defineAdminRoutes<{ service: CriticalAlertService; actorResolver: OwnerActorResolver;
+  adminActorResolver?: TaskActorResolver; adminApiKey?: string }>(async (app, options) => {
+  app.addHook("preHandler", async (request) => {
+    if (request.adminPrincipal?.kind !== "session") return;
+    if (!options.adminActorResolver) throw new AppError(503, "ALERT_ADMIN_UNAVAILABLE", "Administrator actor resolution is unavailable");
+    const admin = await resolveAdminActor(options.adminActorResolver, request.adminPrincipal);
+    if (!hasSystemAdminCapability(admin)) throw new AppError(403, "ALERT_FORBIDDEN", "Active SYSTEM_ADMIN authority is required");
+  });
   app.get("/", async (request) => {
     const raw = (request.query as { severity?: unknown }).severity;
     if (raw !== undefined && !["WARNING", "HIGH", "CRITICAL"].includes(String(raw))) throw new AppError(400, "ALERT_SEVERITY_INVALID", "Alert severity filter is invalid");
@@ -19,8 +26,8 @@ export const criticalAlertsRoutes = defineAdminRoutes<{ service: CriticalAlertSe
 }, { unauthorizedMessage: "Invalid or missing alert API key" });
 
 export const adminCriticalAlertRoutes = defineAdminRoutes<{ evaluator: CriticalAlertEvaluatorService; actorResolver: TaskActorResolver; adminApiKey?: string }>(async (app, options) => {
-  app.addHook("preHandler", async () => {
-    const actor = await options.actorResolver.resolveTrustedActor();
+  app.addHook("preHandler", async (request) => {
+    const actor = await resolveAdminActor(options.actorResolver, request.adminPrincipal);
     if (!hasSystemAdminCapability(actor)) throw new AppError(403, "CRITICAL_ALERT_OPERATIONS_FORBIDDEN", "Active SYSTEM_ADMIN authority in an authority-capable division is required");
   });
   app.post("/evaluate", async (request) => {

@@ -19,6 +19,11 @@ export interface AppConfig extends SupabaseConfig {
   criticalAlertEvaluatorEnabled: boolean;
   criticalAlertPolicy: CriticalAlertPolicy;
   logLevel: string;
+  sessionAbsoluteTtlSeconds: number;
+  sessionIdleTtlSeconds: number;
+  sessionCookieSecure: boolean;
+  trustProxy: boolean;
+  adminApiKeyFallbackEnabled: boolean;
 }
 
 function parseHost(value: string | undefined): string {
@@ -80,6 +85,25 @@ function parseSchedulerInterval(value: string | undefined): number {
   return seconds;
 }
 
+function parseBoolean(name: string, value: string | undefined, defaultValue: boolean): boolean {
+  if (value === undefined || value.trim() === "") return defaultValue;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new Error(`Invalid environment variable: ${name}`);
+}
+
+function parseBoundedInteger(name: string, value: string | undefined, defaultValue: number, minimum: number, maximum: number): number {
+  const parsed = Number(value?.trim() || defaultValue);
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`Invalid environment variable: ${name}`);
+  }
+  return parsed;
+}
+
+function isLoopbackHost(host: string | undefined): boolean {
+  return host === "127.0.0.1" || host === "::1" || host === "localhost";
+}
+
 function parseBusinessTimeZone(value: string | undefined): string {
   const timeZone = value?.trim() || "UTC";
   try {
@@ -92,12 +116,22 @@ function parseBusinessTimeZone(value: string | undefined): string {
 
 export function loadConfig(): AppConfig {
   const supabase = loadSupabaseConfig();
+  const host = parseHost(process.env.HOST);
+  const sessionAbsoluteTtlSeconds = parseBoundedInteger("SESSION_ABSOLUTE_TTL_SECONDS",
+    process.env.SESSION_ABSOLUTE_TTL_SECONDS, 43_200, 900, 604_800);
+  const sessionIdleTtlSeconds = parseBoundedInteger("SESSION_IDLE_TTL_SECONDS",
+    process.env.SESSION_IDLE_TTL_SECONDS, 3_600, 300, sessionAbsoluteTtlSeconds);
+  const sessionCookieSecure = parseBoolean("SESSION_COOKIE_SECURE", process.env.SESSION_COOKIE_SECURE, true);
+  const trustProxy = parseBoolean("TRUST_PROXY", process.env.TRUST_PROXY, false);
+  if (!sessionCookieSecure && (!isLoopbackHost(host) || trustProxy)) {
+    throw new Error("Invalid environment: SESSION_COOKIE_SECURE=false requires a loopback HOST and TRUST_PROXY=false");
+  }
   const config: AppConfig = {
     ...supabase,
     telegramBotToken: requireEnv("TELEGRAM_BOT_TOKEN"),
     internalApiKey: requireEnv("INTERNAL_API_KEY"),
     adminApiKey: requireMinimumLengthEnv("ADMIN_API_KEY", 32),
-    host: parseHost(process.env.HOST),
+    host,
     port: parsePort(process.env.PORT),
     telegramPollingEnabled: process.env.TELEGRAM_POLLING_ENABLED === "true",
     reminderSchedulerEnabled: process.env.REMINDER_SCHEDULER_ENABLED === "true",
@@ -106,6 +140,11 @@ export function loadConfig(): AppConfig {
     criticalAlertEvaluatorEnabled: process.env.CRITICAL_ALERT_EVALUATOR_ENABLED === "true",
     criticalAlertPolicy: parseCriticalAlertPolicy(process.env.CRITICAL_ALERT_POLICY_JSON),
     logLevel: process.env.LOG_LEVEL?.trim() || "info",
+    sessionAbsoluteTtlSeconds,
+    sessionIdleTtlSeconds,
+    sessionCookieSecure,
+    trustProxy,
+    adminApiKeyFallbackEnabled: parseBoolean("ADMIN_API_KEY_FALLBACK_ENABLED", process.env.ADMIN_API_KEY_FALLBACK_ENABLED, true),
   };
   if (config.criticalAlertEvaluatorEnabled && !config.reminderSchedulerEnabled) {
     throw new Error("Invalid environment: CRITICAL_ALERT_EVALUATOR_ENABLED requires REMINDER_SCHEDULER_ENABLED");

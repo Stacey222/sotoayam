@@ -29,16 +29,16 @@ Persyaratan: versi Node.js pada `.node-version` dan project Supabase.
    - instalasi lama: `npm run setup -- --keep-existing-taxonomy --division-code EXISTING_DIVISION`.
    Pada mode fresh, setup membuat Divisi nyata pertama milik customer dan administrator pertama di dalam satu transaksi.
 6. Setelah setup fresh, restart service bila sudah berjalan agar provenance baru dibaca. Untuk development lokal, jalankan `npm run dev`.
-7. Buka `http://localhost:3000`.
+7. Buka `http://localhost:3000`, lalu masuk dengan email dan password administrator yang dibuat oleh setup. Untuk localhost HTTP saja, set `SESSION_COOKIE_SECURE=false` dengan `TRUST_PROXY=false`; cookie tidak aman ditolak pada host non-loopback atau saat proxy trust aktif.
 8. Jalankan test: `npm test`; typecheck/build: `npm run typecheck` dan `npm run build`.
 
 Environment wajib: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TOKEN`, `INTERNAL_API_KEY`, dan `ADMIN_API_KEY` dengan panjang minimal 32 karakter. Untuk kompatibilitas instalasi lama, backend juga menerima alias `SUPABASE_SERVICE_KEY`, tetapi nama canonical yang dianjurkan adalah `SUPABASE_SERVICE_ROLE_KEY`.
 
-Environment opsional: `PORT`, `TELEGRAM_POLLING_ENABLED`, dan `LOG_LEVEL`. Seluruh Admin API wajib menerima header `X-Admin-Api-Key`; tombol **Admin Key** pada UI menyimpannya hanya di `sessionStorage` tab browser.
+Environment sesi opsional: `SESSION_ABSOLUTE_TTL_SECONDS` (default 12 jam), `SESSION_IDLE_TTL_SECONDS` (default 1 jam), `SESSION_COOKIE_SECURE` (default `true`), `TRUST_PROXY` (default `false`), dan `ADMIN_API_KEY_FALLBACK_ENABLED` (sementara default `true`). UI memakai cookie sesi `HttpOnly`, tidak pernah menerima atau menyimpan `ADMIN_API_KEY`, dan mengirim token CSRF pada perubahan data. Production wajib memakai HTTPS; aktifkan `TRUST_PROXY=true` hanya di belakang reverse proxy tepercaya.
 
 ## Legacy Compatibility Identifiers
 
-Instalasi lama dapat memiliki nama teknis yang sudah menjadi kontrak deployment atau data persisten: path `/opt/gwens-automation`, unit `gwens-automation.service`, akun/grup sistem `gwens`, project ID Supabase lokal `gwensoto`, key browser `gwens-admin-key`, contract ID `GWENS_LEGACY_SCHEMA_V1`, serta advisory-lock key `gwens_*` di migration historis. Jangan mengubahnya tanpa migrasi deployment, browser state, dan database yang terkoordinasi. Identifier tersebut hanya untuk kompatibilitas; identitas produk resminya adalah Sotoayam, dan identifier project lokal tidak disertakan dalam release archive customer.
+Instalasi lama dapat memiliki nama teknis yang sudah menjadi kontrak deployment atau data persisten: path `/opt/gwens-automation`, unit `gwens-automation.service`, akun/grup sistem `gwens`, project ID Supabase lokal `gwensoto`, contract ID `GWENS_LEGACY_SCHEMA_V1`, serta advisory-lock key `gwens_*` di migration historis. Jangan mengubahnya tanpa migrasi deployment dan database yang terkoordinasi. Penyimpanan browser legacy `gwens-admin-key` telah dipensiunkan oleh migrasi sesi P1-01 dan tidak lagi dibaca. Identifier lain tersebut hanya untuk kompatibilitas; identitas produk resminya adalah Sotoayam.
 
 Telegram polling memakai `getUpdates`. Jangan jalankan lebih dari satu instance polling dengan token yang sama. Set `TELEGRAM_POLLING_ENABLED=false` pada instance tambahan atau saat memakai integrasi lain.
 
@@ -102,4 +102,6 @@ Pengiriman memakai `Promise.allSettled`, jadi kegagalan satu recipient tidak mem
 - Notification endpoint selalu dilindungi shared secret dengan perbandingan constant-time berbasis digest.
 - RLS diaktifkan pada tabel tanpa policy client; akses data dilakukan backend service role.
 - Error response tidak mengirim stack trace atau environment value.
-- `ADMIN_API_KEY` adalah proteksi MVP. Upgrade yang disarankan sebelum production adalah identity-based admin authentication, audit log, rate limiting, dan secret rotation.
+- Administrator manusia masuk dengan password scrypt dan sesi opaque yang hanya disimpan sebagai SHA-256 di database. Cookie sesi `HttpOnly`, `Secure`, `SameSite=Strict`; masa absolut, idle timeout, revocation langsung, CSRF, cooldown login, dan audit actor diterapkan server-side.
+- `ADMIN_API_KEY` tetap diwajibkan sementara sebagai fallback kompatibilitas Stage A dan dapat dimatikan dengan `ADMIN_API_KEY_FALLBACK_ENABLED=false`. UI tidak menggunakan fallback ini. Penggunaan fallback dicatat sekali per proses.
+- Pemulihan password dilakukan dari server dengan `npm run admin:reset-password -- --email <address>`; prompt tidak menampilkan password dan seluruh sesi akun dicabut.

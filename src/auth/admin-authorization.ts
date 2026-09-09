@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { AppError } from "../errors.js";
 import { secureEqual } from "../security.js";
+import type { AdminSessionAuthenticator, SessionPrincipal } from "./admin-session.js";
 
 export const ADMIN_API_KEY_HEADER = "x-admin-api-key";
 export const DEFAULT_ADMIN_UNAUTHORIZED_MESSAGE = "Invalid or missing admin API key";
@@ -8,19 +9,15 @@ export const DEFAULT_ADMIN_UNAUTHORIZED_MESSAGE = "Invalid or missing admin API 
 /** Marks a plugin produced by defineAdminRoutes so tests can assert protection structurally. */
 export const ADMIN_ROUTE_SCOPE = Symbol.for("sotoayam.adminRouteScope");
 
-/**
- * The authenticated admin principal.
- * Phase 1 (P1-01) extends this with real identity (adminUserId, roles, sessionId)
- * and adds a "session" kind. Route bodies read this, never the header.
- */
-export interface AdminPrincipal {
-  readonly kind: "shared-api-key";
-}
+export type AdminPrincipal = SessionPrincipal | { readonly kind: "shared-api-key" };
 
 /** Options every admin route group must accept. Optional at the type level so existing call
  * sites and the SEC-001 regression table compile unchanged; absence is denied at runtime. */
 export interface AdminAuthorizedRouteOptions {
   adminApiKey?: string;
+  adminApiKeyFallbackEnabled?: boolean;
+  sessionAuthenticator?: AdminSessionAuthenticator;
+  onApiKeyFallback?: () => void | Promise<void>;
 }
 
 export interface AdminRouteScopeSettings {
@@ -36,18 +33,29 @@ declare module "fastify" {
 }
 
 /** The single implementation of admin credential validation. Fail-closed by construction. */
-export function resolveAdminPrincipal(
+export async function resolveAdminPrincipal(
   request: FastifyRequest,
   options: AdminAuthorizedRouteOptions,
   settings: AdminRouteScopeSettings = {},
-): AdminPrincipal {
+): Promise<AdminPrincipal> {
+  const session = await options.sessionAuthenticator?.authenticate(request);
+  if (session) return session;
   const configuredKey = options.adminApiKey;
   const providedKey = request.headers[ADMIN_API_KEY_HEADER];
-  if (!configuredKey || typeof providedKey !== "string" || !secureEqual(providedKey, configuredKey)) {
+  if (options.adminApiKeyFallbackEnabled === false || !configuredKey
+    || typeof providedKey !== "string" || !secureEqual(providedKey, configuredKey)) {
     throw new AppError(401, "UNAUTHORIZED",
       settings.unauthorizedMessage ?? DEFAULT_ADMIN_UNAUTHORIZED_MESSAGE);
   }
+  await options.onApiKeyFallback?.();
   return { kind: "shared-api-key" };
+}
+
+export function requireSessionPrincipal(request: FastifyRequest): SessionPrincipal {
+  if (request.adminPrincipal?.kind !== "session") {
+    throw new AppError(401, "SESSION_REQUIRED", "An authenticated administrator session is required");
+  }
+  return request.adminPrincipal;
 }
 
 /** Wraps a route body in an encapsulated, admin-authorized Fastify scope. */
@@ -58,7 +66,11 @@ export function defineAdminRoutes<Options extends AdminAuthorizedRouteOptions>(
   const scope = async (app: FastifyInstance, options: Options): Promise<void> => {
     if (!app.hasRequestDecorator("adminPrincipal")) app.decorateRequest("adminPrincipal", null);
     app.addHook("preHandler", async (request) => {
-      request.adminPrincipal = resolveAdminPrincipal(request, options, settings);
+      request.adminPrincipal = await resolveAdminPrincipal(request, options, settings);
+      if (request.adminPrincipal.kind === "session" && !["GET", "HEAD", "OPTIONS"].includes(request.method)
+        && !options.sessionAuthenticator?.verifyCsrf(request, request.adminPrincipal)) {
+        throw new AppError(403, "CSRF_INVALID", "A valid CSRF token is required");
+      }
     });
     await routes(app, options);
   };

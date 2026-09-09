@@ -17,6 +17,7 @@ export interface TaskUsersRepository {
   findById(id: number): Promise<TaskUser | null>;
   findTrustedAdminActorUser(): Promise<TaskUser>;
   findTrustedOwnerActorUser?(): Promise<TaskUser>;
+  hasActiveSystemAdminAuthority?(userId: number): Promise<boolean>;
 }
 
 export interface TaskDirectoryRepository {
@@ -86,6 +87,14 @@ export class SupabaseTaskUsersRepository implements TaskUsersRepository, TaskDir
     const user = await this.findById(ids[0]!);
     if (!user) throw new AppError(503, "TASK_ACTOR_UNAVAILABLE", "Trusted task actor no longer exists");
     return user;
+  }
+
+  async hasActiveSystemAdminAuthority(userId: number): Promise<boolean> {
+    const { count, error } = await this.client.from("system_authority_assignments")
+      .select("id", { count: "exact", head: true }).eq("user_id", userId)
+      .eq("authority_code", "SYSTEM_ADMIN").is("revoked_at", null);
+    if (error) throw governanceDatabaseError("Unable to resolve administrator authority", error);
+    return (count ?? 0) >= 1;
   }
 
   async findTrustedOwnerActorUser(): Promise<TaskUser> {

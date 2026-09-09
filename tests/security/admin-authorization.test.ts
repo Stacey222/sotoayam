@@ -16,14 +16,14 @@ function requestWithAdminHeader(value?: string | string[]): FastifyRequest {
   } as unknown as FastifyRequest;
 }
 
-function expectUnauthorized(
+async function expectUnauthorized(
   request: FastifyRequest,
   adminApiKey: string | undefined,
   message = DEFAULT_ADMIN_UNAUTHORIZED_MESSAGE,
-): void {
+): Promise<void> {
   let thrown: unknown;
   try {
-    resolveAdminPrincipal(request, { adminApiKey }, { unauthorizedMessage: message });
+    await resolveAdminPrincipal(request, { adminApiKey }, { unauthorizedMessage: message });
   } catch (error) {
     thrown = error;
   }
@@ -31,33 +31,33 @@ function expectUnauthorized(
 }
 
 describe("centralized admin authorization", () => {
-  it("rejects when no admin API key is configured", () => {
-    expectUnauthorized(requestWithAdminHeader(ADMIN_API_KEY), undefined);
+  it("rejects when no admin API key is configured", async () => {
+    await expectUnauthorized(requestWithAdminHeader(ADMIN_API_KEY), undefined);
   });
 
-  it("rejects when the configured admin API key is empty", () => {
-    expectUnauthorized(requestWithAdminHeader(ADMIN_API_KEY), "");
+  it("rejects when the configured admin API key is empty", async () => {
+    await expectUnauthorized(requestWithAdminHeader(ADMIN_API_KEY), "");
   });
 
-  it("rejects when the request header is missing", () => {
-    expectUnauthorized(requestWithAdminHeader(), ADMIN_API_KEY);
+  it("rejects when the request header is missing", async () => {
+    await expectUnauthorized(requestWithAdminHeader(), ADMIN_API_KEY);
   });
 
-  it("rejects when the request key is wrong", () => {
-    expectUnauthorized(requestWithAdminHeader("wrong-admin-key"), ADMIN_API_KEY);
+  it("rejects when the request key is wrong", async () => {
+    await expectUnauthorized(requestWithAdminHeader("wrong-admin-key"), ADMIN_API_KEY);
   });
 
-  it("resolves the shared-key principal when the request key matches", () => {
-    expect(resolveAdminPrincipal(requestWithAdminHeader(ADMIN_API_KEY), { adminApiKey: ADMIN_API_KEY }))
+  it("resolves the shared-key principal when the request key matches", async () => {
+    expect(await resolveAdminPrincipal(requestWithAdminHeader(ADMIN_API_KEY), { adminApiKey: ADMIN_API_KEY }))
       .toEqual({ kind: "shared-api-key" });
   });
 
-  it("rejects a duplicated header represented as an array with 401", () => {
-    expectUnauthorized(requestWithAdminHeader([ADMIN_API_KEY, ADMIN_API_KEY]), ADMIN_API_KEY);
+  it("rejects a duplicated header represented as an array with 401", async () => {
+    await expectUnauthorized(requestWithAdminHeader([ADMIN_API_KEY, ADMIN_API_KEY]), ADMIN_API_KEY);
   });
 
-  it("preserves a custom unauthorized message", () => {
-    expectUnauthorized(requestWithAdminHeader("wrong-admin-key"), ADMIN_API_KEY, "Invalid or missing report API key");
+  it("preserves a custom unauthorized message", async () => {
+    await expectUnauthorized(requestWithAdminHeader("wrong-admin-key"), ADMIN_API_KEY, "Invalid or missing report API key");
   });
 
   it("marks wrapped route plugins and not bare route functions", () => {

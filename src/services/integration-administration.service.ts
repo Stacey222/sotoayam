@@ -16,11 +16,11 @@ export class IntegrationAdministrationService {
     private readonly authorities: SystemAuthorityRepository,
   ) {}
 
-  async list() { await this.authorizedActor(); return this.integrations.list(); }
-  async listCapabilities(id: number) { await this.authorizedActor(); await this.required(id); return this.integrations.listCapabilities(id); }
+  async list(actorUserId?: number) { await this.authorizedActor(actorUserId); return this.integrations.list(); }
+  async listCapabilities(id: number, actorUserId?: number) { await this.authorizedActor(actorUserId); await this.required(id); return this.integrations.listCapabilities(id); }
 
-  async create(input: { code: string; name: string; source: "AUTOMATION" | "ERP"; requestingDivisionId: number }) {
-    const actorId = await this.authorizedActor();
+  async create(input: { code: string; name: string; source: "AUTOMATION" | "ERP"; requestingDivisionId: number }, actorUserId?: number) {
+    const actorId = await this.authorizedActor(actorUserId);
     const code = input.code.trim().toUpperCase();
     const name = input.name.trim();
     if (!/^[A-Z][A-Z0-9_]{0,99}$/.test(code)) throw new AppError(400, "INTEGRATION_INVALID", "Integration code is invalid");
@@ -30,18 +30,18 @@ export class IntegrationAdministrationService {
     return this.integrations.create({ ...input, code, name, actorUserId: actorId });
   }
 
-  async setActive(id: number, active: boolean) {
-    const actorId = await this.authorizedActor(); await this.required(id);
+  async setActive(id: number, active: boolean, actorUserId?: number) {
+    const actorId = await this.authorizedActor(actorUserId); await this.required(id);
     return this.integrations.setActive(id, active, actorId);
   }
 
-  async grantCapability(id: number, capability: string) {
-    const actorId = await this.authorizedActor(); await this.required(id);
+  async grantCapability(id: number, capability: string, actorUserId?: number) {
+    const actorId = await this.authorizedActor(actorUserId); await this.required(id);
     return this.integrations.grantCapability(id, this.capability(capability), actorId);
   }
 
-  async revokeCapability(id: number, capability: string) {
-    const actorId = await this.authorizedActor(); await this.required(id);
+  async revokeCapability(id: number, capability: string, actorUserId?: number) {
+    const actorId = await this.authorizedActor(actorUserId); await this.required(id);
     return this.integrations.revokeCapability(id, this.capability(capability), actorId);
   }
 
@@ -59,9 +59,9 @@ export class IntegrationAdministrationService {
     return integration;
   }
 
-  private async authorizedActor(): Promise<number> {
-    const actor = await this.taskUsers.findTrustedAdminActorUser();
-    const user = await this.users.get(actor.id);
+  private async authorizedActor(actorUserId?: number): Promise<number> {
+    const id = actorUserId ?? (await this.taskUsers.findTrustedAdminActorUser()).id;
+    const user = await this.users.get(id);
     if (!hasSystemAdminCapability({
       active: user.active,
       divisionId: user.division?.id ?? null,

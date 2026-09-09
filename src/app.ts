@@ -1,5 +1,6 @@
 import path from "node:path";
 import fastifyStatic from "@fastify/static";
+import fastifyCookie from "@fastify/cookie";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/env.js";
 import { createSupabaseClient } from "./db/supabase.js";
@@ -78,6 +79,10 @@ import { TelegramItConsoleService } from "./telegram/it-console.js";
 import { TelegramTaskConsoleService } from "./telegram/task-console.js";
 import { TelegramOwnerConsoleService } from "./telegram/owner-console.js";
 import { RuntimeHealthState } from "./runtime/health-state.js";
+import { SupabaseAdminSessionRepository } from "./repositories/admin-session.repository.js";
+import { DatabaseAdminSessionAuthenticator } from "./auth/admin-session.js";
+import { AdminAuthenticationService } from "./services/admin-authentication.service.js";
+import { adminAuthRoutes } from "./routes/admin-auth.routes.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -97,7 +102,9 @@ export interface AppRuntime {
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
-  const app = Fastify({ logger: options.logger === false ? false : { level: options.config.logLevel } });
+  const app = Fastify({ logger: options.logger === false ? false : { level: options.config.logLevel },
+    trustProxy: options.config.trustProxy });
+  await app.register(fastifyCookie);
   const runtimeHealth = new RuntimeHealthState();
   const client = options.repository ? null : createSupabaseClient(options.config);
   const repository = options.repository ?? new SupabaseTelegramUsersRepository(client!);
@@ -144,6 +151,22 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const taskUsers = client ? new SupabaseTaskUsersRepository(client) : undefined;
   const collaborationRepository = client ? new SupabaseDivisionCollaborationRepository(client) : undefined;
   const permissionsRepository = client ? new SupabasePermissionsRepository(client) : undefined;
+  const adminActorResolver = taskUsers && permissionsRepository
+    ? new TrustedTaskActorService(taskUsers, permissionsRepository) : undefined;
+  const adminSessionRepository = client ? new SupabaseAdminSessionRepository(client) : undefined;
+  const adminAuthenticationService = adminSessionRepository ? new AdminAuthenticationService(
+    adminSessionRepository, options.config.sessionAbsoluteTtlSeconds, new SupabaseAuditRepository(client!),
+    (message) => app.log.warn(message),
+  ) : undefined;
+  const sessionAuthenticator = adminSessionRepository ? new DatabaseAdminSessionAuthenticator(
+    adminSessionRepository, options.config.sessionCookieSecure, options.config.sessionIdleTtlSeconds,
+  ) : undefined;
+  const adminAuthorization = {
+    adminApiKey: options.config.adminApiKey,
+    adminApiKeyFallbackEnabled: options.config.adminApiKeyFallbackEnabled,
+    sessionAuthenticator,
+    onApiKeyFallback: adminAuthenticationService ? () => adminAuthenticationService.observeApiKeyFallback() : undefined,
+  };
   const taskCategoryService = client ? new TaskCategoryService(new SupabaseTaskCategoriesRepository(client)) : undefined;
   const taxonomyManagementService = divisionsRepository && rolesRepository
     ? new TaxonomyManagementService(divisionsRepository, rolesRepository) : undefined;
@@ -261,48 +284,54 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   }));
 
   await app.register(healthRoutes);
+  if (adminAuthenticationService && sessionAuthenticator) await app.register(adminAuthRoutes, {
+    prefix: "/api/admin/auth", service: adminAuthenticationService,
+    authenticator: sessionAuthenticator, cookieSecure: options.config.sessionCookieSecure,
+  });
   await app.register(usersRoutes, {
     prefix: "/api/users",
     repository,
-    adminApiKey: options.config.adminApiKey,
+    ...adminAuthorization,
     accessService: userManagementService,
   });
   if (userManagementService) await app.register(adminUserManagementRoutes, {
     prefix: "/api/admin/users",
     service: userManagementService,
-    adminApiKey: options.config.adminApiKey,
-    actorResolver: taskUsers && permissionsRepository ? new TrustedTaskActorService(taskUsers, permissionsRepository) : undefined,
+    ...adminAuthorization,
+    actorResolver: adminActorResolver,
   });
   if (systemAuthorityService) await app.register(systemAuthorityRoutes, {
     prefix: "/api/admin/system-authority",
     service: systemAuthorityService,
-    adminApiKey: options.config.adminApiKey,
-    actorResolver: taskUsers && permissionsRepository ? new TrustedTaskActorService(taskUsers, permissionsRepository) : undefined,
+    ...adminAuthorization,
+    actorResolver: adminActorResolver,
   });
   if (taxonomyManagementService && taskCategoryService && taskUsers && permissionsRepository) await app.register(taxonomyRoutes, {
     prefix: "/api/admin", service: taxonomyManagementService, categories: taskCategoryService,
-    actorResolver: new TrustedTaskActorService(taskUsers, permissionsRepository), adminApiKey: options.config.adminApiKey,
+    actorResolver: adminActorResolver!, ...adminAuthorization,
   });
   if (collaborationManagementService) await app.register(collaborationRulesRoutes, {
     prefix: "/api/admin/collaboration-rules",
     service: collaborationManagementService,
-    adminApiKey: options.config.adminApiKey,
+    actorResolver: adminActorResolver,
+    ...adminAuthorization,
   });
   if (integrationAdministrationService) await app.register(integrationAdministrationRoutes, {
-    prefix: "/api/admin/integrations", service: integrationAdministrationService, adminApiKey: options.config.adminApiKey,
+    prefix: "/api/admin/integrations", service: integrationAdministrationService,
+    actorResolver: adminActorResolver, ...adminAuthorization,
   });
   if (taskService && taskUsers && permissionsRepository) {
     await app.register(tasksRoutes, {
       prefix: "/api/tasks",
       service: taskService,
-      actorResolver: new TrustedTaskActorService(taskUsers, permissionsRepository),
-      adminApiKey: options.config.adminApiKey,
+      actorResolver: adminActorResolver!,
+      ...adminAuthorization,
     });
   }
   if (taskIngestionService && taskUsers && permissionsRepository) {
     const actorResolver = new TrustedTaskActorService(taskUsers, permissionsRepository);
     await app.register(csvImportRoutes, {
-      prefix: "/api/tasks/import", service: taskIngestionService, actorResolver, adminApiKey: options.config.adminApiKey,
+      prefix: "/api/tasks/import", service: taskIngestionService, actorResolver, ...adminAuthorization,
     });
     await app.register(internalTaskIngestionRoutes, {
       prefix: "/api/internal", service: taskIngestionService,
@@ -311,20 +340,22 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   }
   if (notificationOperations && taskUsers && permissionsRepository) {
     await app.register(adminNotificationsRoutes, { prefix: "/api/admin/notifications", service: notificationOperations,
-      actorResolver: new TrustedTaskActorService(taskUsers, permissionsRepository), adminApiKey: options.config.adminApiKey });
+      actorResolver: adminActorResolver!, ...adminAuthorization });
   }
   if (reportingService && taskUsers) {
     await app.register(reportsRoutes, { prefix: "/api/reports", service: reportingService,
-      actorResolver: new TrustedOwnerActorService(taskUsers, permissionsRepository!), adminApiKey: options.config.adminApiKey,
+      actorResolver: new TrustedOwnerActorService(taskUsers, permissionsRepository!), adminActorResolver,
+      ...adminAuthorization,
       legacyAliasEnabled: installationLineage !== "FRESH" });
   }
   if (criticalAlertService && taskUsers) {
     await app.register(criticalAlertsRoutes, { prefix: "/api/alerts", service: criticalAlertService,
-      actorResolver: new TrustedOwnerActorService(taskUsers, permissionsRepository!), adminApiKey: options.config.adminApiKey });
+      actorResolver: new TrustedOwnerActorService(taskUsers, permissionsRepository!), adminActorResolver,
+      ...adminAuthorization });
   }
   if (criticalAlertEvaluator && taskUsers && permissionsRepository) {
     await app.register(adminCriticalAlertRoutes, { prefix: "/api/admin/alerts", evaluator: criticalAlertEvaluator,
-      actorResolver: new TrustedTaskActorService(taskUsers, permissionsRepository), adminApiKey: options.config.adminApiKey });
+      actorResolver: adminActorResolver!, ...adminAuthorization });
   }
   await app.register(notificationRoutes, {
     prefix: "/api/notifications",

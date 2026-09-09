@@ -68,6 +68,11 @@ Create `${APP_ROOT}/shared/.env` from `.env.example` in the repository, then rep
 | `CRITICAL_ALERT_POLICY_JSON` | Optional | Validated policy override |
 | `BUSINESS_TIME_ZONE` | Optional | Defaults to `UTC`. Choose the customer's zone; stored timestamps stay UTC |
 | `LOG_LEVEL` | Optional | Defaults to `info` |
+| `SESSION_ABSOLUTE_TTL_SECONDS` | Optional | Defaults to `43200` (12 hours); allowed 900â€“604800 |
+| `SESSION_IDLE_TTL_SECONDS` | Optional | Defaults to `3600`; allowed 300 through the absolute TTL |
+| `SESSION_COOKIE_SECURE` | Optional | Defaults to `true`. Production requires HTTPS; `false` is accepted only when `HOST` is loopback and `TRUST_PROXY=false` |
+| `TRUST_PROXY` | Optional | Defaults to `false`; set `true` only behind the trusted TLS reverse proxy so login throttling sees the client IP |
+| `ADMIN_API_KEY_FALLBACK_ENABLED` | Optional | Stage A compatibility fallback, default `true`. The browser never uses it |
 | `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF` | **Deploy-time only** | Required by the deployment script to reach your database. Supply them in the operator's protected environment. **Never** put them in `shared/.env`, the package, or shell history |
 | `SOTOAYAM_BOOTSTRAP_ADMIN_PASSWORD` | **Setup-time only** | Optional automation fallback for the first-administrator password. Prefer `--password-file` or the prompt. Remove it immediately after setup |
 
@@ -158,7 +163,9 @@ Expected: `{"status":"ok"}`.
 
 This restart is required after fresh setup. Skipping it leaves an obsolete legacy report route registered until the next restart.
 
-Confirm the installation is administratively ready:
+Confirm the installation is administratively ready by opening the HTTPS admin URL and signing in with the email and password created by setup. The browser receives a short-lived `HttpOnly` session cookie; it never receives `ADMIN_API_KEY`.
+
+The following server-side check uses the temporary Stage A compatibility fallback and is not the daily administrator login path:
 
 ```bash
 curl -fsS -H "X-Admin-Api-Key: ${ADMIN_API_KEY}" \
@@ -174,7 +181,9 @@ sudo journalctl -u "${SERVICE_NAME}" -n 100 --no-pager
 
 ## First Company Configuration
 
-All administration goes through the HTTP API. Every request needs the `X-Admin-Api-Key` header. In v1 this shared key *is* the administrator authentication for HTTP; per-person login arrives in a later release.
+All human administration goes through the same-origin web UI using the signed-in administrator's opaque server session. Session identity is revalidated on every request and audit rows name that administrator. State-changing requests also require the session-bound CSRF token handled by the UI.
+
+The `X-Admin-Api-Key` examples below are retained only for Stage A automation compatibility. They work while `ADMIN_API_KEY_FALLBACK_ENABLED=true`, are observed in logs/audit, and should not be copied into a browser. New human workflows must use login sessions.
 
 Create the divisions your business actually has:
 
@@ -233,6 +242,15 @@ curl -fsS -X PATCH "http://127.0.0.1:${HEALTH_PORT}/api/admin/users/<id>/access"
 ```
 
 Note that this is the only way to add a person: they message the bot first, you assign them afterwards. The first administrator, created by setup, is the one account that exists without Telegram.
+
+If an administrator password must be recovered, run the server-only command as the service account. It prompts without echo, enforces the same password policy, revokes every session for the account, and writes an audit row:
+
+```bash
+sudo -u "${APP_USER}" node --env-file="${APP_ROOT}/shared/.env" \
+  "${APP_ROOT}/current/dist/src/cli/admin-reset-password.js" --email admin@example.com
+```
+
+For controlled automation, add `--password-file /protected/path` and delete that protected file immediately afterward. There is no HTTP password-reset endpoint.
 
 ## First Task
 
@@ -312,7 +330,10 @@ Migrations only move forward. Application rollback with `scripts/deploy/rollback
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `ADMIN_API_KEY must be at least 32 characters` | The key is too short. Generate a longer random value and restart |
+| `ADMIN_API_KEY must be at least 32 characters` | The temporary compatibility key is too short. Generate a longer random value and restart |
+| Login repeatedly returns `401 INVALID_CREDENTIALS` | Email, password, and inactive-account failures deliberately have one response. Verify the account through an authorized server-side process |
+| Login returns `429 LOGIN_THROTTLED` | The bounded cooldown is active. Wait for `Retry-After`; do not weaken the gate |
+| Browser login works on localhost but not production | Production cookies require HTTPS. Keep `SESSION_COOKIE_SECURE=true` and fix the TLS/reverse-proxy path |
 | `Missing required environment variable: <name>` | Add it to `shared/.env` and restart |
 | `Cannot find project ref. Have you run supabase link?` | The deploy-time Supabase variables are missing or wrong. Migration needs them |
 | `Unable to load installation provenance` | The application cannot reach the database. Check `SUPABASE_URL` and the service role key |
@@ -326,8 +347,9 @@ Migrations only move forward. Application rollback with `scripts/deploy/rollback
 ## Security Notes
 
 - The service runs as a non-root account. Keep it that way.
-- `ADMIN_API_KEY` is the administrator credential for the HTTP API in this version. Treat it as a password: at least 32 random characters, unique to this installation, rotated if exposed.
-- Keep `PORT` bound to `127.0.0.1` and put a reverse proxy with TLS in front of it if the API must be reachable externally.
+- Human administrators use their own password and revocable server session. Logout and password rotation take effect in the database without a cache window.
+- `ADMIN_API_KEY` is only the temporary Stage A compatibility fallback. Treat it as a server secret: at least 32 random characters, unique to this installation, rotated if exposed, and disable it when the staged migration permits.
+- Keep `PORT` bound to `127.0.0.1` and put a trusted reverse proxy with TLS in front of it. Secure administrator cookies are intentionally unusable over plain external HTTP.
 - Secrets belong only in `shared/.env` with `0640` permissions. Never in the release package, Git, shell history, or systemd unit files.
 - Deploy-time Supabase variables and the setup password are supplied for one command and removed immediately afterwards.
 - Do not expose the database or any Supabase port publicly.

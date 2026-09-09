@@ -44,8 +44,10 @@ Status: Final.
 Do not introduce Telegram webhooks solely for architectural neatness.
 
 ## D-007 — Admin authentication target
-Decision: Move from shared browser-entered admin key toward real admin identity using password hash + signed HTTP-only session.
-Status: Approved target.
+Decision: Human administrators use their scrypt password identity with opaque random, hashed-at-rest server sessions transported by `HttpOnly`, `Secure`, `SameSite=Strict` cookies and protected by a session-bound CSRF token. This realizes the original signed-session intent while permitting immediate database-backed revocation.
+Status: Implemented by P1-01. `ADMIN_API_KEY` remains a required, observable Stage A compatibility fallback, can be disabled explicitly, and is not used by the browser. Its staged removal remains tied to P1-04; OWNER actor redesign remains P2-01.
+
+Session-authenticated access to all 12 admin route groups currently requires an active `SYSTEM_ADMIN` authority assignment. This is an intentional P1-01 boundary until future role-onboarding work defines broader administrator eligibility; it does not change the separate OWNER actor redesign boundary.
 
 Enterprise IAM/SSO is out of scope.
 

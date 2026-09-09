@@ -30,7 +30,9 @@ describe("P0-15 customer-facing cleanup", () => {
     const contract = await repositoryFile("tests/fixtures/legacy-schema-contract.json");
     const bootstrap = await repositoryFile("supabase/migrations/202609090001_create_first_admin_bootstrap.sql");
 
-    expect(browser).toContain('"gwens-admin-key"');
+    expect(browser).not.toContain('"gwens-admin-key"');
+    expect(browser).not.toContain("sessionStorage");
+    expect(browser).toContain('"/api/admin/auth/session"');
     expect(deployment).toContain('SOTOAYAM_DEFAULT_APP_ROOT="/opt/sotoayam"');
     expect(contract).toContain('"GWENS_LEGACY_SCHEMA_V1"');
     expect(bootstrap).toContain("gwens_system_admin_invariant");

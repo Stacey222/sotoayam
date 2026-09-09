@@ -3,8 +3,13 @@ import type { PermissionsRepository } from "../repositories/permissions.reposito
 import type { TaskUsersRepository } from "../repositories/task-users.repository.js";
 import type { UserChannelsRepository } from "../repositories/user-channels.repository.js";
 import type { TaskActor } from "../tasks/types.js";
+import type { AdminPrincipal } from "../auth/admin-authorization.js";
+import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
 
-export interface TaskActorResolver { resolveTrustedActor(): Promise<TaskActor> }
+export interface TaskActorResolver {
+  resolveTrustedActor(): Promise<TaskActor>;
+  resolveActor?(principal: AdminPrincipal): Promise<TaskActor>;
+}
 export interface TelegramTaskActorResolver { resolveTelegramActor(externalTelegramId: number): Promise<TaskActor> }
 export interface OwnerActorResolver { resolveOwnerActor(): Promise<TaskActor> }
 
@@ -19,6 +24,28 @@ export class TrustedTaskActorService implements TaskActorResolver {
     const permissions = await this.permissions.findForRoleCode(user.roleCode);
     return { ...user, permissions: new Set(permissions.filter((item) => item.active).map((item) => item.code)) };
   }
+
+  async resolveActor(principal: AdminPrincipal): Promise<TaskActor> {
+    if (principal.kind === "shared-api-key") return this.resolveTrustedActor();
+    const user = await this.users.findById(principal.adminUserId);
+    if (!user?.active || user.divisionId === null || user.roleId === null || !user.roleCode
+      || !hasSystemAdminCapability(user)
+      || !this.users.hasActiveSystemAdminAuthority
+      || !await this.users.hasActiveSystemAdminAuthority(user.id)) {
+      throw new AppError(403, "ADMIN_AUTHORITY_REQUIRED", "Active SYSTEM_ADMIN authority is required");
+    }
+    const permissions = await this.permissions.findForRoleCode(user.roleCode);
+    return { ...user, permissions: new Set(permissions.filter((item) => item.active).map((item) => item.code)) };
+  }
+}
+
+export function resolveAdminActor(resolver: TaskActorResolver, principal: AdminPrincipal | null | undefined): Promise<TaskActor> {
+  if (!principal) throw new AppError(401, "UNAUTHORIZED", "Administrator authentication is required");
+  if (principal.kind === "session") {
+    if (!resolver.resolveActor) throw new AppError(503, "TASK_ACTOR_UNAVAILABLE", "Session actor resolution is unavailable");
+    return resolver.resolveActor(principal);
+  }
+  return resolver.resolveActor ? resolver.resolveActor(principal) : resolver.resolveTrustedActor();
 }
 
 export class TrustedOwnerActorService implements OwnerActorResolver {

@@ -11,6 +11,7 @@ import { csvImportRoutes } from "../../src/routes/task-ingestion.routes.js";
 import { tasksRoutes } from "../../src/routes/tasks.routes.js";
 import { usersRoutes } from "../../src/routes/users.routes.js";
 import { taxonomyRoutes } from "../../src/routes/taxonomy.routes.js";
+import type { AdminAuthorizedRouteOptions } from "../../src/auth/admin-authorization.js";
 
 const ADMIN_API_KEY = "regression-admin-key";
 
@@ -27,6 +28,7 @@ interface RouteCase {
     adminApiKey: string | undefined,
     downstream: Mock,
     secondaryAuthorization: Mock,
+    authorization: AdminAuthorizedRouteOptions,
   ) => Promise<void>;
 }
 
@@ -46,11 +48,12 @@ const routeCases: RouteCase[] = [
   {
     routeGroup: "taxonomy",
     endpoint: "/divisions",
-    register: async (app, adminApiKey, downstream, secondaryAuthorization) => {
+    register: async (app, adminApiKey, downstream, secondaryAuthorization, authorization) => {
       await app.register(taxonomyRoutes, {
         service: { listDivisions: downstream } as never,
         categories: {} as never,
-        actorResolver: { resolveTrustedActor: secondaryAuthorization },
+        actorResolver: { resolveTrustedActor: secondaryAuthorization, resolveActor: secondaryAuthorization },
+        ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });
     },
@@ -58,9 +61,10 @@ const routeCases: RouteCase[] = [
   {
     routeGroup: "users",
     endpoint: "/",
-    register: async (app, adminApiKey, downstream) => {
+    register: async (app, adminApiKey, downstream, _secondaryAuthorization, authorization) => {
       await app.register(usersRoutes, {
         repository: { findAll: downstream } as never,
+        ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });
     },
@@ -68,9 +72,10 @@ const routeCases: RouteCase[] = [
   {
     routeGroup: "admin-user-management",
     endpoint: "/",
-    register: async (app, adminApiKey, downstream) => {
+    register: async (app, adminApiKey, downstream, _secondaryAuthorization, authorization) => {
       await app.register(adminUserManagementRoutes, {
         service: { list: downstream } as never,
+        ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });
     },
@@ -78,9 +83,10 @@ const routeCases: RouteCase[] = [
   {
     routeGroup: "system-authority",
     endpoint: "/status",
-    register: async (app, adminApiKey, downstream) => {
+    register: async (app, adminApiKey, downstream, _secondaryAuthorization, authorization) => {
       await app.register(systemAuthorityRoutes, {
         service: { status: downstream } as never,
+        ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });
     },
@@ -88,9 +94,11 @@ const routeCases: RouteCase[] = [
   {
     routeGroup: "collaboration-rules",
     endpoint: "/",
-    register: async (app, adminApiKey, downstream) => {
+    register: async (app, adminApiKey, downstream, secondaryAuthorization, authorization) => {
       await app.register(collaborationRulesRoutes, {
         service: { list: downstream } as never,
+        actorResolver: { resolveTrustedActor: secondaryAuthorization, resolveActor: secondaryAuthorization },
+        ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });
     },
@@ -98,9 +106,11 @@ const routeCases: RouteCase[] = [
   {
     routeGroup: "integration-administration",
     endpoint: "/",
-    register: async (app, adminApiKey, downstream) => {
+    register: async (app, adminApiKey, downstream, secondaryAuthorization, authorization) => {
       await app.register(integrationAdministrationRoutes, {
         service: { list: downstream } as never,
+        actorResolver: { resolveTrustedActor: secondaryAuthorization, resolveActor: secondaryAuthorization },
+        ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });
     },
@@ -108,10 +118,11 @@ const routeCases: RouteCase[] = [
   {
     routeGroup: "tasks",
     endpoint: "/",
-    register: async (app, adminApiKey, downstream, secondaryAuthorization) => {
+    register: async (app, adminApiKey, downstream, secondaryAuthorization, authorization) => {
       await app.register(tasksRoutes, {
         service: { list: downstream } as never,
-        actorResolver: { resolveTrustedActor: secondaryAuthorization },
+        actorResolver: { resolveTrustedActor: secondaryAuthorization, resolveActor: secondaryAuthorization },
+        ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });
     },
@@ -122,10 +133,11 @@ const routeCases: RouteCase[] = [
     method: "POST",
     headers: { "content-type": "text/csv" },
     payload: "title,owner_division\nTask,IT",
-    register: async (app, adminApiKey, downstream, secondaryAuthorization) => {
+    register: async (app, adminApiKey, downstream, secondaryAuthorization, authorization) => {
       await app.register(csvImportRoutes, {
         service: { importCsv: downstream } as never,
-        actorResolver: { resolveTrustedActor: secondaryAuthorization },
+        actorResolver: { resolveTrustedActor: secondaryAuthorization, resolveActor: secondaryAuthorization },
+        ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });
     },
@@ -134,10 +146,11 @@ const routeCases: RouteCase[] = [
     routeGroup: "admin-notifications",
     endpoint: "/status",
     assertSecondaryGuardOrdering: true,
-    register: async (app, adminApiKey, downstream, secondaryAuthorization) => {
+    register: async (app, adminApiKey, downstream, secondaryAuthorization, authorization) => {
       await app.register(adminNotificationsRoutes, {
         service: { status: downstream } as never,
-        actorResolver: { resolveTrustedActor: secondaryAuthorization },
+        actorResolver: { resolveTrustedActor: secondaryAuthorization, resolveActor: secondaryAuthorization },
+        ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });
     },
@@ -146,10 +159,12 @@ const routeCases: RouteCase[] = [
     routeGroup: "reports",
     endpoint: "/content-creator/affiliate-task-status",
     unauthorizedMessage: "Invalid or missing report API key",
-    register: async (app, adminApiKey, downstream, secondaryAuthorization) => {
+    register: async (app, adminApiKey, downstream, secondaryAuthorization, authorization) => {
       await app.register(reportsRoutes, {
         service: { affiliateTaskStatus: downstream } as never,
         actorResolver: { resolveOwnerActor: secondaryAuthorization },
+        adminActorResolver: { resolveTrustedActor: secondaryAuthorization, resolveActor: secondaryAuthorization },
+        ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });
     },
@@ -158,10 +173,12 @@ const routeCases: RouteCase[] = [
     routeGroup: "critical-alerts",
     endpoint: "/",
     unauthorizedMessage: "Invalid or missing alert API key",
-    register: async (app, adminApiKey, downstream, secondaryAuthorization) => {
+    register: async (app, adminApiKey, downstream, secondaryAuthorization, authorization) => {
       await app.register(criticalAlertsRoutes, {
         service: { list: downstream } as never,
         actorResolver: { resolveOwnerActor: secondaryAuthorization },
+        adminActorResolver: { resolveTrustedActor: secondaryAuthorization, resolveActor: secondaryAuthorization },
+        ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });
     },
@@ -171,11 +188,12 @@ const routeCases: RouteCase[] = [
     endpoint: "/evaluate?dry_run=true",
     method: "POST",
     assertSecondaryGuardOrdering: true,
-    register: async (app, adminApiKey, downstream, secondaryAuthorization) => {
+    register: async (app, adminApiKey, downstream, secondaryAuthorization, authorization) => {
       downstream.mockResolvedValue({ candidates: 0, observations: [] });
       await app.register(adminCriticalAlertRoutes, {
         evaluator: { evaluate: downstream } as never,
-        actorResolver: { resolveTrustedActor: secondaryAuthorization },
+        actorResolver: { resolveTrustedActor: secondaryAuthorization, resolveActor: secondaryAuthorization },
+        ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });
     },
@@ -187,6 +205,8 @@ const authCases = [
   { condition: "rejects when the request key is missing", adminApiKey: ADMIN_API_KEY, requestKey: undefined, expectedStatus: 401 },
   { condition: "rejects when the request key is wrong", adminApiKey: ADMIN_API_KEY, requestKey: "wrong-admin-key", expectedStatus: 401 },
   { condition: "continues to the route when the request key matches", adminApiKey: ADMIN_API_KEY, requestKey: ADMIN_API_KEY, expectedStatus: 200 },
+  { condition: "continues to the route with an authenticated administrator session", adminApiKey: undefined,
+    requestKey: undefined, expectedStatus: 200, session: true },
 ];
 
 describe.each(routeCases)("$routeGroup admin authorization", ({
@@ -198,13 +218,18 @@ describe.each(routeCases)("$routeGroup admin authorization", ({
   assertSecondaryGuardOrdering = false,
   register,
 }) => {
-  it.each(authCases)("$condition", async ({ adminApiKey, requestKey, expectedStatus }) => {
+  it.each(authCases)("$condition", async ({ adminApiKey, requestKey, expectedStatus, session }) => {
     const app = Fastify({ logger: false });
     const downstream = vi.fn().mockResolvedValue([]);
     const secondaryAuthorization = vi.fn().mockResolvedValue(trustedActor);
 
     try {
-      await register(app, adminApiKey, downstream, secondaryAuthorization);
+      const authorization: AdminAuthorizedRouteOptions = session ? { adminApiKeyFallbackEnabled: false,
+        sessionAuthenticator: { authenticate: async () => ({ kind: "session", adminUserId: 2,
+          sessionId: "123e4567-e89b-42d3-a456-426614174000", email: "second@example.test",
+          displayName: "Second Admin", expiresAt: "2026-09-10T00:00:00Z" }),
+        verifyCsrf: () => true } } : {};
+      await register(app, adminApiKey, downstream, secondaryAuthorization, authorization);
       const response = await app.inject({
         method,
         url: endpoint,

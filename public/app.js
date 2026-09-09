@@ -3,21 +3,26 @@ const empty = document.querySelector("#empty");
 const notice = document.querySelector("#notice");
 const editor = document.querySelector("#editor");
 const form = document.querySelector("#edit-form");
-// Retained so existing browser sessions keep their locally stored admin key after the rebrand.
-const LEGACY_ADMIN_KEY_STORAGE_KEY = "gwens-admin-key";
+const loginDialog = document.querySelector("#login-dialog");
+const loginForm = document.querySelector("#login-form");
+const loginError = document.querySelector("#login-error");
+const logoutButton = document.querySelector("#logout");
 let selectedStatus = "pending";
 let usersById = new Map();
 let catalogs = { divisions: [], roles: [] };
 
-function adminHeaders() {
-  const key = sessionStorage.getItem(LEGACY_ADMIN_KEY_STORAGE_KEY);
-  return key ? { "X-Admin-Api-Key": key } : {};
+function csrfToken() {
+  const cookies = Object.fromEntries(document.cookie.split(";").map((item) => item.trim().split("=").map(decodeURIComponent)));
+  return cookies["__Host-sotoayam_csrf"] || cookies.sotoayam_csrf || "";
 }
 function showNotice(message) { notice.textContent = message; notice.hidden = !message; }
 async function api(path, options = {}) {
-  const response = await fetch(path, { ...options, headers: { "Content-Type": "application/json", ...adminHeaders(), ...(options.headers || {}) } });
+  const method = options.method || "GET";
+  const csrf = ["POST", "PUT", "PATCH", "DELETE"].includes(method) ? csrfToken() : "";
+  const response = await fetch(path, { ...options, credentials: "same-origin",
+    headers: { "Content-Type": "application/json", ...(csrf ? { "X-CSRF-Token": csrf } : {}), ...(options.headers || {}) } });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error?.message || "Permintaan gagal");
+  if (!response.ok) { const error = new Error(payload.error?.message || "Permintaan gagal"); error.status = response.status; throw error; }
   return payload;
 }
 function statusFor(user) {
@@ -50,7 +55,7 @@ async function loadUsers() {
   try {
     const [catalogPayload, userPayload] = await Promise.all([api("/api/admin/users/catalogs"), api(`/api/admin/users?status=${encodeURIComponent(selectedStatus)}`)]);
     catalogs = catalogPayload.data; render(userPayload.data);
-  } catch (error) { showNotice(`${error.message}. Jika proteksi admin aktif, masukkan Admin Key.`); render([]); }
+  } catch (error) { if (error.status === 401) loginDialog.showModal(); else showNotice(error.message); render([]); }
   finally { rows.removeAttribute("aria-busy"); }
 }
 function openEditor(user) {
@@ -62,7 +67,17 @@ function openEditor(user) {
 }
 document.querySelectorAll(".filter").forEach((button) => button.addEventListener("click", () => { selectedStatus = button.dataset.status; document.querySelectorAll(".filter").forEach((item) => item.classList.toggle("active", item === button)); void loadUsers(); }));
 document.querySelector("#refresh").addEventListener("click", () => void loadUsers());
-document.querySelector("#admin-key-button").addEventListener("click", () => { const key = window.prompt("Masukkan Admin API Key (kosongkan untuk menghapus):", ""); if (key === null) return; if (key.trim()) sessionStorage.setItem(LEGACY_ADMIN_KEY_STORAGE_KEY, key.trim()); else sessionStorage.removeItem(LEGACY_ADMIN_KEY_STORAGE_KEY); void loadUsers(); });
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault(); loginError.hidden = true;
+  try {
+    await api("/api/admin/auth/login", { method: "POST", body: JSON.stringify({
+      email: document.querySelector("#login-email").value,
+      password: document.querySelector("#login-password").value,
+    }) });
+    document.querySelector("#login-password").value = ""; loginDialog.close(); logoutButton.hidden = false; await loadUsers();
+  } catch (error) { loginError.textContent = error.message; loginError.hidden = false; }
+});
+logoutButton.addEventListener("click", async () => { try { await api("/api/admin/auth/logout", { method: "POST" }); } finally { logoutButton.hidden = true; loginDialog.showModal(); render([]); } });
 rows.addEventListener("click", (event) => { const button = event.target.closest("button[data-user-id]"); const user = button ? usersById.get(button.dataset.userId) : null; if (user) openEditor(user); });
 document.querySelector("#close-dialog").addEventListener("click", () => editor.close());
 document.querySelector("#cancel").addEventListener("click", () => editor.close());
@@ -72,4 +87,4 @@ form.addEventListener("submit", async (event) => {
   try { await api(`/api/admin/users/${document.querySelector("#user-id").value}/access`, { method: "PATCH", body: JSON.stringify(body) }); editor.close(); await loadUsers(); }
   catch (error) { window.alert(error.message); }
 });
-void loadUsers();
+void api("/api/admin/auth/session").then(() => { logoutButton.hidden = false; return loadUsers(); }).catch(() => loginDialog.showModal());

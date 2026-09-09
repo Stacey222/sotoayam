@@ -2,7 +2,7 @@ import { defineAdminRoutes } from "../auth/admin-authorization.js";
 import { AppError } from "../errors.js";
 import type { UserManagementService } from "../services/user-management.service.js";
 import type { UserManagementStatus } from "../user-management/types.js";
-import type { TaskActorResolver } from "../services/task-actor.service.js";
+import { resolveAdminActor, type TaskActorResolver } from "../services/task-actor.service.js";
 import { parsePositiveId } from "../validation.js";
 import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
 
@@ -52,7 +52,7 @@ export const adminUserManagementRoutes = defineAdminRoutes<AdminUserManagementRo
   });
   app.patch<{ Params: { id: string } }>("/:id/business-user-code", async (request) => {
     if (!options.actorResolver) throw new AppError(503, "BUSINESS_USER_CODE_ADMIN_UNAVAILABLE", "Business user code administration is unavailable");
-    const actor = await options.actorResolver.resolveTrustedActor();
+    const actor = await resolveAdminActor(options.actorResolver, request.adminPrincipal);
     if (!hasSystemAdminCapability(actor)) {
       throw new AppError(403, "BUSINESS_USER_CODE_FORBIDDEN", "Active SYSTEM_ADMIN authority in an authority-capable division is required");
     }

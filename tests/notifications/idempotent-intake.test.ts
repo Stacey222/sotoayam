@@ -28,6 +28,8 @@ const config: AppConfig = {
   host: "127.0.0.1", port: 3000, telegramPollingEnabled: false, reminderSchedulerEnabled: false,
   reminderSchedulerIntervalSeconds: 300, businessTimeZone: "UTC", criticalAlertEvaluatorEnabled: false,
   criticalAlertPolicy: DEFAULT_CRITICAL_ALERT_POLICY, logLevel: "silent",
+  sessionAbsoluteTtlSeconds: 43_200, sessionIdleTtlSeconds: 3_600,
+  sessionCookieSecure: false, trustProxy: false, adminApiKeyFallbackEnabled: true,
 };
 const user = (overrides: Partial<TelegramUser> = {}): TelegramUser => ({
   id: 1, telegram_chat_id: 1001, telegram_username: null, telegram_first_name: null, name: "Recipient",

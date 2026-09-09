@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_CRITICAL_ALERT_POLICY } from "../../src/alerts/policy.js";
 import { buildApp } from "../../src/app.js";
 import { isAdminRouteScope } from "../../src/auth/admin-authorization.js";
+import { ADMIN_AUTH_ROUTE_SCOPE, adminAuthRoutes } from "../../src/routes/admin-auth.routes.js";
 import type { AppConfig } from "../../src/config/env.js";
 import { adminNotificationsRoutes } from "../../src/routes/admin-notifications.routes.js";
 import { adminUserManagementRoutes } from "../../src/routes/admin-user-management.routes.js";
@@ -32,6 +33,8 @@ const config: AppConfig = {
   criticalAlertEvaluatorEnabled: false,
   criticalAlertPolicy: DEFAULT_CRITICAL_ALERT_POLICY,
   logLevel: "silent",
+  sessionAbsoluteTtlSeconds: 43_200, sessionIdleTtlSeconds: 3_600,
+  sessionCookieSecure: false, trustProxy: false, adminApiKeyFallbackEnabled: true,
 };
 
 const repository = {
@@ -153,7 +156,9 @@ describe("admin route boundaries", () => {
 
   it("keeps the tested manifest in parity with app registrations", async () => {
     const appSource = await readFile(path.resolve("src/app.ts"), "utf8");
-    expect(appSource.match(/adminApiKey:/g) ?? []).toHaveLength(adminRouteGroups.length);
+    expect(appSource.match(/\.\.\.adminAuthorization/g) ?? []).toHaveLength(adminRouteGroups.length);
+    expect((adminAuthRoutes as unknown as Record<symbol, unknown>)[ADMIN_AUTH_ROUTE_SCOPE]).toBe(true);
+    expect(isAdminRouteScope(adminAuthRoutes)).toBe(false);
   });
 
   it("keeps the admin API-key header in one source file", async () => {
@@ -165,5 +170,16 @@ describe("admin route boundaries", () => {
       }
     }
     expect(matchingFiles).toEqual(["auth/admin-authorization.ts"]);
+  });
+
+  it("keeps administrator session cookie names in one source file", async () => {
+    const sourceRoot = path.resolve("src");
+    const matchingFiles: string[] = [];
+    for (const file of await sourceFiles(sourceRoot)) {
+      if ((await readFile(file, "utf8")).includes("sotoayam_session")) {
+        matchingFiles.push(path.relative(sourceRoot, file).replaceAll("\\", "/"));
+      }
+    }
+    expect(matchingFiles).toEqual(["auth/admin-session.ts"]);
   });
 });

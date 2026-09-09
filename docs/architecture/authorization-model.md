@@ -2,7 +2,11 @@
 
 ## Decision model
 
-Authentication and authorization are separate. The current shared `ADMIN_API_KEY` may remain only as a temporary bootstrap control; it cannot represent a person.
+Authentication and authorization are separate. Human administrators authenticate with their bootstrap email/password and an opaque server-side session. Only SHA-256 token hashes are stored; the browser carries the raw session token in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie and supplies the session-bound CSRF token for mutations.
+
+`resolveAdminPrincipal` first validates the session against database time and current user activation, with no cache window. It then temporarily permits `ADMIN_API_KEY` only when the Stage A compatibility fallback is enabled. The fallback cannot represent a person, retains the existing singleton actor behavior, and is logged and audited once per process. Session principals resolve the exact authenticated `user_id`, so multiple active `SYSTEM_ADMIN` users do not invoke the singleton path.
+
+Login throttling deliberately uses two non-overlapping keys after credential lookup. Known-email failures (`BAD_PASSWORD` or `INACTIVE_USER`) are counted per account: five consecutive failures within 15 minutes close that account gate, and a successful login resets the consecutive sequence. Unknown-email failures do not store the submitted email and are counted only by client IP: 50 `UNKNOWN_EMAIL` attempts within 15 minutes close that IP gate. Unknown-email IP traffic never closes a known account's gate, including when multiple clients share the application-visible proxy address.
 
 Every protected decision should evaluate:
 
@@ -132,3 +136,5 @@ A service transaction should enforce:
 Current backend uses a server credential that bypasses RLS. Near-term authorization therefore lives in application services, with repository methods receiving an authorization context or already-scoped query specification.
 
 Future authenticated browser access may add RLS as defense in depth, but no public policy should be added. Service-role credentials remain server-only. Application tests must remain the primary proof that Divisi isolation works.
+
+The browser session store uses deny-all RLS and service-only `SECURITY DEFINER` functions. Deactivation, revocation, absolute expiry, and idle expiry are evaluated on every request. `OWNER` report actor redesign remains separate: a session user must first pass the active `SYSTEM_ADMIN` guard, while the existing singleton OWNER business actor remains unchanged until P2-01.

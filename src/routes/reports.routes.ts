@@ -1,13 +1,15 @@
 import { defineAdminRoutes } from "../auth/admin-authorization.js";
+import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
 import { AppError } from "../errors.js";
 import { parseReportWindow } from "../reporting/time-window.js";
 import type { ReportDrillDown } from "../reporting/types.js";
 import type { TaskStatusReportFilters } from "../reporting/types.js";
-import type { OwnerActorResolver } from "../services/task-actor.service.js";
+import { resolveAdminActor, type OwnerActorResolver, type TaskActorResolver } from "../services/task-actor.service.js";
 import type { ReportingService } from "../services/reporting.service.js";
 import { TASK_STATUSES, type TaskStatus } from "../tasks/types.js";
 
-export interface ReportsRoutesOptions { service: ReportingService; actorResolver: OwnerActorResolver; adminApiKey?: string; legacyAliasEnabled?: boolean }
+export interface ReportsRoutesOptions { service: ReportingService; actorResolver: OwnerActorResolver; adminActorResolver?: TaskActorResolver;
+  adminApiKey?: string; legacyAliasEnabled?: boolean }
 
 function detail(query: { detail?: unknown; page?: unknown }): { kind: ReportDrillDown; page: number } | null {
   if (query.detail === undefined) return null;
@@ -42,6 +44,12 @@ function filters(query: { division?: unknown; task_category?: unknown; statuses?
 }
 
 export const reportsRoutes = defineAdminRoutes<ReportsRoutesOptions>(async (app, options) => {
+  app.addHook("preHandler", async (request) => {
+    if (request.adminPrincipal?.kind !== "session") return;
+    if (!options.adminActorResolver) throw new AppError(503, "REPORT_ADMIN_UNAVAILABLE", "Administrator actor resolution is unavailable");
+    const admin = await resolveAdminActor(options.adminActorResolver, request.adminPrincipal);
+    if (!hasSystemAdminCapability(admin)) throw new AppError(403, "REPORT_FORBIDDEN", "Active SYSTEM_ADMIN authority is required");
+  });
   app.get("/task-status", async (request) => {
     const query = request.query as { window?: unknown; detail?: unknown; page?: unknown; division?: unknown; task_category?: unknown; statuses?: unknown };
     const actor = await options.actorResolver.resolveOwnerActor();

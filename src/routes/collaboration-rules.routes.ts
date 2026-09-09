@@ -2,8 +2,10 @@ import { defineAdminRoutes } from "../auth/admin-authorization.js";
 import { AppError } from "../errors.js";
 import type { CollaborationRuleManagementService } from "../services/collaboration-rule-management.service.js";
 import { parsePositiveId } from "../validation.js";
+import { resolveAdminActor, type TaskActorResolver } from "../services/task-actor.service.js";
+import type { FastifyRequest } from "fastify";
 
-export interface CollaborationRulesRoutesOptions { service: CollaborationRuleManagementService; adminApiKey?: string }
+export interface CollaborationRulesRoutesOptions { service: CollaborationRuleManagementService; actorResolver?: TaskActorResolver; adminApiKey?: string }
 
 function body(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new AppError(400, "VALIDATION_ERROR", "Request body must be an object");
@@ -15,7 +17,12 @@ function boolean(value: unknown, field: string): boolean {
 }
 
 export const collaborationRulesRoutes = defineAdminRoutes<CollaborationRulesRoutesOptions>(async (app, options) => {
-  app.get("/", async () => ({ success: true, data: await options.service.list() }));
+  const actorId = async (request: FastifyRequest) => {
+    if (request.adminPrincipal?.kind !== "session") return undefined;
+    if (!options.actorResolver) throw new AppError(503, "COLLABORATION_ADMIN_UNAVAILABLE", "Administrator actor resolution is unavailable");
+    return (await resolveAdminActor(options.actorResolver, request.adminPrincipal)).id;
+  };
+  app.get("/", async (request) => ({ success: true, data: await options.service.list(await actorId(request)) }));
   app.post("/", async (request, reply) => {
     const value = body(request.body);
     if (Object.keys(value).some((key) => !["source_division_id", "target_division_id", "task_scope", "allowed", "requires_approval"].includes(key))) {
@@ -25,7 +32,7 @@ export const collaborationRulesRoutes = defineAdminRoutes<CollaborationRulesRout
     const targetDivisionId = parsePositiveId(String(value.target_division_id));
     if (value.task_scope !== undefined && value.task_scope !== "ALL") throw new AppError(400, "VALIDATION_ERROR", "task_scope must be ALL");
     const data = await options.service.create({ sourceDivisionId, targetDivisionId, taskScope: "ALL",
-      allowed: boolean(value.allowed, "allowed"), requiresApproval: boolean(value.requires_approval, "requires_approval") });
+      allowed: boolean(value.allowed, "allowed"), requiresApproval: boolean(value.requires_approval, "requires_approval") }, await actorId(request));
     return reply.status(201).send({ success: true, data });
   });
   app.patch<{ Params: { id: string } }>("/:id", async (request) => {
@@ -37,9 +44,9 @@ export const collaborationRulesRoutes = defineAdminRoutes<CollaborationRulesRout
       allowed: value.allowed === undefined ? undefined : boolean(value.allowed, "allowed"),
       requiresApproval: value.requires_approval === undefined ? undefined : boolean(value.requires_approval, "requires_approval"),
       active: value.active === undefined ? undefined : boolean(value.active, "active"),
-    }) };
+    }, await actorId(request)) };
   });
   app.delete<{ Params: { id: string } }>("/:id", async (request) => ({
-    success: true, data: await options.service.deactivate(parsePositiveId(request.params.id)),
+    success: true, data: await options.service.deactivate(parsePositiveId(request.params.id), await actorId(request)),
   }));
 });

@@ -1,7 +1,7 @@
 import { defineAdminRoutes } from "../auth/admin-authorization.js";
 import { AppError } from "../errors.js";
 import type { SystemAuthorityService } from "../services/system-authority.service.js";
-import type { TaskActorResolver } from "../services/task-actor.service.js";
+import { resolveAdminActor, type TaskActorResolver } from "../services/task-actor.service.js";
 import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
 import { parsePositiveId } from "../validation.js";
 
@@ -22,7 +22,7 @@ export const systemAuthorityRoutes = defineAdminRoutes<SystemAuthorityRoutesOpti
   app.post("/revoke", async (request) => { const value = input(request.body); return { success: true, data: await options.service.revoke(value.userId, value.reason) }; });
   app.post<{ Params: { id: string } }>("/divisions/:id/capability", async (request) => {
     if (!options.actorResolver) throw new AppError(503, "SYSTEM_AUTHORITY_UNAVAILABLE", "System authority actor resolution is unavailable");
-    const actor = await options.actorResolver.resolveTrustedActor();
+    const actor = await resolveAdminActor(options.actorResolver, request.adminPrincipal);
     if (!hasSystemAdminCapability(actor)) throw new AppError(403, "SYSTEM_AUTHORITY_FORBIDDEN", "Active SYSTEM_ADMIN authority in an authority-capable division is required");
     const value = request.body as Record<string, unknown> | null;
     if (!value || Array.isArray(value) || Object.keys(value).length !== 1 || typeof value.enabled !== "boolean") {

@@ -61,8 +61,9 @@ Legend:
 
 ## Phase 1 — Security & Reliability
 
-- [ ] P1-01 Real admin identity and signed HTTP-only sessions.
+- [x] P1-01 Real admin identity and signed HTTP-only sessions.
   Owner: Claude Code architecture -> Codex implement
+  Note: implemented as the approved opaque, hashed-at-rest PostgreSQL session design with secure HttpOnly cookies, CSRF, bounded expiry/cooldown, truthful session actor resolution, two-SYSTEM_ADMIN compatibility, password rotation/recovery, and the observable Stage A `ADMIN_API_KEY` fallback. One additive migration brings the total to 16; all 15 historical hashes remain unchanged.
 - [ ] P1-02 Shared outbound HTTP client: timeout, bounded retry, Telegram 429 handling.
   Owner: Codex
 - [ ] P1-03 Rate limiting for auth-bearing routes.

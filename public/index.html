@@ -13,7 +13,7 @@
         <h1>Automation Control</h1>
         <p class="subtitle">Kelola onboarding, Divisi, role bisnis, dan status akses pengguna.</p>
       </div>
-      <button id="admin-key-button" class="secondary" type="button">Admin Key</button>
+      <button id="logout" class="secondary" type="button" hidden>Logout</button>
     </header>
     <main>
       <section class="toolbar" aria-label="Filter pengguna">
@@ -33,6 +33,15 @@
         <div id="empty" class="empty" hidden>Belum ada pengguna pada filter ini.</div>
       </section>
     </main>
+    <dialog id="login-dialog">
+      <form id="login-form">
+        <div class="dialog-heading"><div><p class="eyebrow">ADMIN</p><h2>Login</h2></div></div>
+        <label>Email<input id="login-email" type="email" autocomplete="username" required /></label>
+        <label>Password<input id="login-password" type="password" autocomplete="current-password" required /></label>
+        <p id="login-error" class="notice" hidden></p>
+        <div class="actions"><button type="submit">Login</button></div>
+      </form>
+    </dialog>
     <dialog id="editor">
       <form id="edit-form">
         <div class="dialog-heading">

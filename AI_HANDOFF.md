@@ -24,9 +24,11 @@ Baseline at audit:
 - existing migration history unless a migration-specific task says otherwise.
 
 ## Admin Authorization State
-SEC-001 is patched and all 11 admin route groups now use the centralized fail-closed scope in `src/auth/admin-authorization.ts`.
+P1-01 is implemented. All 12 admin route groups use the centralized fail-closed scope in `src/auth/admin-authorization.ts`, which resolves an opaque database-backed administrator session first and then the temporary Stage A `ADMIN_API_KEY` compatibility fallback. Session tokens and CSRF tokens are 256-bit random values stored only as SHA-256 hashes. Sessions have 12-hour absolute and 1-hour idle defaults, immediate revocation, a ten-session cap, CSRF enforcement on mutations, account/IP cooldown gates, and audited lifecycle events.
 
-Permanent route-level regression coverage verifies all 11 groups for missing configuration, missing/wrong request keys, and matching keys. Startup configuration requires `ADMIN_API_KEY` and rejects values shorter than 32 characters.
+The browser uses same-origin `HttpOnly`, `Secure`, `SameSite=Strict` session cookies and no longer receives or stores the shared key. `SESSION_COOKIE_SECURE=false` is allowed only on loopback. Session principals resolve the exact authenticated administrator and recheck active `SYSTEM_ADMIN` authority/capability on actor-protected routes, so two active system administrators no longer trigger the singleton failure. OWNER actor semantics remain intentionally unchanged for P2-01.
+
+`ADMIN_API_KEY` remains required with its 32-character minimum and works across all 12 groups while `ADMIN_API_KEY_FALLBACK_ENABLED=true`; fallback use is logged and audited once per process. `npm run admin:reset-password -- --email <address>` is the server-only recovery path and revokes all sessions for that account.
 
 New admin route groups must use `defineAdminRoutes` and be added to the security manifest. Admin API-key checks must not be implemented locally in route files.
 
@@ -46,7 +48,7 @@ Setup now requires an explicit, mutually exclusive `--fresh-install` or `--keep-
 
 Provenance is read once during application startup. A fresh instance necessarily starts before setup with absent/`UNKNOWN` provenance and may register the benign legacy report alias for that first process lifetime; restart the service after successful fresh setup so `FRESH` route registration takes effect. Authorization and provisioning safety do not depend on that alias.
 
-`SYSTEM_ADMIN` eligibility no longer depends on the literal `IT` taxonomy. It requires an active authority assignment, active user/division, and the division's guarded `grants_system_authority` capability. Direct service-role capability writes and removal of the last post-bootstrap capable division are rejected. HTTP administrator access still uses centralized `ADMIN_API_KEY` authorization until P1-01 implements sessions.
+`SYSTEM_ADMIN` eligibility no longer depends on the literal `IT` taxonomy. It requires an active authority assignment, active user/division, and the division's guarded `grants_system_authority` capability. Direct service-role capability writes and removal of the last post-bootstrap capable division are rejected. P1-01 session actor resolution preserves and re-evaluates this boundary on every protected request.
 
 P0-14 adds exactly one forward migration, `202609090002_implement_customer_taxonomy_transition.sql`, bringing the repository total to 15. All 14 historical migration hashes remain unchanged. Validation used only disposable local PostgreSQL: 17 database tests passed explicitly; the full suite with one worker passed 602 tests and skipped those same 17 opt-in database tests. The default parallel suite hit only pre-existing 5-second Windows shell-startup timeouts in two deployment test files; both files pass in isolation. Typecheck, build, contract tests, secret scan, and diff checks passed. No live Supabase project or VPS was contacted.
 
@@ -67,7 +69,7 @@ Fresh-customer installation defaults are separated from the historical staged cu
 
 Operational worker flags remain explicit customer choices: safe preparation values do not silently enable Telegram polling, reminders, or critical-alert evaluation, and fresh installation no longer forces the original all-disabled cutover state. The fresh host and business-timezone fallbacks are `127.0.0.1` and `UTC`; existing installations retain compatibility through explicit environment values.
 
-Historical operational assumptions are not universal product requirements. P0-14 moved customer taxonomy to data while retaining provenance-gated compatibility. P0-15 removed the origin-linked `supabase/config.toml` from the customer release archive, corrected stale customer/operator guidance, labeled origin go-live records as internal historical evidence, and moved the origin division list out of runtime source into a checker fixture. The developer-local config remains in the repository, while all 15 migrations and compatibility-sensitive deployment, browser-storage, schema-contract, advisory-lock, reporting-alias, and legacy-identity identifiers remain unchanged.
+Historical operational assumptions are not universal product requirements. P0-14 moved customer taxonomy to data while retaining provenance-gated compatibility. P0-15 removed the origin-linked `supabase/config.toml` from the customer release archive, corrected stale customer/operator guidance, labeled origin go-live records as internal historical evidence, and moved the origin division list out of runtime source into a checker fixture. The developer-local config remains in the repository. P1-01 deliberately retired the legacy browser shared-key storage identifier; other compatibility-sensitive deployment, schema-contract, advisory-lock, reporting-alias, and legacy-identity identifiers remain unchanged.
 
 The release package allowlist now contains migration tooling and all migrations but no developer Supabase project identity. Deployment still creates link state from protected deploy-only environment variables; its test passes with no packaged `config.toml`. P0-15's required validation passed 605 tests with 17 opt-in disposable-database tests skipped, plus typecheck, build, contract tests, secret scan, focused packaging/deployment tests, a real archive content check, historical migration integrity, and diff whitespace validation. No live Supabase project or VPS was contacted. The pre-existing governance checker drift was subsequently reconciled without changing migrations or permission semantics: it now reconstructs foundation plus later permission/grant additions, and all governance checks pass.
 
@@ -83,17 +85,21 @@ No historical migration changed. The P0-16 restore acceptance contacted only the
 
 Final closeout validation passed: 612 tests passed with 17 documented opt-in database tests skipped, typecheck and build passed, all 9 contract tests passed, all 13 governance checks passed, and the final secret scan passed. Disposable credential values discovered in the uncommitted `.env.example` were removed; the file now contains blank template values only.
 
+## P1-01 Validation State
+
+One additive migration, `202609100001_create_admin_session_authentication.sql`, brings the repository total to 16. All 15 historical migration hashes remain unchanged. A clean isolated PostgreSQL 17 database applied 16/16 migrations, and six focused database tests passed for service-only RPC access, hash validation, touch throttling, immediate revocation, consecutive-failure cooldown, password-change revocation, idle/absolute expiry, deactivation, session cap, and audit lifecycle. The default full suite passed 647 tests with 23 documented opt-in database tests skipped; focused unit/route coverage includes 60 authorization matrix cases across all 12 groups and the two-administrator regression. Typecheck, build, nine contract tests, secret scan, governance checks, and diff checks passed. No remote Supabase project, VPS, Telegram API, or production data was contacted.
+
 ## Next Agent
-Recommended: Claude Code architecture, then Codex implementation for P1-01.
+Recommended: Codex implementation for P1-02.
 
 Next task:
-Start P1-01: design and implement real administrator identity with signed HTTP-only sessions, preserving the centralized fail-closed transitional API-key boundary until the approved migration design replaces it safely.
+Implement P1-02 shared outbound HTTP client with timeout, bounded retry, and Telegram 429 handling.
 
 Reason:
-Phase 0's commercial blockers are closed on evidence. P1-01 is the first planned Phase 1 item and replaces shared-key browser administration with the approved identity/session target from D-007.
+P1-01 is complete on local database and full-suite evidence. P1-02 is the next ordered Phase 1 reliability item.
 
 ## Pending Higher-Level Work
-- Begin Phase 1 with P1-01 administrator identity and signed HTTP-only sessions.
+- Continue Phase 1 with P1-02 outbound HTTP reliability; preserve the P1-01 session and compatibility boundaries.
 - Preserve remaining launch gates: Phase 4 clean-room install, upgrade/rollback, restore drill, and final security review are still separate pre-customer requirements.
 
 ## Agent Handoff Format

@@ -31,6 +31,8 @@ const config: AppConfig = {
   criticalAlertEvaluatorEnabled: false,
   criticalAlertPolicy: DEFAULT_CRITICAL_ALERT_POLICY,
   logLevel: "silent",
+  sessionAbsoluteTtlSeconds: 43_200, sessionIdleTtlSeconds: 3_600,
+  sessionCookieSecure: false, trustProxy: false, adminApiKeyFallbackEnabled: true,
 };
 
 function user(overrides: Partial<TelegramUser> = {}): TelegramUser {

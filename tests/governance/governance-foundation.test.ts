@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
@@ -11,12 +12,26 @@ import {
 } from "../../src/governance/catalog.js";
 import type { Division } from "../../src/governance/types.js";
 import { SupabaseDivisionsRepository } from "../../src/repositories/divisions.repository.js";
-import { LEGACY_DIVISION_SEEDS } from "../../scripts/fixtures/legacy-governance-foundation.js";
+import {
+  buildGovernancePermissionHistory,
+  evaluateGovernancePermissionHistory,
+  type GovernanceMigration,
+} from "../../scripts/check-governance-foundation.js";
+import {
+  FOUNDATION_PERMISSION_SEEDS,
+  FOUNDATION_ROLE_PERMISSION_SEEDS,
+  LEGACY_DIVISION_SEEDS,
+} from "../../scripts/fixtures/legacy-governance-foundation.js";
 
-const migrationPath = path.resolve(
-  process.cwd(),
-  "supabase/migrations/202608290001_create_governance_foundation.sql",
-);
+const migrationsDirectory = path.resolve(process.cwd(), "supabase/migrations");
+const foundationMigration = "202608290001_create_governance_foundation.sql";
+const transitionMigration = "202609090002_implement_customer_taxonomy_transition.sql";
+const migrationPath = path.join(migrationsDirectory, foundationMigration);
+
+async function migrationChain(): Promise<GovernanceMigration[]> {
+  const names = (await readdir(migrationsDirectory)).filter((name) => name.endsWith(".sql")).sort();
+  return Promise.all(names.map(async (name) => ({ name, sql: await readFile(path.join(migrationsDirectory, name), "utf8") })));
+}
 
 function isUnique(values: readonly string[]): boolean {
   return new Set(values).size === values.length;
@@ -62,6 +77,59 @@ describe("Slice 1 governance catalog", () => {
 
   it("does not grant technical monitoring to OWNER", () => {
     expect(ROLE_PERMISSION_SEEDS.OWNER).not.toContain("technical_monitoring.view");
+  });
+});
+
+describe("effective governance migration history", () => {
+  it("recognizes the exact foundation permissions and effective current catalog", async () => {
+    const migrations = await migrationChain();
+    const foundationHistory = buildGovernancePermissionHistory(
+      migrations.filter(({ name }) => name === foundationMigration),
+    );
+    const history = buildGovernancePermissionHistory(migrations);
+
+    expect([...foundationHistory.permissions]).toEqual(FOUNDATION_PERMISSION_SEEDS);
+    expect([...history.permissions].sort()).toEqual([...PERMISSION_SEEDS].sort());
+    expect(evaluateGovernancePermissionHistory(migrations).PERMISSION_SEED).toBe(true);
+  });
+
+  it("includes the P0-14 OWNER grant without inventing STAFF or ADMIN additions", async () => {
+    const history = buildGovernancePermissionHistory(await migrationChain());
+    const additions = history.roleGrantAdditions.get(transitionMigration);
+
+    expect(history.permissionAdditions.get(transitionMigration)).toEqual(["alert.acknowledge"]);
+    expect(additions?.get("OWNER")).toEqual(["alert.acknowledge"]);
+    expect(additions?.has("STAFF")).toBe(false);
+    expect(additions?.has("ADMIN")).toBe(false);
+    expect([...history.roleGrants.get("OWNER")!].sort()).toEqual([...ROLE_PERMISSION_SEEDS.OWNER].sort());
+    expect(FOUNDATION_ROLE_PERMISSION_SEEDS.OWNER).not.toContain("alert.acknowledge");
+  });
+
+  it("fails when the later permission/grant migration is absent from expected history", async () => {
+    const withoutTransition = (await migrationChain()).filter(({ name }) => name !== transitionMigration);
+    const checks = evaluateGovernancePermissionHistory(withoutTransition);
+
+    expect(checks.PERMISSION_SEED).toBe(false);
+    expect(checks.OWNER_GRANTS).toBe(false);
+  });
+
+  it("fails closed when migration history introduces an unknown permission", async () => {
+    const withUnknown = [...await migrationChain(), {
+      name: "999999999999_unexpected_permission.sql",
+      sql: "insert into public.permissions (code, name) values ('unknown.permission', 'Unknown') on conflict (code) do nothing;",
+    }];
+
+    expect(evaluateGovernancePermissionHistory(withUnknown).PERMISSION_SEED).toBe(false);
+  });
+
+  it("keeps the foundation and P0-14 migration bytes immutable", async () => {
+    const expected = new Map([
+      [foundationMigration, "abdc8a5193cc4ddcb1d45e945b809900a9f8b07a4a93e242ae9e8752a9eff334"],
+      [transitionMigration, "5019817994fe0740bb38c8bd20248f7d22080beb49586a84a90fc06b029f3f0b"],
+    ]);
+    for (const [name, hash] of expected) {
+      expect(createHash("sha256").update(await readFile(path.join(migrationsDirectory, name))).digest("hex"), name).toBe(hash);
+    }
   });
 });
 

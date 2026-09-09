@@ -1,6 +1,6 @@
 # Go-Live Collaboration Matrix
 
-> Historical origin-installation matrix. The named rule below is not required or seeded for a fresh customer. Customer-defined taxonomy and rule installation are deferred to P0-13/P0-14.
+> **INTERNAL / HISTORICAL VERIFICATION.** The named origin-installation rule below is engineering evidence, not customer/operator setup material. It is not required or seeded for a fresh customer; P0-14 now provisions customer-defined taxonomy with no fresh collaboration-rule defaults.
 
 This matrix records canonical production rules observed on 2026-09-02. Cross-Divisi access remains default-deny. A missing row is not permission.
 

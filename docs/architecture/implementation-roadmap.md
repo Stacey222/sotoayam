@@ -68,7 +68,7 @@ Each slice is deliberately bounded. A slice is complete only when its acceptance
 - **Components:** rule repository/service, IT management API, scope codes, approval records for activated approval rules.
 - **Database impact:** collaboration rules and, if needed, task approvals.
 - **Tests:** confirmed allow, unspecified deny, approval gating, requester visibility, owner execution, rule audit.
-- **Acceptance:** ONPAGE_B2C-to-CONTENT_CREATOR works only under approved active rule; no all-to-all assignment.
+- **Acceptance:** a customer-defined cross-Divisi relationship works only under an approved active rule; missing rules deny and no all-to-all assignment exists. The historical ONPAGE_B2C-to-CONTENT_CREATOR rule is legacy installation state, not a product default.
 - **Dependencies:** Slice 5 and business approval of v1 active rows.
 - **Rollback boundary:** deactivate rules/routes; same-Divisi tasks remain.
 

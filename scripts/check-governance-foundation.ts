@@ -1,11 +1,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  DIVISION_SEEDS,
   PERMISSION_SEEDS,
   ROLE_PERMISSION_SEEDS,
   ROLE_SEEDS,
 } from "../src/governance/catalog.js";
+import { LEGACY_DIVISION_SEEDS } from "./fixtures/legacy-governance-foundation.js";
 
 const MIGRATION = "202608290001_create_governance_foundation.sql";
 
@@ -48,8 +48,8 @@ async function main(): Promise<void> {
     RLS: requiredTables.every((table) => sql.includes(`alter table public.${table} enable row level security`)),
     NO_PUBLIC_POLICIES: !/create\s+policy/i.test(sql),
     NON_DESTRUCTIVE: !/\b(?:drop\s+table|truncate|delete\s+from)\b/i.test(sql),
-    DIVISION_SEED: unique(DIVISION_SEEDS.map(({ code }) => code))
-      && sameSet(catalogSeedCodes(sql, "divisions"), DIVISION_SEEDS.map(({ code }) => code)),
+    DIVISION_SEED: unique(LEGACY_DIVISION_SEEDS.map(({ code }) => code))
+      && sameSet(catalogSeedCodes(sql, "divisions"), LEGACY_DIVISION_SEEDS.map(({ code }) => code)),
     ROLE_SEED: unique(ROLE_SEEDS) && sameSet(catalogSeedCodes(sql, "roles"), ROLE_SEEDS),
     PERMISSION_SEED: unique(PERMISSION_SEEDS)
       && sameSet(catalogSeedCodes(sql, "permissions"), PERMISSION_SEEDS),

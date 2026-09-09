@@ -4,9 +4,9 @@ Slice 8 derives reports directly from canonical Task Core data. It does not crea
 
 ## Canonical definition
 
-`AFFILIATE_TASK_STATUS` includes only tasks whose owner Divisi is `CONTENT_CREATOR` and whose canonical `task_category` is `AFFILIATE`. Category is nullable for compatibility and is written only through TaskService or its intake paths. Titles, descriptions, sources, and external references never classify a task.
+`TASK_STATUS` is the canonical report and accepts customer-defined Divisi, category, status, and time-window filters. Category is nullable for compatibility and is written only through TaskService or its intake paths. Titles, descriptions, sources, and external references never classify a task.
 
-The database validates category as an uppercase code instead of a closed database enum. Slice 8 application validation supports only `AFFILIATE`; future legitimate categories can be introduced additively without destructive schema work. Existing production tasks remain unclassified and are not backfilled.
+`AFFILIATE_TASK_STATUS` is a deprecated compatibility alias for the historical `CONTENT_CREATOR`/`AFFILIATE` report. It is registered only for `LEGACY` or `UNKNOWN` installation lineage and is absent for `FRESH`; it is not a product default. The database validates category as an uppercase code instead of a closed database enum, so fresh installations use customer-defined active categories. Existing historical tasks remain unclassified and are not backfilled.
 
 ## Metrics
 

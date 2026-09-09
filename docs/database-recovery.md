@@ -92,7 +92,7 @@ The application uses Supabase PostgREST, so a raw PostgreSQL target does not pro
 
 The 2026-09-02 drill produced and restored this application logical backup:
 
-- Filename: `gwens-production-public-20260902T093513Z.dump` (historical artifact name retained so operators can identify the verified backup)
+- Filename convention: `sotoayam-backup-YYYYMMDD.dump` (the verified drill used a protected custom-format artifact with an installation-local filename)
 - Size: `151130` bytes
 - SHA-256: `37071c90278fc954e372d20d2626b5d48b37296cdec102dee7bfeb052469d2b1`
 - Contents: `public` schema and data, custom format, 276 archive TOC entries

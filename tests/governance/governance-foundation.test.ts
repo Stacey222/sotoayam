@@ -4,7 +4,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import { sanitizeAuditState } from "../../src/governance/audit-sanitizer.js";
 import {
-  DIVISION_SEEDS,
   GOVERNANCE_PERMISSIONS,
   PERMISSION_SEEDS,
   ROLE_PERMISSION_SEEDS,
@@ -12,6 +11,7 @@ import {
 } from "../../src/governance/catalog.js";
 import type { Division } from "../../src/governance/types.js";
 import { SupabaseDivisionsRepository } from "../../src/repositories/divisions.repository.js";
+import { LEGACY_DIVISION_SEEDS } from "../../scripts/fixtures/legacy-governance-foundation.js";
 
 const migrationPath = path.resolve(
   process.cwd(),
@@ -23,8 +23,8 @@ function isUnique(values: readonly string[]): boolean {
 }
 
 describe("Slice 1 governance catalog", () => {
-  it("has unique division codes", () => {
-    expect(isUnique(DIVISION_SEEDS.map(({ code }) => code))).toBe(true);
+  it("keeps the immutable legacy migration division fixture unique", () => {
+    expect(isUnique(LEGACY_DIVISION_SEEDS.map(({ code }) => code))).toBe(true);
   });
 
   it("has unique role codes", () => {

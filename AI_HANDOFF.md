@@ -67,21 +67,22 @@ Fresh-customer installation defaults are separated from the historical staged cu
 
 Operational worker flags remain explicit customer choices: safe preparation values do not silently enable Telegram polling, reminders, or critical-alert evaluation, and fresh installation no longer forces the original all-disabled cutover state. The fresh host and business-timezone fallbacks are `127.0.0.1` and `UTC`; existing installations retain compatibility through explicit environment values.
 
-Historical operational assumptions are not universal product requirements. P0-14 moved customer taxonomy to data while retaining provenance-gated compatibility; broader private operational documentation cleanup remains P0-15.
+Historical operational assumptions are not universal product requirements. P0-14 moved customer taxonomy to data while retaining provenance-gated compatibility. P0-15 removed the origin-linked `supabase/config.toml` from the customer release archive, corrected stale customer/operator guidance, labeled origin go-live records as internal historical evidence, and moved the origin division list out of runtime source into a checker fixture. The developer-local config remains in the repository, while all 15 migrations and compatibility-sensitive deployment, browser-storage, schema-contract, advisory-lock, reporting-alias, and legacy-identity identifiers remain unchanged.
+
+The release package allowlist now contains migration tooling and all migrations but no developer Supabase project identity. Deployment still creates link state from protected deploy-only environment variables; its test passes with no packaged `config.toml`. P0-15's required validation passed 605 tests with 17 opt-in disposable-database tests skipped, plus typecheck, build, contract tests, secret scan, focused packaging/deployment tests, a real archive content check, historical migration integrity, and diff whitespace validation. No live Supabase project or VPS was contacted. An additional `npm run check:governance-schema` run remains red on the pre-existing `PERMISSION_SEED` and `OWNER_GRANTS` comparisons because that historical-migration checker imports the later-expanded current permission catalog; the P0-15-relocated `DIVISION_SEED` comparison passes, and neither failing branch nor any migration was changed in this task.
 
 ## Next Agent
-Recommended: Antigravity.
+Recommended: Claude Code.
 
 Next task:
-Perform the independent adversarial review of the P0-14 implementation and its migration/setup safety gates.
+Author P0-16's clean installation guide against the now-clean customer package and current explicit setup flow.
 
 Reason:
-P0-14 implementation, focused tests, full validation, and disposable PostgreSQL rehearsals are green. The roadmap explicitly requires adversarial review before proceeding to P0-15.
+P0-15 implementation and all local gates are green. The remaining Phase 0 documentation task is a clean installation guide, followed by Antigravity dry-run validation.
 
 ## Pending Higher-Level Work
-After P0-14 review:
-- remove private/founder operational state from product documentation (P0-15);
-- write and validate the clean installation guide (P0-16).
+- Write and validate the clean installation guide (P0-16).
+- Keep identity-based admin sessions, rate limiting, integration credentials, and other Phase 1 work outside P0-16.
 
 ## Agent Handoff Format
 Every agent completing a task should return:

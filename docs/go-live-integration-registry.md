@@ -1,6 +1,6 @@
 # Go-Live Integration Registry
 
-> Historical origin-installation planning snapshot. Its zero counts and planned integration labels are not fresh-customer installation requirements or seeds.
+> **INTERNAL / HISTORICAL VERIFICATION.** This origin-installation planning snapshot is engineering evidence, not customer/operator setup material. Its zero counts and planned integration labels are not fresh-customer installation requirements or seeds.
 
 Production currently has zero integration identities and zero active integrations. The entries below are planning records only; none exists in or is activated in production. Machine identities must never be represented by fake human users.
 

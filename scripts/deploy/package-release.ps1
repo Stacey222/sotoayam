@@ -12,7 +12,8 @@ Push-Location $projectRoot
 try {
   npm run build
   if ($LASTEXITCODE -ne 0) { throw "Build failed" }
-  tar -czf $output dist/src public package.json package-lock.json .node-version scripts/migrate.ts scripts/deploy/deployment-config.sh scripts/deploy/check-vps-runtime.mjs supabase/config.toml supabase/migrations
+  # The deploy flow creates link state from protected environment variables; never ship a developer project identity.
+  tar -czf $output dist/src public package.json package-lock.json .node-version scripts/migrate.ts scripts/deploy/deployment-config.sh scripts/deploy/check-vps-runtime.mjs supabase/migrations
   if ($LASTEXITCODE -ne 0) { throw "Release packaging failed" }
 } finally {
   Pop-Location

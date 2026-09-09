@@ -50,7 +50,6 @@ async function deploymentFixture(existingRelease = true): Promise<DeploymentFixt
   await writeFile(path.join(payload, "package-lock.json"), "{}\n", "utf8");
   await writeFile(path.join(payload, ".node-version"), "24.20.0\n", "utf8");
   await writeFile(path.join(payload, "scripts", "migrate.ts"), "// test fixture\n", "utf8");
-  await writeFile(path.join(payload, "supabase", "config.toml"), 'project_id = "test"\n', "utf8");
   await writeFile(path.join(payload, "supabase", "migrations", "202609070001_test.sql"), "select 1;\n", "utf8");
   await mkdir(fakeBin, { recursive: true });
   await executable(path.join(fakeBin, "node"), `#!/usr/bin/env bash
@@ -132,6 +131,9 @@ describe("release deployment migration gate", () => {
     expect(commands.indexOf("npm prune --omit=dev --ignore-scripts")).toBeLessThan(commands.indexOf("sudo systemctl restart"));
     expect(commands.indexOf("sudo systemctl restart")).toBeLessThan(commands.indexOf("curl -fsS"));
     await expect(readFile(path.join(fixture.appRoot, "current", "package.json"), "utf8")).resolves.toBe("{}\n");
+    await expect(readFile(path.join(fixture.appRoot, "current", "supabase", "config.toml"), "utf8")).rejects.toThrow();
+    await expect(readFile(path.join(fixture.appRoot, "current", "supabase", "migrations", "202609070001_test.sql"), "utf8"))
+      .resolves.toBe("select 1;\n");
   });
 
   it.each([
@@ -174,9 +176,12 @@ describe("release deployment migration gate", () => {
 });
 
 describe("release packaging", () => {
-  it("includes the official migration runner, config, and migration inventory", async () => {
+  it("excludes local Supabase config while retaining migration tooling and inventory", async () => {
     const packaging = await readFile(path.join(projectRoot, "scripts/deploy/package-release.ps1"), "utf8");
-    expect(packaging).toContain(".node-version scripts/migrate.ts scripts/deploy/deployment-config.sh scripts/deploy/check-vps-runtime.mjs supabase/config.toml supabase/migrations");
+    const archiveCommand = packaging.match(/^\s*tar -czf \$output (.+)$/m)?.[1] ?? "";
+    expect(archiveCommand.split(/\s+/)).not.toContain("supabase/config.toml");
+    expect(archiveCommand.split(/\s+/)).toContain("supabase/migrations");
+    expect(archiveCommand.split(/\s+/)).toContain("scripts/migrate.ts");
     expect(packaging.indexOf("npm run build")).toBeLessThan(packaging.indexOf("tar -czf"));
   });
 });

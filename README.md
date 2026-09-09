@@ -16,24 +16,29 @@ Sotoayam
 
 Boundary ERP belum diimplementasikan pada MVP ini. Integrasi berikutnya masuk melalui event contract backend, bukan query database dari workflow n8n.
 
-## Local Development
+## Local Development dan Setup
 
-Persyaratan: Node.js 20+ dan project Supabase.
+Persyaratan: versi Node.js pada `.node-version` dan project Supabase.
 
 1. Install dependency: `npm install`.
 2. Salin nama variable dari `.env.example` ke `.env` milik lokal dan isi secret secara lokal. Jangan commit `.env`.
-3. Jalankan migration `supabase/migrations/202608260001_create_telegram_users.sql` melalui Supabase CLI atau SQL Editor.
-4. Jalankan development server: `npm run dev`.
-5. Buka `http://localhost:3000`.
-6. Jalankan test: `npm test`; typecheck/build: `npm run typecheck` dan `npm run build`.
+3. Hubungkan Supabase CLI ke project yang dituju dengan project ref milik operator, lalu jalankan seluruh migration terurut dengan `npm run migrate`.
+4. Build aplikasi: `npm run build`.
+5. Pilih mode setup secara eksplisit dan provision administrator pertama tepat sekali:
+   - instalasi customer baru: `npm run setup -- --fresh-install --division-name "Operations" --division-code OPERATIONS`;
+   - instalasi lama: `npm run setup -- --keep-existing-taxonomy --division-code EXISTING_DIVISION`.
+   Pada mode fresh, setup membuat Divisi nyata pertama milik customer dan administrator pertama di dalam satu transaksi.
+6. Setelah setup fresh, restart service bila sudah berjalan agar provenance baru dibaca. Untuk development lokal, jalankan `npm run dev`.
+7. Buka `http://localhost:3000`.
+8. Jalankan test: `npm test`; typecheck/build: `npm run typecheck` dan `npm run build`.
 
-Environment wajib: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TOKEN`, dan `INTERNAL_API_KEY`. Untuk kompatibilitas workspace lama, backend juga menerima alias `SUPABASE_SERVICE_KEY`, tetapi nama canonical yang dianjurkan adalah `SUPABASE_SERVICE_ROLE_KEY`.
+Environment wajib: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TOKEN`, `INTERNAL_API_KEY`, dan `ADMIN_API_KEY` dengan panjang minimal 32 karakter. Untuk kompatibilitas instalasi lama, backend juga menerima alias `SUPABASE_SERVICE_KEY`, tetapi nama canonical yang dianjurkan adalah `SUPABASE_SERVICE_ROLE_KEY`.
 
-Environment opsional: `PORT`, `TELEGRAM_POLLING_ENABLED`, `LOG_LEVEL`, dan `ADMIN_API_KEY`. Jika `ADMIN_API_KEY` diisi, seluruh `/api/users` wajib menerima header `X-Admin-Api-Key`; tombol **Admin Key** pada UI menyimpannya hanya di `sessionStorage` tab browser. Jika tidak diisi, API admin bersifat public dan deployment tidak boleh dianggap production-ready.
+Environment opsional: `PORT`, `TELEGRAM_POLLING_ENABLED`, dan `LOG_LEVEL`. Seluruh Admin API wajib menerima header `X-Admin-Api-Key`; tombol **Admin Key** pada UI menyimpannya hanya di `sessionStorage` tab browser.
 
 ## Legacy Compatibility Identifiers
 
-Nama teknis lama yang sudah menjadi kontrak deployment atau data persisten tetap dipertahankan: path `/opt/gwens-automation`, unit `gwens-automation.service`, akun/grup sistem `gwens`, project ID Supabase lokal `gwensoto`, key browser `gwens-admin-key`, contract ID `GWENS_LEGACY_SCHEMA_V1`, serta advisory-lock key `gwens_*` di migration historis. Mengubahnya tanpa migrasi deployment, browser state, dan database yang terkoordinasi dapat memutus instalasi atau kompatibilitas yang ada. Nama-nama tersebut bukan identitas produk yang ditampilkan; identitas produk resminya adalah Sotoayam.
+Instalasi lama dapat memiliki nama teknis yang sudah menjadi kontrak deployment atau data persisten: path `/opt/gwens-automation`, unit `gwens-automation.service`, akun/grup sistem `gwens`, project ID Supabase lokal `gwensoto`, key browser `gwens-admin-key`, contract ID `GWENS_LEGACY_SCHEMA_V1`, serta advisory-lock key `gwens_*` di migration historis. Jangan mengubahnya tanpa migrasi deployment, browser state, dan database yang terkoordinasi. Identifier tersebut hanya untuk kompatibilitas; identitas produk resminya adalah Sotoayam, dan identifier project lokal tidak disertakan dalam release archive customer.
 
 Telegram polling memakai `getUpdates`. Jangan jalankan lebih dari satu instance polling dengan token yang sama. Set `TELEGRAM_POLLING_ENABLED=false` pada instance tambahan atau saat memakai integrasi lain.
 
@@ -68,14 +73,14 @@ X-Internal-Api-Key: <credential yang disimpan di n8n>
 
 ```json
 {
-  "event_id": "stock-SQ001-20260826-001",
+  "event_id": "stock-SKU001-20260826-001",
   "type": "STOCK_CRITICAL",
-  "message": "Stok Squishy Strawberry kritis.",
-  "metadata": { "sku": "SQ001" }
+  "message": "Stok SKU001 mencapai batas kritis.",
+  "metadata": { "sku": "SKU001" }
 }
 ```
 
-`event_id` diterima untuk forward compatibility, tetapi deduplikasi/idempotency event belum diterapkan pada MVP. n8n tidak perlu mengetahui recipient maupun Telegram Chat ID.
+Jika `event_id` disertakan, kombinasi source dan event ID disimpan sebagai kunci idempotency: retry dengan payload identik mengembalikan hasil tersimpan tanpa broadcast ulang, sedangkan penggunaan ulang dengan payload berbeda ditolak dengan `409 NOTIFICATION_EVENT_CONFLICT`. Request tanpa `event_id` tetap didukung sebagai alur legacy non-idempotent. n8n tidak perlu mengetahui recipient maupun Telegram Chat ID.
 
 Mapping event:
 

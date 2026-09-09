@@ -18,7 +18,7 @@ Core fields: `id`, immutable unique `code`, editable `name`, `active`, timestamp
 
 Why: confirmed dynamic create/rename/activate/disable requirement. A stable key is required by users, tasks, routes, reports, alerts, and collaboration rules. It cannot safely remain a repeated string.
 
-Initial seed codes: `PURCHASING`, `SALES_GROSIR`, `DIGITAL_MARKETING`, `CONTENT_CREATOR`, `ONPAGE_B2C`, `SHOPEE_LIVE`, `GUDANG`, `MANAGEMENT`, `IT`. Seeds are configuration, not hard-coded business logic.
+Fresh installations receive customer-defined Divisi taxonomy during explicit setup and have no product-default Divisi codes. The immutable historical migration contains an origin seed set solely for legacy compatibility; P0-14 retires that exact unreferenced set only for positively declared fresh installations.
 
 ### `users`
 

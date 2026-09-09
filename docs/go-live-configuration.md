@@ -1,6 +1,6 @@
 # Go-Live Configuration Workbook
 
-> Historical origin-installation workbook. Its users, counts, Divisi, rules, timezone, categories, and integration observations are not Sotoayam fresh-install defaults. Customer taxonomy replacement is deferred to P0-13/P0-14, and full private operational documentation cleanup is deferred to P0-15.
+> **INTERNAL / HISTORICAL VERIFICATION.** This origin-installation workbook is engineering evidence, not customer/operator setup material. Its users, counts, Divisi, rules, timezone, categories, and integration observations are not Sotoayam fresh-install defaults; P0-14 now provisions customer-defined taxonomy.
 
 Snapshot date: 2026-09-02. Status values mean exactly `CONFIRMED`, `MISSING_INPUT`, `PROPOSED`, or `NOT_REQUIRED_FOR_BETA`; proposed items are not authorization to implement them.
 

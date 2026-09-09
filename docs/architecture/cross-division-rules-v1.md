@@ -1,5 +1,7 @@
 # Cross-Divisi Rules v1
 
+> **INTERNAL / HISTORICAL DESIGN RECORD.** Named Divisi and matrix rows below capture origin-installation discovery, not Sotoayam defaults. Fresh installations start with customer-defined taxonomy and no collaboration rules.
+
 ## Policy semantics
 
 - All unspecified source/target/scope combinations are **DENY**.
@@ -9,7 +11,7 @@
 - Source and target use stable `divisions.code`; renaming display text does not change rules.
 - `scope_code` is a narrow business capability such as `CONTENT_REQUEST`, not free-form spreadsheet input.
 
-## Confirmed baseline
+## Historical baseline
 
 The following are confirmed requirements, independent of individual matrix rows:
 
@@ -23,9 +25,9 @@ The following are confirmed requirements, independent of individual matrix rows:
 | Rules support allow, deny, and approval | Confirmed |
 | Missing rule defaults to deny | Recommended security baseline |
 
-The ONPAGE_B2C-to-CONTENT_CREATOR workflow is the only concrete end-to-end example stated as required. Approval policy was not confirmed, so v1 uses a conservative approval requirement until business owners approve a lower-friction rule.
+The ONPAGE_B2C-to-CONTENT_CREATOR workflow was the origin installation's only concrete end-to-end example. It does not define a generic product requirement. Approval policy was not confirmed, so the historical v1 proposal used a conservative approval requirement pending business-owner approval.
 
-## Matrix v1
+## Historical matrix v1
 
 | Source Divisi | Target Divisi | Allowed | Requires approval | Permitted task scope | Status | Reason |
 |---|---|---:|---:|---|---|---|
@@ -37,7 +39,7 @@ The ONPAGE_B2C-to-CONTENT_CREATOR workflow is the only concrete end-to-end examp
 | `GUDANG` | `PURCHASING` | yes | yes | `REPLENISHMENT_REVIEW` | **PROPOSED** | Allows stock concerns to request purchasing review; ERP remains source of truth. |
 | Any other pair | Any other pair | no | n/a | none | **DEFAULT DENY** | Prevents speculative unrestricted collaboration. |
 
-No proposed row should be seeded as active without IT/business approval. The first implementation may seed only the confirmed relationship in inactive or approval-required state.
+No row in this historical matrix is a fresh-install seed. Customer rules are created only from explicit customer requirements and remain default-deny until approved and active.
 
 ## Evaluation algorithm
 

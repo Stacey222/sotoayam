@@ -49,9 +49,10 @@ Legend:
   Owner: Claude Code
 - [x] P0-14 Implement install-time taxonomy/config migration with compatibility adapter.
   Owner: Codex -> Antigravity review
-  Note: implementation and disposable-PostgreSQL acceptance gates pass; adversarial review remains the next independent gate.
-- [ ] P0-15 Remove private/founder operational state from product documentation.
+  Note: implementation, disposable-PostgreSQL acceptance, and independent adversarial review passed.
+- [x] P0-15 Remove private/founder operational state from product documentation.
   Owner: Z.AI inventory -> Codex execute
+  Note: customer archive excludes local Supabase project config while retaining all migrations; customer/operator docs are origin-clean except explicitly labeled compatibility identifiers, and internal origin records are labeled historical.
 
 ### Documentation
 - [ ] P0-16 Write and validate clean installation guide.

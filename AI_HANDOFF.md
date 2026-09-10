@@ -26,7 +26,7 @@ Baseline at audit:
 ## Admin Authorization State
 P1-01 is implemented. All 12 admin route groups use the centralized fail-closed scope in `src/auth/admin-authorization.ts`, which resolves an opaque database-backed administrator session first and then the temporary Stage A `ADMIN_API_KEY` compatibility fallback. Session tokens and CSRF tokens are 256-bit random values stored only as SHA-256 hashes. Sessions have 12-hour absolute and 1-hour idle defaults, immediate revocation, a ten-session cap, CSRF enforcement on mutations, account/IP cooldown gates, and audited lifecycle events.
 
-The browser uses same-origin `HttpOnly`, `Secure`, `SameSite=Strict` session cookies and no longer receives or stores the shared key. `SESSION_COOKIE_SECURE=false` is allowed only on loopback. Session principals resolve the exact authenticated administrator and recheck active `SYSTEM_ADMIN` authority/capability on actor-protected routes, so two active system administrators no longer trigger the singleton failure. OWNER actor semantics remain intentionally unchanged for P2-01.
+The browser uses same-origin `HttpOnly`, `Secure`, `SameSite=Strict` session cookies and no longer receives or stores the shared key. `SESSION_COOKIE_SECURE=false` is allowed only on loopback with `TRUST_PROXY=false`. Session principals resolve the exact authenticated administrator and recheck active `SYSTEM_ADMIN` authority/capability on actor-protected routes, so two active system administrators no longer trigger the singleton failure. OWNER actor semantics remain intentionally unchanged for P2-01.
 
 `ADMIN_API_KEY` remains required with its 32-character minimum and works across all 12 groups while `ADMIN_API_KEY_FALLBACK_ENABLED=true`; fallback use is logged and audited once per process. `npm run admin:reset-password -- --email <address>` is the server-only recovery path and revokes all sessions for that account.
 
@@ -89,17 +89,23 @@ Final closeout validation passed: 612 tests passed with 17 documented opt-in dat
 
 One additive migration, `202609100001_create_admin_session_authentication.sql`, brings the repository total to 16. All 15 historical migration hashes remain unchanged. A clean isolated PostgreSQL 17 database applied 16/16 migrations, and six focused database tests passed for service-only RPC access, hash validation, touch throttling, immediate revocation, consecutive-failure cooldown, password-change revocation, idle/absolute expiry, deactivation, session cap, and audit lifecycle. The default full suite passed 647 tests with 23 documented opt-in database tests skipped; focused unit/route coverage includes 60 authorization matrix cases across all 12 groups and the two-administrator regression. Typecheck, build, nine contract tests, secret scan, governance checks, and diff checks passed. No remote Supabase project, VPS, Telegram API, or production data was contacted.
 
+## P1-02 Outbound HTTP State
+
+All production outbound HTTP now passes through `OutboundHttpClient`; Telegram sending, editing, callback acknowledgement, startup checks, and long polling no longer call `fetch` directly. Each attempt has an explicit timeout, safe reads have at most two retries (three attempts), and final failures carry stable timeout/network/HTTP/abort classification with attempt and exhaustion metadata. Retry waits observe caller cancellation immediately.
+
+Telegram mutation POSTs are never retried after ambiguous timeout, network, or 5xx outcomes. They retry only explicit HTTP 429 rejection. When both HTTP `Retry-After` and Telegram `parameters.retry_after` are valid, the longer delay wins; a server delay above the 60-second local wait cap is returned unchanged in deterministic error metadata without retrying early. Polling request failures exhaust the same bounded client policy rather than entering an unbounded error-retry loop. Existing `TELEGRAM_*_FAILED` application error contracts and notification batch accounting remain intact. No migration or runtime dependency was added.
+
 ## Next Agent
-Recommended: Codex implementation for P1-02.
+Recommended: Codex implementation for P1-03.
 
 Next task:
-Implement P1-02 shared outbound HTTP client with timeout, bounded retry, and Telegram 429 handling.
+Implement P1-03 rate limiting for auth-bearing routes.
 
 Reason:
-P1-01 is complete on local database and full-suite evidence. P1-02 is the next ordered Phase 1 reliability item.
+P1-01 and P1-02 are complete with full-suite evidence. P1-03 is the next ordered Phase 1 security item.
 
 ## Pending Higher-Level Work
-- Continue Phase 1 with P1-02 outbound HTTP reliability; preserve the P1-01 session and compatibility boundaries.
+- Continue Phase 1 with P1-03 auth-route rate limiting; preserve the P1-01 session and P1-02 outbound HTTP boundaries.
 - Preserve remaining launch gates: Phase 4 clean-room install, upgrade/rollback, restore drill, and final security review are still separate pre-customer requirements.
 
 ## Agent Handoff Format

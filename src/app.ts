@@ -48,7 +48,7 @@ import { taxonomyRoutes } from "./routes/taxonomy.routes.js";
 import { NotificationService } from "./services/notification.service.js";
 import { NotificationIntakeService } from "./services/notification-intake.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
-import { TelegramService, type TelegramSender } from "./services/telegram.service.js";
+import { TelegramApiClient, TelegramService, type TelegramSender } from "./services/telegram.service.js";
 import { UserManagementService } from "./services/user-management.service.js";
 import { SystemAuthorityService } from "./services/system-authority.service.js";
 import { UserAccessStateService, type UserAccessStateResolver } from "./services/user-access-state.service.js";
@@ -111,7 +111,8 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const registrationWriter = options.registrationWriter
     ?? (options.repository ? options.repository : new SupabaseNormalizedRegistrationRepository(client!));
   const registrationService = new TelegramRegistrationService(registrationWriter);
-  const telegramSender = options.telegramSender ?? new TelegramService(options.config.telegramBotToken, app.log);
+  const telegramApi = new TelegramApiClient();
+  const telegramSender = options.telegramSender ?? new TelegramService(options.config.telegramBotToken, app.log, telegramApi);
   const accessStateResolver = options.accessStateResolver
     ?? (client
       ? new UserAccessStateService(new SupabaseUserAccessStateRepository(client))
@@ -254,6 +255,7 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     taskConsole,
     ownerConsole,
     runtimeHealth,
+    telegramApi,
   );
 
   app.setErrorHandler((error, request, reply) => {

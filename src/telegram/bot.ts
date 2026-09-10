@@ -1,7 +1,7 @@
 import type { FastifyBaseLogger } from "fastify";
 import { DatabaseError } from "../errors.js";
 import type { TelegramRegistrationService } from "../services/telegram-registration.service.js";
-import type { TelegramSender } from "../services/telegram.service.js";
+import { TelegramApiClient, TelegramApiError, type TelegramSender } from "../services/telegram.service.js";
 import type { UserAccessStateResolver } from "../services/user-access-state.service.js";
 import type { TelegramUser } from "../types/index.js";
 import type { TelegramItConsole } from "./it-console.js";
@@ -24,24 +24,6 @@ interface TelegramUpdate {
   };
 }
 
-interface TelegramApiResponse<T> {
-  ok: boolean;
-  result?: T;
-  error_code?: number;
-  description?: string;
-}
-
-class TelegramPollingError extends Error {
-  constructor(
-    public readonly httpStatus: number,
-    public readonly telegramErrorCode?: number,
-    public readonly telegramDescription?: string,
-  ) {
-    super("Telegram polling request was rejected");
-    this.name = "TelegramPollingError";
-  }
-}
-
 export class TelegramBot {
   private offset = 0;
   private stopped = false;
@@ -57,6 +39,7 @@ export class TelegramBot {
     private readonly taskConsole?: TelegramTaskConsole,
     private readonly ownerConsole?: TelegramOwnerConsole,
     private readonly runtimeHealth?: RuntimeHealthState,
+    private readonly telegramApi = new TelegramApiClient(),
   ) {}
 
   async handleUpdate(update: TelegramUpdate): Promise<void> {
@@ -298,28 +281,26 @@ export class TelegramBot {
 
   async start(): Promise<void> {
     this.stopped = false;
-    this.logger.info("Telegram bot initialization started");
-    await this.callTelegram<{ username?: string }>("getMe");
-    this.logger.info("Telegram getMe succeeded");
-    if (this.runtimeHealth) this.runtimeHealth.telegramPollingActive = true;
-    this.logger.info("Telegram polling started");
-    while (!this.stopped) {
-      this.controller = new AbortController();
-      try {
-        const url = new URL(`https://api.telegram.org/bot${this.token}/getUpdates`);
-        url.searchParams.set("offset", String(this.offset));
-        url.searchParams.set("timeout", "25");
-        url.searchParams.set("allowed_updates", JSON.stringify(["message", "callback_query"]));
-        const response = await fetch(url, { signal: this.controller.signal });
-        const payload = (await response.json().catch(() => ({ ok: false }))) as TelegramApiResponse<TelegramUpdate[]>;
-        if (!response.ok || !payload.ok) {
-          throw new TelegramPollingError(
-            response.status,
-            payload.error_code,
-            this.redact(payload.description),
-          );
-        }
-        for (const update of payload.result ?? []) {
+    this.controller = new AbortController();
+    try {
+      this.logger.info("Telegram bot initialization started");
+      await this.telegramApi.call<{ username?: string }>(this.token, "getMe", {
+        signal: this.controller.signal,
+      });
+      this.logger.info("Telegram getMe succeeded");
+      if (this.runtimeHealth) this.runtimeHealth.telegramPollingActive = true;
+      this.logger.info("Telegram polling started");
+      while (!this.stopped) {
+        const updates = await this.telegramApi.call<TelegramUpdate[]>(this.token, "getUpdates", {
+          query: {
+            offset: String(this.offset),
+            timeout: "25",
+            allowed_updates: JSON.stringify(["message", "callback_query"]),
+          },
+          signal: this.controller.signal,
+          timeoutMs: 30_000,
+        });
+        for (const update of updates) {
           this.offset = update.update_id + 1;
           this.logger.info(
             { updateId: update.update_id, updateType: update.callback_query ? "callback_query" : "message" },
@@ -334,36 +315,26 @@ export class TelegramBot {
             );
           }
         }
-      } catch (error) {
-        if (this.stopped) break;
-        if (error instanceof TelegramPollingError) {
-          this.logger.warn(
-            {
-              httpStatus: error.httpStatus,
-              telegramErrorCode: error.telegramErrorCode,
-              telegramDescription: error.telegramDescription,
-            },
-            "Telegram polling error; retrying",
-          );
-        } else {
-          this.logger.warn(
-            { errorType: error instanceof Error ? error.name : "UnknownError" },
-            "Telegram polling error; retrying",
-          );
-        }
-        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
+    } catch (error) {
+      if (this.stopped) return;
+      if (error instanceof TelegramApiError) {
+        this.logger.warn({
+          transportKind: error.transportKind,
+          attempts: error.attempts,
+          retryExhausted: error.retryExhausted,
+          httpStatus: error.httpStatus,
+          telegramErrorCode: error.telegramErrorCode,
+          telegramDescription: this.redact(error.telegramDescription),
+        }, "Telegram polling stopped after bounded request retries");
+      } else {
+        this.logger.warn({ errorType: error instanceof Error ? error.name : "UnknownError" },
+          "Telegram polling stopped after bounded request retries");
+      }
+      throw error;
+    } finally {
+      if (this.runtimeHealth) this.runtimeHealth.telegramPollingActive = false;
     }
-    if (this.runtimeHealth) this.runtimeHealth.telegramPollingActive = false;
-  }
-
-  private async callTelegram<T>(method: string): Promise<T> {
-    const response = await fetch(`https://api.telegram.org/bot${this.token}/${method}`);
-    const payload = (await response.json().catch(() => ({ ok: false }))) as TelegramApiResponse<T>;
-    if (!response.ok || !payload.ok || payload.result === undefined) {
-      throw new TelegramPollingError(response.status, payload.error_code, this.redact(payload.description));
-    }
-    return payload.result;
   }
 
   private redact(value: string | undefined): string | undefined {

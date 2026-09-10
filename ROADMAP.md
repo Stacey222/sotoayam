@@ -64,8 +64,9 @@ Legend:
 - [x] P1-01 Real admin identity and signed HTTP-only sessions.
   Owner: Claude Code architecture -> Codex implement
   Note: implemented as the approved opaque, hashed-at-rest PostgreSQL session design with secure HttpOnly cookies, CSRF, bounded expiry/cooldown, truthful session actor resolution, two-SYSTEM_ADMIN compatibility, password rotation/recovery, and the observable Stage A `ADMIN_API_KEY` fallback. One additive migration brings the total to 16; all 15 historical hashes remain unchanged.
-- [ ] P1-02 Shared outbound HTTP client: timeout, bounded retry, Telegram 429 handling.
+- [x] P1-02 Shared outbound HTTP client: timeout, bounded retry, Telegram 429 handling.
   Owner: Codex
+  Note: all Telegram HTTP operations use one bounded client. Safe reads retry transient transport/status failures at most twice; Telegram mutations retry only explicit HTTP 429 rejections. Retry waits are abort-aware, the longer valid `Retry-After`/`retry_after` hint wins, and delays above the local wait cap fail deterministically without retrying early.
 - [ ] P1-03 Rate limiting for auth-bearing routes.
   Owner: Codex
 - [ ] P1-04 Per-integration credentials, hashed at rest, with rotation path.

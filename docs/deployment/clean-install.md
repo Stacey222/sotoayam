@@ -73,6 +73,17 @@ Create `${APP_ROOT}/shared/.env` from `.env.example` in the repository, then rep
 | `SESSION_COOKIE_SECURE` | Optional | Defaults to `true`. Production requires HTTPS; `false` is accepted only when `HOST` is loopback and `TRUST_PROXY=false` |
 | `TRUST_PROXY` | Optional | Defaults to `false`; set `true` only behind the trusted TLS reverse proxy so login throttling sees the client IP |
 | `ADMIN_API_KEY_FALLBACK_ENABLED` | Optional | Stage A compatibility fallback, default `true`. The browser never uses it |
+| `RATE_LIMIT_ENABLED` | Optional | Defaults to `true`; emergency kill switch for the in-memory availability limiter only |
+| `RATE_LIMIT_LOGIN_PER_MINUTE` | Optional | 1–120, default 5 per client IP |
+| `RATE_LIMIT_LOGIN_GLOBAL_PER_MINUTE` | Optional | 10–6000, default 60 across the process |
+| `RATE_LIMIT_ADMIN_READ_PER_MINUTE` | Optional | 30–6000, default 300; admin reads only. Auth session reads are fixed at 120/min |
+| `RATE_LIMIT_ADMIN_WRITE_PER_MINUTE` | Optional | 5–1200, default 60 |
+| `RATE_LIMIT_ADMIN_EXPENSIVE_PER_MINUTE` | Optional | 1–600, default 10 |
+| `RATE_LIMIT_INTERNAL_PER_MINUTE` | Optional | 30–20000, default 600 |
+| `RATE_LIMIT_AUTH_FAILURE_PER_MINUTE` | Optional | 3–600, default 30 per client IP |
+| `RATE_LIMIT_SHARED_ORIGIN_FACTOR` | Optional | 1–100, default 10; IP-only multiplier when loopback plus `TRUST_PROXY=false` collapses origins |
+| `RATE_LIMIT_MAX_KEYS` | Optional | 1000–200000, default 10000 |
+| `RATE_LIMIT_TRUSTED_IPS` | Optional | Empty by default; comma-separated exact IP addresses (IPv6 entries compare at /64) |
 | `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF` | **Deploy-time only** | Required by the deployment script to reach your database. Supply them in the operator's protected environment. **Never** put them in `shared/.env`, the package, or shell history |
 | `SOTOAYAM_BOOTSTRAP_ADMIN_PASSWORD` | **Setup-time only** | Optional automation fallback for the first-administrator password. Prefer `--password-file` or the prompt. Remove it immediately after setup |
 
@@ -350,6 +361,8 @@ Migrations only move forward. Application rollback with `scripts/deploy/rollback
 - Human administrators use their own password and revocable server session. Logout and password rotation take effect in the database without a cache window.
 - `ADMIN_API_KEY` is only the temporary Stage A compatibility fallback. Treat it as a server secret: at least 32 random characters, unique to this installation, rotated if exposed, and disable it when the staged migration permits.
 - Keep `PORT` bound to `127.0.0.1` and put a trusted reverse proxy with TLS in front of it. Secure administrator cookies are intentionally unusable over plain external HTTP.
+- Behind that proxy, set `TRUST_PROXY=true` and configure the proxy to overwrite rather than append `X-Forwarded-For`. Never enable proxy trust on a directly reachable application port: a client-controlled forwarding header bypasses IP budgets and expands limiter key cardinality. With loopback plus `TRUST_PROXY=false`, Sotoayam warns and applies shared-origin limits because all clients appear as one IP.
+- Rate-limit counters are process-local and reset on restart. Durable password cooldown remains in `admin_login_attempts`; `RATE_LIMIT_ENABLED=false` disables only volume limiting and never authentication.
 - Secrets belong only in `shared/.env` with `0640` permissions. Never in the release package, Git, shell history, or systemd unit files.
 - Deploy-time Supabase variables and the setup password are supplied for one command and removed immediately afterwards.
 - Do not expose the database or any Supabase port publicly.

@@ -35,6 +35,11 @@ const config: AppConfig = {
   logLevel: "silent",
   sessionAbsoluteTtlSeconds: 43_200, sessionIdleTtlSeconds: 3_600,
   sessionCookieSecure: false, trustProxy: false, adminApiKeyFallbackEnabled: true,
+  rateLimitEnabled: true, rateLimitLoginPerMinute: 5, rateLimitLoginGlobalPerMinute: 60,
+  rateLimitAdminReadPerMinute: 300, rateLimitAdminWritePerMinute: 60,
+  rateLimitAdminExpensivePerMinute: 10, rateLimitInternalPerMinute: 600,
+  rateLimitAuthFailurePerMinute: 30, rateLimitSharedOriginFactor: 10,
+  rateLimitMaxKeys: 10_000, rateLimitTrustedIps: [],
 };
 
 const repository = {

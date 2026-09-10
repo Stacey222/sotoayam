@@ -10,7 +10,7 @@ export interface NotificationRoutesOptions {
 }
 
 export async function notificationRoutes(app: FastifyInstance, options: NotificationRoutesOptions): Promise<void> {
-  app.post("/send", async (request) => {
+  app.post("/send", { config: { rateLimit: "internal" } }, async (request) => {
     const providedKey = request.headers["x-internal-api-key"] as string | undefined;
     if (!secureEqual(providedKey, options.internalApiKey)) {
       throw new AppError(401, "UNAUTHORIZED", "Invalid or missing internal API key");

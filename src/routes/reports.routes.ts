@@ -50,7 +50,7 @@ export const reportsRoutes = defineAdminRoutes<ReportsRoutesOptions>(async (app,
     const admin = await resolveAdminActor(options.adminActorResolver, request.adminPrincipal);
     if (!hasSystemAdminCapability(admin)) throw new AppError(403, "REPORT_FORBIDDEN", "Active SYSTEM_ADMIN authority is required");
   });
-  app.get("/task-status", async (request) => {
+  app.get("/task-status", { config: { rateLimit: "admin-expensive" } }, async (request) => {
     const query = request.query as { window?: unknown; detail?: unknown; page?: unknown; division?: unknown; task_category?: unknown; statuses?: unknown };
     const actor = await options.actorResolver.resolveOwnerActor();
     const window = parseReportWindow(query.window);
@@ -61,12 +61,13 @@ export const reportsRoutes = defineAdminRoutes<ReportsRoutesOptions>(async (app,
       : await options.service.taskStatus(actor, selected, window) };
   });
 
-  if (options.legacyAliasEnabled !== false) app.get("/content-creator/affiliate-task-status", async (request) => {
+  if (options.legacyAliasEnabled !== false) app.get("/content-creator/affiliate-task-status",
+    { config: { rateLimit: "admin-expensive" } }, async (request) => {
     const query = request.query as { window?: unknown; detail?: unknown; page?: unknown };
     const actor = await options.actorResolver.resolveOwnerActor();
     const window = parseReportWindow(query.window);
     const selectedDetail = detail(query);
     if (selectedDetail) return { success: true, data: await options.service.drillDown(actor, window, selectedDetail.kind, selectedDetail.page) };
     return { success: true, data: await options.service.affiliateTaskStatus(actor, window) };
-  });
+    });
 }, { unauthorizedMessage: "Invalid or missing report API key" });

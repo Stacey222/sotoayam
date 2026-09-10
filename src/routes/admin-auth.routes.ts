@@ -17,10 +17,12 @@ function sessionData(principal: SessionPrincipal) {
     display_name: principal.displayName, expires_at: principal.expiresAt };
 }
 
-async function authenticate(request: FastifyRequest, options: AdminAuthRoutesOptions): Promise<SessionPrincipal> {
+async function authenticate(request: FastifyRequest, reply: import("fastify").FastifyReply,
+  options: AdminAuthRoutesOptions): Promise<SessionPrincipal> {
   const principal = await options.authenticator.authenticate(request);
   if (!principal) throw new AppError(401, "SESSION_REQUIRED", "An authenticated administrator session is required");
   request.adminPrincipal = principal;
+  request.server.rateLimitAdminIdentity?.(request, reply, principal);
   return principal;
 }
 
@@ -33,7 +35,7 @@ function requireCsrf(request: FastifyRequest, options: AdminAuthRoutesOptions, p
 export const adminAuthRoutes = async (app: FastifyInstance, options: AdminAuthRoutesOptions): Promise<void> => {
   if (!app.hasRequestDecorator("adminPrincipal")) app.decorateRequest("adminPrincipal", null);
 
-  app.post("/login", async (request, reply) => {
+  app.post("/login", { config: { rateLimit: "login" } }, async (request, reply) => {
     const body = request.body as { email?: unknown; password?: unknown } | null;
     try {
       const result = await options.service.login({ email: body?.email, password: body?.password,
@@ -46,9 +48,10 @@ export const adminAuthRoutes = async (app: FastifyInstance, options: AdminAuthRo
     }
   });
 
-  app.post("/logout", async (request, reply) => {
+  app.post("/logout", { config: { rateLimit: "auth-mutate" } }, async (request, reply) => {
     const principal = await options.authenticator.authenticate(request);
     if (principal) {
+      request.server.rateLimitAdminIdentity?.(request, reply, principal);
       requireCsrf(request, options, principal);
       await options.service.logout(principal);
     }
@@ -56,13 +59,13 @@ export const adminAuthRoutes = async (app: FastifyInstance, options: AdminAuthRo
     return reply.status(204).send();
   });
 
-  app.get("/session", async (request) => {
-    const principal = await authenticate(request, options);
+  app.get("/session", { config: { rateLimit: "auth-session" } }, async (request, reply) => {
+    const principal = await authenticate(request, reply, options);
     return { success: true, data: sessionData(principal) };
   });
 
-  app.post("/password", async (request, reply) => {
-    const principal = await authenticate(request, options);
+  app.post("/password", { config: { rateLimit: "auth-password" } }, async (request, reply) => {
+    const principal = await authenticate(request, reply, options);
     requireCsrf(request, options, principal);
     const body = request.body as { current_password?: unknown; new_password?: unknown } | null;
     await options.service.changePassword(principal, {
@@ -71,15 +74,15 @@ export const adminAuthRoutes = async (app: FastifyInstance, options: AdminAuthRo
     return reply.status(204).send();
   });
 
-  app.get("/sessions", async (request) => {
-    const principal = await authenticate(request, options);
+  app.get("/sessions", { config: { rateLimit: "auth-session" } }, async (request, reply) => {
+    const principal = await authenticate(request, reply, options);
     const sessions = await options.service.listSessions(principal);
     return { success: true, data: sessions.map((session) => ({ ...session,
       current: session.sessionId === principal.sessionId })) };
   });
 
-  app.delete<{ Params: { id: string } }>("/sessions/:id", async (request, reply) => {
-    const principal = await authenticate(request, options);
+  app.delete<{ Params: { id: string } }>("/sessions/:id", { config: { rateLimit: "auth-mutate" } }, async (request, reply) => {
+    const principal = await authenticate(request, reply, options);
     requireCsrf(request, options, principal);
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request.params.id)) {
       throw new AppError(400, "INVALID_SESSION_ID", "Session id is invalid");

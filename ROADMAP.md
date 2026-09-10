@@ -67,8 +67,9 @@ Legend:
 - [x] P1-02 Shared outbound HTTP client: timeout, bounded retry, Telegram 429 handling.
   Owner: Codex
   Note: all Telegram HTTP operations use one bounded client. Safe reads retry transient transport/status failures at most twice; Telegram mutations retry only explicit HTTP 429 rejections. Retry waits are abort-aware, the longer valid `Retry-After`/`retry_after` hint wins, and delays above the local wait cap fail deterministically without retrying early.
-- [ ] P1-03 Rate limiting for auth-bearing routes.
+- [x] P1-03 Rate limiting for auth-bearing routes.
   Owner: Codex
+  Note: in-process bounded token buckets protect login, auth/session, all 12 admin groups, expensive operations, and internal integrations. Policies are structural, 401 penalties gate later credential attempts, shared-origin proxy collapse is warned and mitigated, and limiter failures do not weaken fail-closed authentication.
 - [ ] P1-04 Per-integration credentials, hashed at rest, with rotation path.
   Owner: Claude Code design -> Codex implement
 - [ ] P1-05 Persist Telegram offset and update dedupe.
@@ -118,6 +119,7 @@ Legend:
   Owner: Codex
 - [ ] P3-06 Reverse proxy/TLS/firewall deployment guidance.
   Owner: Claude Code -> Codex config
+  Note: P1-03 already requires the trusted reverse proxy to overwrite `X-Forwarded-For`; broader TLS/firewall guidance remains deferred.
 - [ ] P3-07 Customer troubleshooting runbook.
   Owner: Z.AI draft -> Claude Code review
 - [ ] P3-08 External free-tier uptime monitoring against `/ready`.

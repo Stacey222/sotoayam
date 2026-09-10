@@ -30,7 +30,7 @@ export const adminCriticalAlertRoutes = defineAdminRoutes<{ evaluator: CriticalA
     const actor = await resolveAdminActor(options.actorResolver, request.adminPrincipal);
     if (!hasSystemAdminCapability(actor)) throw new AppError(403, "CRITICAL_ALERT_OPERATIONS_FORBIDDEN", "Active SYSTEM_ADMIN authority in an authority-capable division is required");
   });
-  app.post("/evaluate", async (request) => {
+  app.post("/evaluate", { config: { rateLimit: "admin-expensive" } }, async (request) => {
     if ((request.query as { dry_run?: unknown }).dry_run !== "true") throw new AppError(400, "DRY_RUN_REQUIRED", "Operational evaluation requires dry_run=true");
     const result = await options.evaluator.evaluate({ dryRun: true });
     return { success: true, data: { dry_run: true, candidates: result.candidates, observations: result.observations.map((item) => ({ type: item.alertType, severity: item.severity, summary: item.summary })) } };

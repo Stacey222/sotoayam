@@ -4,7 +4,8 @@ import fastifyCookie from "@fastify/cookie";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/env.js";
 import { createSupabaseClient } from "./db/supabase.js";
-import { AppError } from "./errors.js";
+import { AppError, RateLimitedError } from "./errors.js";
+import { registerRateLimit } from "./http/rate-limit-plugin.js";
 import {
   SupabaseTelegramUsersRepository,
   type TelegramUsersRepository,
@@ -105,6 +106,7 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const app = Fastify({ logger: options.logger === false ? false : { level: options.config.logLevel },
     trustProxy: options.config.trustProxy });
   await app.register(fastifyCookie);
+  await registerRateLimit(app, { config: options.config });
   const runtimeHealth = new RuntimeHealthState();
   const client = options.repository ? null : createSupabaseClient(options.config);
   const repository = options.repository ?? new SupabaseTelegramUsersRepository(client!);
@@ -269,8 +271,13 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     const statusCode = appError?.statusCode ?? frameworkStatus ?? 500;
     const errorCode = appError?.code ?? (frameworkStatus ? "INVALID_REQUEST" : "INTERNAL_ERROR");
     const errorMessage = appError?.message ?? (frameworkStatus ? "Invalid request" : "An unexpected error occurred");
+    if (error instanceof RateLimitedError) {
+      reply.header("Retry-After", String(error.retryAfterSeconds));
+      if (error.rateLimit) reply.headers({ "RateLimit-Limit": String(error.rateLimit.limit),
+        "RateLimit-Remaining": String(error.rateLimit.remaining), "RateLimit-Reset": String(error.rateLimit.resetSeconds) });
+    }
     if (statusCode >= 500) request.log.error({ err: error }, "Request failed");
-    else request.log.warn({ code: errorCode, path: request.url }, "Request rejected");
+    else if (!(error instanceof RateLimitedError)) request.log.warn({ code: errorCode, path: request.url }, "Request rejected");
     return reply.status(statusCode).send({
       success: false,
       error: {
@@ -365,10 +372,13 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     internalApiKey: options.config.internalApiKey,
   });
 
-  await app.register(fastifyStatic, {
-    root: path.resolve(process.cwd(), "public"),
-    prefix: "/",
-    wildcard: false,
+  await app.register(async (staticScope) => {
+    staticScope.addHook("onRoute", (routeOptions) => {
+      routeOptions.config = { ...routeOptions.config, rateLimit: "exempt" };
+    });
+    await staticScope.register(fastifyStatic, {
+      root: path.resolve(process.cwd(), "public"), prefix: "/", wildcard: false,
+    });
   });
 
   return { app, bot, reminderScheduler };

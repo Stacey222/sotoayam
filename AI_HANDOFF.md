@@ -95,17 +95,25 @@ All production outbound HTTP now passes through `OutboundHttpClient`; Telegram s
 
 Telegram mutation POSTs are never retried after ambiguous timeout, network, or 5xx outcomes. They retry only explicit HTTP 429 rejection. When both HTTP `Retry-After` and Telegram `parameters.retry_after` are valid, the longer delay wins; a server delay above the 60-second local wait cap is returned unchanged in deterministic error metadata without retrying early. Polling request failures exhaust the same bounded client policy rather than entering an unbounded error-retry loop. Existing `TELEGRAM_*_FAILED` application error contracts and notification batch accounting remain intact. No migration or runtime dependency was added.
 
+## P1-03 Rate-Limit State
+
+Application-level rate limiting is implemented as dependency-free, in-process token buckets with continuous refill, bounded keys, sweep-then-LRU eviction, unreferenced sweep timers, and Fastify close cleanup. Route policy is structural: all 12 `defineAdminRoutes` groups inherit read/write policy, special auth/expensive/internal routes declare explicit policies, and health/static routes are exempt. Session admin budgets use `adminUserId`, compatibility fallback uses one `apikey` identity, auth session reads are fixed at 120/minute, and current-password changes are fixed at 5 per 15 minutes.
+
+Every completed 401 charges a per-IP auth-failure bucket. Later credential requests inspect that bucket before handlers, database calls, or scrypt; exhausted sources receive `RATE_LIMITED`. A limiter 429 never reaches P1-01 login work and never creates a P1-01 failure. Limiter faults fail open while authentication remains fail-closed. Loopback plus `TRUST_PROXY=false` emits a warning and multiplies only IP budgets; no localhost or `ADMIN_API_KEY` exemption exists. Counters reset on restart by design, while durable login cooldown remains database-backed.
+
+P1-03 validation passed 58 focused tests and the full 699-test active suite, with 24 documented database tests skipped by default. Typecheck, build, nine contract tests, secret scan, governance checks, historical migration integrity, and diff checks passed. No migration or production dependency was added.
+
 ## Next Agent
-Recommended: Codex implementation for P1-03.
+Recommended: Claude Code design for P1-04.
 
 Next task:
-Implement P1-03 rate limiting for auth-bearing routes.
+Design P1-04 per-integration credentials with hashed-at-rest rotation.
 
 Reason:
-P1-01 and P1-02 are complete with full-suite evidence. P1-03 is the next ordered Phase 1 security item.
+P1-01 through P1-03 are complete; P1-04 is the next ordered Phase 1 security item.
 
 ## Pending Higher-Level Work
-- Continue Phase 1 with P1-03 auth-route rate limiting; preserve the P1-01 session and P1-02 outbound HTTP boundaries.
+- Continue Phase 1 with P1-04 integration credentials; preserve the P1-01 session, P1-02 HTTP, and P1-03 limiter boundaries.
 - Preserve remaining launch gates: Phase 4 clean-room install, upgrade/rollback, restore drill, and final security review are still separate pre-customer requirements.
 
 ## Agent Handoff Format

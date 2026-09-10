@@ -9,6 +9,14 @@ export class AppError extends Error {
   }
 }
 
+export class RateLimitedError extends AppError {
+  constructor(public readonly retryAfterSeconds: number,
+    public readonly rateLimit?: { limit: number; remaining: number; resetSeconds: number }) {
+    super(429, "RATE_LIMITED", "Too many requests");
+    this.name = "RateLimitedError";
+  }
+}
+
 export interface DatabaseDiagnostic {
   code?: string;
   message?: string;

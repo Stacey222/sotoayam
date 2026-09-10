@@ -125,3 +125,9 @@ Required before first paying customer:
 - upgrade/rollback rehearsal;
 - backup restore rehearsal;
 - final security review.
+
+## D-019 — Application rate limiting
+Decision: Request-volume limiting is an in-process token bucket with bounded memory and restart-resetting counters; no Redis or database counter is used for the single-process v1 architecture.
+Status: Implemented for P1-03.
+
+The limiter is an availability boundary and fails open only on its own internal errors; authentication remains independently fail-closed. Durable credential cooldown remains in `admin_login_attempts`. Route policies are attached structurally, administrator fairness is keyed by authenticated user (or the compatibility API-key identity), and 401 responses feed a per-IP penalty that gates later credential attempts. Auth-session reads are fixed at 120/minute; `RATE_LIMIT_ADMIN_READ_PER_MINUTE` applies only to normal admin reads.

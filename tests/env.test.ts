@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../src/config/env.js";
+import { createRateLimitPolicies } from "../src/http/rate-limit-policy.js";
 
 describe("Supabase server credential validation", () => {
   beforeEach(() => vi.stubEnv("ADMIN_API_KEY", "a".repeat(32)));
@@ -211,6 +212,49 @@ describe("Supabase server credential validation", () => {
       vi.stubEnv("SESSION_ABSOLUTE_TTL_SECONDS", "900");
       vi.stubEnv("SESSION_IDLE_TTL_SECONDS", "901");
       expect(() => loadConfig()).toThrow("Invalid environment variable: SESSION_IDLE_TTL_SECONDS");
+    });
+  });
+
+  describe("P1-03 rate-limit configuration", () => {
+    beforeEach(() => {
+      vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+      vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+      vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+      vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    });
+
+    it("RL-20 loads the approved defaults", () => {
+      const loaded = loadConfig();
+      expect(loaded).toMatchObject({ rateLimitEnabled: true, rateLimitLoginPerMinute: 5,
+        rateLimitLoginGlobalPerMinute: 60, rateLimitAdminReadPerMinute: 300,
+        rateLimitAdminWritePerMinute: 60, rateLimitAdminExpensivePerMinute: 10,
+        rateLimitInternalPerMinute: 600, rateLimitAuthFailurePerMinute: 30,
+        rateLimitSharedOriginFactor: 10, rateLimitMaxKeys: 10_000, rateLimitTrustedIps: [] });
+      expect(createRateLimitPolicies(loaded).policies["auth-session"].capacity).toBe(120);
+      expect(createRateLimitPolicies(loaded).policies["admin-read"].capacity).toBe(300);
+    });
+
+    it.each([
+      ["RATE_LIMIT_LOGIN_PER_MINUTE", 1, 120], ["RATE_LIMIT_LOGIN_GLOBAL_PER_MINUTE", 10, 6_000],
+      ["RATE_LIMIT_ADMIN_READ_PER_MINUTE", 30, 6_000], ["RATE_LIMIT_ADMIN_WRITE_PER_MINUTE", 5, 1_200],
+      ["RATE_LIMIT_ADMIN_EXPENSIVE_PER_MINUTE", 1, 600], ["RATE_LIMIT_INTERNAL_PER_MINUTE", 30, 20_000],
+      ["RATE_LIMIT_AUTH_FAILURE_PER_MINUTE", 3, 600], ["RATE_LIMIT_SHARED_ORIGIN_FACTOR", 1, 100],
+      ["RATE_LIMIT_MAX_KEYS", 1_000, 200_000],
+    ] as const)("RL-20 bounds and validates %s", (name, minimum, maximum) => {
+      vi.stubEnv(name, "not-a-number"); expect(() => loadConfig()).toThrow(`Invalid environment variable: ${name}`);
+      vi.stubEnv(name, String(minimum - 1)); expect(() => loadConfig()).toThrow(`Invalid environment variable: ${name}`);
+      vi.stubEnv(name, String(maximum + 1)); expect(() => loadConfig()).toThrow(`Invalid environment variable: ${name}`);
+      vi.stubEnv(name, String(minimum)); expect(loadConfig()).toBeDefined();
+      vi.stubEnv(name, String(maximum)); expect(loadConfig()).toBeDefined();
+    });
+
+    it("RL-20 validates the kill switch and parses trusted IPs", () => {
+      vi.stubEnv("RATE_LIMIT_ENABLED", "invalid");
+      expect(() => loadConfig()).toThrow("Invalid environment variable: RATE_LIMIT_ENABLED");
+      vi.stubEnv("RATE_LIMIT_ENABLED", "false");
+      vi.stubEnv("RATE_LIMIT_TRUSTED_IPS", "127.0.0.2, 2001:db8::1");
+      expect(loadConfig()).toMatchObject({ rateLimitEnabled: false,
+        rateLimitTrustedIps: ["127.0.0.2", "2001:db8::1"] });
     });
   });
 });

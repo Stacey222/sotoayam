@@ -24,6 +24,17 @@ export interface AppConfig extends SupabaseConfig {
   sessionCookieSecure: boolean;
   trustProxy: boolean;
   adminApiKeyFallbackEnabled: boolean;
+  rateLimitEnabled: boolean;
+  rateLimitLoginPerMinute: number;
+  rateLimitLoginGlobalPerMinute: number;
+  rateLimitAdminReadPerMinute: number;
+  rateLimitAdminWritePerMinute: number;
+  rateLimitAdminExpensivePerMinute: number;
+  rateLimitInternalPerMinute: number;
+  rateLimitAuthFailurePerMinute: number;
+  rateLimitSharedOriginFactor: number;
+  rateLimitMaxKeys: number;
+  rateLimitTrustedIps: string[];
 }
 
 function parseHost(value: string | undefined): string {
@@ -145,6 +156,17 @@ export function loadConfig(): AppConfig {
     sessionCookieSecure,
     trustProxy,
     adminApiKeyFallbackEnabled: parseBoolean("ADMIN_API_KEY_FALLBACK_ENABLED", process.env.ADMIN_API_KEY_FALLBACK_ENABLED, true),
+    rateLimitEnabled: parseBoolean("RATE_LIMIT_ENABLED", process.env.RATE_LIMIT_ENABLED, true),
+    rateLimitLoginPerMinute: parseBoundedInteger("RATE_LIMIT_LOGIN_PER_MINUTE", process.env.RATE_LIMIT_LOGIN_PER_MINUTE, 5, 1, 120),
+    rateLimitLoginGlobalPerMinute: parseBoundedInteger("RATE_LIMIT_LOGIN_GLOBAL_PER_MINUTE", process.env.RATE_LIMIT_LOGIN_GLOBAL_PER_MINUTE, 60, 10, 6_000),
+    rateLimitAdminReadPerMinute: parseBoundedInteger("RATE_LIMIT_ADMIN_READ_PER_MINUTE", process.env.RATE_LIMIT_ADMIN_READ_PER_MINUTE, 300, 30, 6_000),
+    rateLimitAdminWritePerMinute: parseBoundedInteger("RATE_LIMIT_ADMIN_WRITE_PER_MINUTE", process.env.RATE_LIMIT_ADMIN_WRITE_PER_MINUTE, 60, 5, 1_200),
+    rateLimitAdminExpensivePerMinute: parseBoundedInteger("RATE_LIMIT_ADMIN_EXPENSIVE_PER_MINUTE", process.env.RATE_LIMIT_ADMIN_EXPENSIVE_PER_MINUTE, 10, 1, 600),
+    rateLimitInternalPerMinute: parseBoundedInteger("RATE_LIMIT_INTERNAL_PER_MINUTE", process.env.RATE_LIMIT_INTERNAL_PER_MINUTE, 600, 30, 20_000),
+    rateLimitAuthFailurePerMinute: parseBoundedInteger("RATE_LIMIT_AUTH_FAILURE_PER_MINUTE", process.env.RATE_LIMIT_AUTH_FAILURE_PER_MINUTE, 30, 3, 600),
+    rateLimitSharedOriginFactor: parseBoundedInteger("RATE_LIMIT_SHARED_ORIGIN_FACTOR", process.env.RATE_LIMIT_SHARED_ORIGIN_FACTOR, 10, 1, 100),
+    rateLimitMaxKeys: parseBoundedInteger("RATE_LIMIT_MAX_KEYS", process.env.RATE_LIMIT_MAX_KEYS, 10_000, 1_000, 200_000),
+    rateLimitTrustedIps: (process.env.RATE_LIMIT_TRUSTED_IPS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
   };
   if (config.criticalAlertEvaluatorEnabled && !config.reminderSchedulerEnabled) {
     throw new Error("Invalid environment: CRITICAL_ALERT_EVALUATOR_ENABLED requires REMINDER_SCHEDULER_ENABLED");

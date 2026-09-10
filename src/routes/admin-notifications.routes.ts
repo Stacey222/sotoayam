@@ -22,7 +22,7 @@ export const adminNotificationsRoutes = defineAdminRoutes<AdminNotificationsRout
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) throw new AppError(400, "VALIDATION_ERROR", "limit must be between 1 and 50");
     return { success: true, data: await options.service.recent(limit) };
   });
-  app.post("/evaluate", async (request) => {
+  app.post("/evaluate", { config: { rateLimit: "admin-expensive" } }, async (request) => {
     const dryRun = (request.query as { dry_run?: unknown }).dry_run;
     if (dryRun !== "true") throw new AppError(400, "DRY_RUN_REQUIRED", "Operational evaluation requires dry_run=true");
     return { success: true, data: await options.service.dryRun() };

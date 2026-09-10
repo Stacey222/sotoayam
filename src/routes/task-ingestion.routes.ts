@@ -13,7 +13,9 @@ export interface InternalTaskRoutesOptions { service: TaskIngestionService; inte
 
 export const csvImportRoutes = defineAdminRoutes<CsvImportRoutesOptions>(async (app, options) => {
   app.addContentTypeParser("text/csv", { parseAs: "string" }, (_request, body, done) => done(null, body));
-  app.post<{ Querystring: { dry_run?: string } }>("/csv", { bodyLimit: CSV_MAX_BYTES }, async (request) => {
+  app.post<{ Querystring: { dry_run?: string } }>("/csv", {
+    bodyLimit: CSV_MAX_BYTES, config: { rateLimit: "admin-expensive" },
+  }, async (request) => {
     if (typeof request.body !== "string") throw new AppError(400, "CSV_CONTENT_TYPE_REQUIRED", "Use text/csv with a UTF-8 CSV body");
     const dryRun = booleanQuery(request.query.dry_run);
     const safeLabel = importLabel(request.headers["x-import-label"]);
@@ -28,13 +30,14 @@ export async function internalTaskIngestionRoutes(app: FastifyInstance, options:
       throw new AppError(401, "UNAUTHORIZED", "Invalid or missing internal API key");
     }
   });
-  app.post<{ Querystring: { dry_run?: string } }>("/tasks", async (request) => {
+  app.post<{ Querystring: { dry_run?: string } }>("/tasks", { config: { rateLimit: "internal" } }, async (request) => {
     const rawCode = request.headers["x-integration-code"];
     if (typeof rawCode !== "string" || !/^[A-Z][A-Z0-9_]{0,99}$/.test(rawCode.trim().toUpperCase())) {
       throw new AppError(401, "INTEGRATION_REQUIRED", "A valid integration identity is required");
     }
     const integration = await options.integrations.findActiveByCode(rawCode.trim().toUpperCase());
     if (!integration) throw new AppError(403, "INTEGRATION_FORBIDDEN", "Integration identity is unknown or inactive");
+    request.server.rateLimitIntegrationIdentity?.(request, integration.id);
     if (!await options.integrations.hasActiveCapability(integration.id, "TASK_CREATE")) {
       throw new AppError(403, "INTEGRATION_CAPABILITY_REQUIRED", "Integration does not have TASK_CREATE capability");
     }

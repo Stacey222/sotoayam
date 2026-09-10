@@ -117,7 +117,7 @@ describe("admin route boundaries", () => {
       expect(internal.statusCode).not.toBe(401);
       expect(internal.json().error.code).toBe("VALIDATION_ERROR");
       expect(adminOnly.statusCode).toBe(401);
-      expect(adminOnly.json().error.code).toBe("UNAUTHORIZED");
+      expect(adminOnly.json().error.code).toBe("INTEGRATION_UNAUTHORIZED");
     } finally {
       await app.close();
     }
@@ -148,7 +148,7 @@ describe("admin route boundaries", () => {
       expect(internal.statusCode).toBe(401);
       expect(internal.json().code).toBe("INTEGRATION_REQUIRED");
       expect(adminOnly.statusCode).toBe(401);
-      expect(adminOnly.json().code).toBe("UNAUTHORIZED");
+      expect(adminOnly.json().code).toBe("INTEGRATION_UNAUTHORIZED");
     } finally {
       await app.close();
     }

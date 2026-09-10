@@ -57,8 +57,9 @@ Create `${APP_ROOT}/shared/.env` from `.env.example` in the repository, then rep
 | `SUPABASE_URL` | **Required** | Your Supabase project API URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Required** | Service role or secret key. Server-side only. The alias `SUPABASE_SERVICE_KEY` is accepted for older installations |
 | `TELEGRAM_BOT_TOKEN` | **Required** | Required even when polling is off. Use this instance's own bot |
-| `INTERNAL_API_KEY` | **Required** | Shared secret for `POST /api/notifications/send` from your automation |
-| `ADMIN_API_KEY` | **Required** | **Minimum 32 characters.** Startup refuses anything shorter. Generate it randomly; do not reuse another system's key |
+| `INTERNAL_API_KEY` | **Required** | Temporary shared secret for legacy internal callers during integration-credential Stage A |
+| `INTERNAL_API_KEY_FALLBACK_ENABLED` | Optional | Defaults to `true` for zero-downtime upgrades. Disable only after the credential usage gate passes |
+| `ADMIN_API_KEY` | Conditional | Required only when `ADMIN_API_KEY_FALLBACK_ENABLED=true`; when present it must contain at least 32 characters |
 | `HOST` | Optional | Defaults to `127.0.0.1`. Keep the port private to the server |
 | `PORT` | Optional | Defaults to `3000`. Match `HEALTH_PORT` if you change it |
 | `TELEGRAM_POLLING_ENABLED` | Optional | `true` or `false`. See **Telegram Setup** |
@@ -72,7 +73,7 @@ Create `${APP_ROOT}/shared/.env` from `.env.example` in the repository, then rep
 | `SESSION_IDLE_TTL_SECONDS` | Optional | Defaults to `3600`; allowed 300 through the absolute TTL |
 | `SESSION_COOKIE_SECURE` | Optional | Defaults to `true`. Production requires HTTPS; `false` is accepted only when `HOST` is loopback and `TRUST_PROXY=false` |
 | `TRUST_PROXY` | Optional | Defaults to `false`; set `true` only behind the trusted TLS reverse proxy so login throttling sees the client IP |
-| `ADMIN_API_KEY_FALLBACK_ENABLED` | Optional | Stage A compatibility fallback, default `true`. The browser never uses it |
+| `ADMIN_API_KEY_FALLBACK_ENABLED` | Optional | Stage B compatibility fallback, default `false`. Enabling it is temporary and emits a startup warning |
 | `RATE_LIMIT_ENABLED` | Optional | Defaults to `true`; emergency kill switch for the in-memory availability limiter only |
 | `RATE_LIMIT_LOGIN_PER_MINUTE` | Optional | 1–120, default 5 per client IP |
 | `RATE_LIMIT_LOGIN_GLOBAL_PER_MINUTE` | Optional | 10–6000, default 60 across the process |
@@ -176,7 +177,7 @@ This restart is required after fresh setup. Skipping it leaves an obsolete legac
 
 Confirm the installation is administratively ready by opening the HTTPS admin URL and signing in with the email and password created by setup. The browser receives a short-lived `HttpOnly` session cookie; it never receives `ADMIN_API_KEY`.
 
-The following server-side check uses the temporary Stage A compatibility fallback and is not the daily administrator login path:
+The following server-side check requires an explicit temporary compatibility opt-in (`ADMIN_API_KEY_FALLBACK_ENABLED=true`) and is not the daily administrator login path. Before opting in, use `npm run check:admin-key-usage -- --since <ISO timestamp>` to inspect recorded fallback usage:
 
 ```bash
 curl -fsS -H "X-Admin-Api-Key: ${ADMIN_API_KEY}" \
@@ -194,7 +195,7 @@ sudo journalctl -u "${SERVICE_NAME}" -n 100 --no-pager
 
 All human administration goes through the same-origin web UI using the signed-in administrator's opaque server session. Session identity is revalidated on every request and audit rows name that administrator. State-changing requests also require the session-bound CSRF token handled by the UI.
 
-The `X-Admin-Api-Key` examples below are retained only for Stage A automation compatibility. They work while `ADMIN_API_KEY_FALLBACK_ENABLED=true`, are observed in logs/audit, and should not be copied into a browser. New human workflows must use login sessions.
+The `X-Admin-Api-Key` examples below are retained only for explicitly enabled compatibility. The Stage B default is `false`; when temporarily enabled, use is observed in logs/audit and a deprecation warning appears at every startup. New human workflows must use login sessions.
 
 Create the divisions your business actually has:
 
@@ -325,6 +326,22 @@ Require exit code 0. Then verify: the expected tables and functions exist, row-l
 
 A recovery drill should be run at least monthly and before any high-risk migration. Never point a production Telegram bot at a recovery target.
 
+## Integration Credentials
+
+Create the first machine credential from the protected server after the integration identity exists:
+
+```bash
+npm run integration:credential -- --code ERP_SYNC --label "n8n production" --email admin@example.com
+```
+
+The command prints the `soto_ik_<selector>_<secret>` value exactly once. Put it directly into the integration's protected secret store and send it only in `X-Integration-Key`; never put it in a URL, log, repository, or database field. `X-Integration-Code` is optional and, when supplied, must agree with the credential owner. It never authenticates by itself.
+
+The CLI requires the email of the active SYSTEM_ADMIN who performs the operation and never chooses arbitrarily when multiple administrators exist.
+
+Rotate with overlap: create a second credential, deploy it to the caller, make a real request, wait more than 60 seconds, and confirm the new row has a non-null `last_used_at` through `GET /api/admin/integrations/:id/credentials`. Only then revoke the old credential with `POST /api/admin/integrations/:id/credentials/:credentialId/revoke`. Two active credentials is the hard maximum. Use immediate revocation for compromise; `grace_seconds` from 1 through 604800 is for planned retirement only. Grace cannot reactivate an expired credential and can only shorten an existing future expiry.
+
+Existing internal callers continue through `INTERNAL_API_KEY_FALLBACK_ENABLED=true`. After migration, run `npm run check:integration-credentials -- --since <upgrade-ISO-timestamp>`. Disable the fallback only when it reports `SAFE TO DISABLE FALLBACK`; the gate requires an observed credential for every active integration and no legacy fallback audit since the supplied timestamp.
+
 ## Upgrade
 
 1. Take a backup and verify its checksum.
@@ -332,6 +349,8 @@ A recovery drill should be run at least monthly and before any high-risk migrati
 3. Upload it with the two deploy scripts.
 4. Run `deploy-release.sh` with the deploy-time Supabase variables set. It installs the new release, runs migrations, and only then switches to the new version.
 5. Confirm health, then confirm your divisions, categories, and rules are unchanged.
+
+P1-04 changes `ADMIN_API_KEY_FALLBACK_ENABLED` to default `false`. Human administrators continue through sessions. If an old server-side script still needs the shared administrator key, temporarily set the flag to `true` and supply an `ADMIN_API_KEY` of at least 32 characters; every startup warns while this opt-in remains. Use `npm run check:admin-key-usage -- --since <upgrade-ISO-timestamp>` to identify recorded use before removing that opt-in.
 
 Do **not** run setup again — it is refused after the first installation.
 
@@ -359,7 +378,7 @@ Migrations only move forward. Application rollback with `scripts/deploy/rollback
 
 - The service runs as a non-root account. Keep it that way.
 - Human administrators use their own password and revocable server session. Logout and password rotation take effect in the database without a cache window.
-- `ADMIN_API_KEY` is only the temporary Stage A compatibility fallback. Treat it as a server secret: at least 32 random characters, unique to this installation, rotated if exposed, and disable it when the staged migration permits.
+- `ADMIN_API_KEY` is a temporary Stage B compatibility fallback and is disabled by default. If explicitly enabled, treat it as a server secret: at least 32 random characters, unique to this installation, and remove the opt-in after usage checks are clear.
 - Keep `PORT` bound to `127.0.0.1` and put a trusted reverse proxy with TLS in front of it. Secure administrator cookies are intentionally unusable over plain external HTTP.
 - Behind that proxy, set `TRUST_PROXY=true` and configure the proxy to overwrite rather than append `X-Forwarded-For`. Never enable proxy trust on a directly reachable application port: a client-controlled forwarding header bypasses IP budgets and expands limiter key cardinality. With loopback plus `TRUST_PROXY=false`, Sotoayam warns and applies shared-origin limits because all clients appear as one IP.
 - Rate-limit counters are process-local and reset on restart. Durable password cooldown remains in `admin_login_attempts`; `RATE_LIMIT_ENABLED=false` disables only volume limiting and never authentication.

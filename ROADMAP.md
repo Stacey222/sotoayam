@@ -70,8 +70,9 @@ Legend:
 - [x] P1-03 Rate limiting for auth-bearing routes.
   Owner: Codex
   Note: in-process bounded token buckets protect login, auth/session, all 12 admin groups, expensive operations, and internal integrations. Policies are structural, 401 penalties gate later credential attempts, shared-origin proxy collapse is warned and mitigated, and limiter failures do not weaken fail-closed authentication.
-- [ ] P1-04 Per-integration credentials, hashed at rest, with rotation path.
+- [x] P1-04 Per-integration credentials, hashed at rest, with rotation path.
   Owner: Claude Code design -> Codex implement
+  Note: machine integrations now authenticate with per-integration 256-bit opaque credentials stored only as SHA-256 digests behind service-role RPCs. Rotation supports at most two active credentials, immediate or grace-period revocation, audited lifecycle events, integration attribution without changing notification idempotency semantics, and staged legacy-key fallbacks. One additive migration brings the total to 17; all 16 historical hashes remain unchanged.
 - [ ] P1-05 Persist Telegram offset and update dedupe.
   Owner: Codex
 - [ ] P1-06 Bound/pacing for Telegram fan-out.

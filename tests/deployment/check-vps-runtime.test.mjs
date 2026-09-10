@@ -12,7 +12,8 @@ const freshEnvironment = (overrides = {}) => ({
   SUPABASE_SERVICE_ROLE_KEY: "test-server-key",
   TELEGRAM_BOT_TOKEN: "test-bot-token",
   INTERNAL_API_KEY: "test-internal-key",
-  ADMIN_API_KEY: "test-admin-key",
+  INTERNAL_API_KEY_FALLBACK_ENABLED: "true",
+  ADMIN_API_KEY_FALLBACK_ENABLED: "false",
   HOST: "127.0.0.1",
   PORT: "3000",
   TELEGRAM_POLLING_ENABLED: "true",
@@ -65,6 +66,10 @@ describe("generic VPS runtime validation", () => {
       REMINDER_SCHEDULER_ENABLED: "false",
       CRITICAL_ALERT_EVALUATOR_ENABLED: "true",
     })).invalid).toContain("CRITICAL_ALERT_EVALUATOR_ENABLED");
+    expect(validateRuntimeEnvironment(freshEnvironment({ INTERNAL_API_KEY_FALLBACK_ENABLED: "sometimes" })).invalid)
+      .toContain("INTERNAL_API_KEY_FALLBACK_ENABLED");
+    expect(validateRuntimeEnvironment(freshEnvironment({ ADMIN_API_KEY_FALLBACK_ENABLED: "true" })).missing)
+      .toContain("ADMIN_API_KEY");
   });
 
   it("rejects an unsupported Node runtime before the health request", async () => {

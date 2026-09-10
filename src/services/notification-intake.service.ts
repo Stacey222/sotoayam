@@ -68,7 +68,7 @@ export class NotificationIntakeService implements NotificationSender {
     private readonly deliveries: ReminderNotificationsRepository,
   ) {}
 
-  async send(event: NotificationEvent): Promise<NotificationResult> {
+  async send(event: NotificationEvent, integrationId: number | null = null): Promise<NotificationResult> {
     const externalEventId = event.event_id ?? `gen:${randomUUID()}`;
     const identityOrigin = event.event_id === undefined ? "GENERATED" as const : "CALLER" as const;
     const identity = `${SOURCE}\u0000${externalEventId}`;
@@ -79,7 +79,7 @@ export class NotificationIntakeService implements NotificationSender {
         if (this.active.get(identity) === preceding) this.active.delete(identity);
         continue;
       }
-      const operation = this.persistAndDispatch(event, externalEventId, identityOrigin);
+      const operation = this.persistAndDispatch(event, externalEventId, identityOrigin, integrationId);
       this.active.set(identity, operation);
       try {
         return await operation;
@@ -93,6 +93,7 @@ export class NotificationIntakeService implements NotificationSender {
     event: NotificationEvent,
     externalEventId: string,
     identityOrigin: "CALLER" | "GENERATED",
+    integrationId: number | null,
   ): Promise<NotificationResult> {
     const recipients = await this.resolver.resolve(event.type);
     const recipientExpansion = recipients.map<NotificationIntakeRecipient>((recipient) => ({
@@ -107,6 +108,7 @@ export class NotificationIntakeService implements NotificationSender {
       payloadHash: notificationPayloadHash(event),
       message: event.message,
       recipients: recipientExpansion,
+      integrationId,
     });
 
     if (outcome.conflict) {

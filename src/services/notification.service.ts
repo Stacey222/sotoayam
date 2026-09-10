@@ -16,7 +16,7 @@ export interface NotificationResult {
 }
 
 export interface NotificationSender {
-  send(event: NotificationEvent): Promise<NotificationResult>;
+  send(event: NotificationEvent, integrationId?: number | null): Promise<NotificationResult>;
 }
 
 export class NotificationService {

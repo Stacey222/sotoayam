@@ -84,6 +84,9 @@ import { SupabaseAdminSessionRepository } from "./repositories/admin-session.rep
 import { DatabaseAdminSessionAuthenticator } from "./auth/admin-session.js";
 import { AdminAuthenticationService } from "./services/admin-authentication.service.js";
 import { adminAuthRoutes } from "./routes/admin-auth.routes.js";
+import { SupabaseIntegrationCredentialRepository } from "./repositories/integration-credential.repository.js";
+import { IntegrationCredentialService } from "./services/integration-credential.service.js";
+import { InternalApiKeyFallbackObserver } from "./auth/internal-integration-authorization.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -161,6 +164,9 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     adminSessionRepository, options.config.sessionAbsoluteTtlSeconds, new SupabaseAuditRepository(client!),
     (message) => app.log.warn(message),
   ) : undefined;
+  if (options.config.adminApiKeyFallbackEnabled) {
+    app.log.warn("ADMIN_API_KEY compatibility fallback is enabled and deprecated; migrate automation to integration credentials");
+  }
   const sessionAuthenticator = adminSessionRepository ? new DatabaseAdminSessionAuthenticator(
     adminSessionRepository, options.config.sessionCookieSecure, options.config.sessionIdleTtlSeconds,
   ) : undefined;
@@ -220,10 +226,15 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
         new SupabaseAuditRepository(client),
       )
     : undefined;
+  const integrationCredentialRepository = client ? new SupabaseIntegrationCredentialRepository(client) : undefined;
+  const integrationCredentialService = integrationCredentialRepository
+    ? new IntegrationCredentialService(integrationCredentialRepository) : undefined;
+  const internalFallbackObserver = client
+    ? new InternalApiKeyFallbackObserver(new SupabaseAuditRepository(client), (message) => app.log.warn(message)) : undefined;
   const integrationAdministrationService = client && userManagementService && taskUsers && divisionsRepository
     ? new IntegrationAdministrationService(
-        new SupabaseIntegrationAdministrationRepository(client), divisionsRepository, taskUsers,
-        userManagementService, new SupabaseSystemAuthorityRepository(client),
+      new SupabaseIntegrationAdministrationRepository(client), divisionsRepository, taskUsers,
+        userManagementService, new SupabaseSystemAuthorityRepository(client), integrationCredentialService,
       )
     : undefined;
   const itConsole = client && userManagementService ? new TelegramItConsoleService(
@@ -345,6 +356,9 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     await app.register(internalTaskIngestionRoutes, {
       prefix: "/api/internal", service: taskIngestionService,
       integrations: new SupabaseTaskSourceIntegrationsRepository(client!), internalApiKey: options.config.internalApiKey,
+      internalApiKeyFallbackEnabled: options.config.internalApiKeyFallbackEnabled,
+      credentials: integrationCredentialService,
+      onInternalApiKeyFallback: internalFallbackObserver ? () => internalFallbackObserver.observe() : undefined,
     });
   }
   if (notificationOperations && taskUsers && permissionsRepository) {
@@ -370,6 +384,9 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     prefix: "/api/notifications",
     notificationService,
     internalApiKey: options.config.internalApiKey,
+    internalApiKeyFallbackEnabled: options.config.internalApiKeyFallbackEnabled,
+    credentials: integrationCredentialService,
+    onInternalApiKeyFallback: internalFallbackObserver ? () => internalFallbackObserver.observe() : undefined,
   });
 
   await app.register(async (staticScope) => {

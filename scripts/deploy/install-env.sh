@@ -11,7 +11,8 @@ REQUIRED=(
   SUPABASE_SERVICE_ROLE_KEY
   TELEGRAM_BOT_TOKEN
   INTERNAL_API_KEY
-  ADMIN_API_KEY
+  INTERNAL_API_KEY_FALLBACK_ENABLED
+  ADMIN_API_KEY_FALLBACK_ENABLED
   HOST
   PORT
   TELEGRAM_POLLING_ENABLED
@@ -35,12 +36,23 @@ for name in "${REQUIRED[@]}"; do
     exit 1
   fi
 done
-for name in TELEGRAM_POLLING_ENABLED REMINDER_SCHEDULER_ENABLED CRITICAL_ALERT_EVALUATOR_ENABLED; do
+for name in TELEGRAM_POLLING_ENABLED REMINDER_SCHEDULER_ENABLED CRITICAL_ALERT_EVALUATOR_ENABLED INTERNAL_API_KEY_FALLBACK_ENABLED ADMIN_API_KEY_FALLBACK_ENABLED; do
   if ! grep -Eq "^${name}=(true|false|\"true\"|\"false\")$" "${NEXT}"; then
     echo "Environment validation failed: ${name} must be true or false" >&2
     exit 1
   fi
 done
+ADMIN_FALLBACK_VALUE="$(sed -n 's/^ADMIN_API_KEY_FALLBACK_ENABLED=//p' "${NEXT}" | tr -d '"')"
+ADMIN_KEY_COUNT="$(grep -c '^ADMIN_API_KEY=' "${NEXT}" || true)"
+ADMIN_KEY_VALUE="$(sed -n 's/^ADMIN_API_KEY=//p' "${NEXT}" | tr -d '"')"
+if [[ "${ADMIN_KEY_COUNT}" -gt 1 || ( "${ADMIN_KEY_COUNT}" -eq 1 && -n "${ADMIN_KEY_VALUE}" && "${#ADMIN_KEY_VALUE}" -lt 32 ) ]]; then
+  echo "Environment validation failed: ADMIN_API_KEY must appear at most once and contain at least 32 characters when present" >&2
+  exit 1
+fi
+if [[ "${ADMIN_FALLBACK_VALUE}" == "true" && ( "${ADMIN_KEY_COUNT}" -ne 1 || -z "${ADMIN_KEY_VALUE}" ) ]]; then
+  echo "Environment validation failed: ADMIN_API_KEY is required when ADMIN_API_KEY_FALLBACK_ENABLED=true" >&2
+  exit 1
+fi
 if ! grep -Eq '^HOST=(127\.0\.0\.1|"127\.0\.0\.1")$' "${NEXT}"; then
   echo "Environment validation failed: HOST must be 127.0.0.1" >&2
   exit 1

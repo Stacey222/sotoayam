@@ -228,7 +228,7 @@ describe.each(routeCases)("$routeGroup admin authorization", ({
         sessionAuthenticator: { authenticate: async () => ({ kind: "session", adminUserId: 2,
           sessionId: "123e4567-e89b-42d3-a456-426614174000", email: "second@example.test",
           displayName: "Second Admin", expiresAt: "2026-09-10T00:00:00Z" }),
-        verifyCsrf: () => true } } : {};
+        verifyCsrf: () => true } } : { adminApiKeyFallbackEnabled: true };
       await register(app, adminApiKey, downstream, secondaryAuthorization, authorization);
       const response = await app.inject({
         method,

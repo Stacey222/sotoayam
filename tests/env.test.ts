@@ -145,14 +145,16 @@ describe("Supabase server credential validation", () => {
       vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
     });
 
-    it("rejects a missing admin API key", () => {
+    it("P4-28 accepts a missing admin API key when fallback is disabled", () => {
       vi.stubEnv("ADMIN_API_KEY", undefined);
-      expect(() => loadConfig()).toThrow("Missing required environment variable: ADMIN_API_KEY");
+      vi.stubEnv("ADMIN_API_KEY_FALLBACK_ENABLED", "false");
+      expect(loadConfig().adminApiKey).toBeUndefined();
     });
 
-    it("rejects an empty admin API key", () => {
+    it("P4-28 treats an empty admin API key as absent when fallback is disabled", () => {
       vi.stubEnv("ADMIN_API_KEY", "");
-      expect(() => loadConfig()).toThrow("Missing required environment variable: ADMIN_API_KEY");
+      vi.stubEnv("ADMIN_API_KEY_FALLBACK_ENABLED", "false");
+      expect(loadConfig().adminApiKey).toBeUndefined();
     });
 
     it.each([1, 16, 31])("rejects a %i-character admin API key", (length) => {
@@ -187,7 +189,7 @@ describe("Supabase server credential validation", () => {
       vi.stubEnv("ADMIN_API_KEY_FALLBACK_ENABLED", "");
       expect(loadConfig()).toMatchObject({ sessionAbsoluteTtlSeconds: 43_200,
         sessionIdleTtlSeconds: 3_600, sessionCookieSecure: true,
-        trustProxy: false, adminApiKeyFallbackEnabled: true });
+        trustProxy: false, adminApiKeyFallbackEnabled: false });
     });
 
     it("allows insecure development cookies only on loopback", () => {

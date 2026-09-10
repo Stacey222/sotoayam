@@ -33,6 +33,7 @@ export interface NotificationIntakeRepository {
     payloadHash: string;
     message: string;
     recipients: NotificationIntakeRecipient[];
+    integrationId?: number | null;
   }): Promise<NotificationIntakeOutcome>;
   findDueForEvent(eventId: number, now: string, staleBefore: string, limit: number): Promise<DueDelivery[]>;
   dispatchState(eventId: number): Promise<NotificationDispatchState>;
@@ -54,7 +55,7 @@ export class SupabaseNotificationIntakeRepository implements NotificationIntakeR
   constructor(private readonly client: SupabaseClient) {}
 
   async intake(input: Parameters<NotificationIntakeRepository["intake"]>[0]): Promise<NotificationIntakeOutcome> {
-    const { data, error } = await this.client.rpc("intake_notification_event", {
+    const parameters = {
       p_source: input.source,
       p_external_event_id: input.externalEventId,
       p_identity_origin: input.identityOrigin,
@@ -65,7 +66,11 @@ export class SupabaseNotificationIntakeRepository implements NotificationIntakeR
         legacy_id: recipient.legacyId,
         dedupe_key: recipient.dedupeKey,
       })),
-    }).single();
+    };
+    const request = input.integrationId === null || input.integrationId === undefined
+      ? this.client.rpc("intake_notification_event", parameters)
+      : this.client.rpc("intake_attributed_notification_event", { ...parameters, p_integration_id: input.integrationId });
+    const { data, error } = await request.single();
     if (error) throw governanceDatabaseError("Unable to persist notification event", error);
     const row = data as unknown as RpcRow;
     return {

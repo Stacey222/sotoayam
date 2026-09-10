@@ -9,7 +9,7 @@ export interface SupabaseConfig {
 export interface AppConfig extends SupabaseConfig {
   telegramBotToken: string;
   internalApiKey: string;
-  adminApiKey: string;
+  adminApiKey?: string;
   host?: string;
   port: number;
   telegramPollingEnabled: boolean;
@@ -24,6 +24,7 @@ export interface AppConfig extends SupabaseConfig {
   sessionCookieSecure: boolean;
   trustProxy: boolean;
   adminApiKeyFallbackEnabled: boolean;
+  internalApiKeyFallbackEnabled?: boolean;
   rateLimitEnabled: boolean;
   rateLimitLoginPerMinute: number;
   rateLimitLoginGlobalPerMinute: number;
@@ -53,8 +54,9 @@ function requireEnv(name: string, aliases: string[] = []): string {
   throw new Error(`Missing required environment variable: ${name}`);
 }
 
-function requireMinimumLengthEnv(name: string, minimumLength: number): string {
-  const value = requireEnv(name);
+function optionalMinimumLengthEnv(name: string, minimumLength: number): string | undefined {
+  const value = process.env[name]?.trim();
+  if (!value) return undefined;
   if (value.length < minimumLength) {
     throw new Error(`Invalid environment variable: ${name} must be at least ${minimumLength} characters`);
   }
@@ -134,6 +136,12 @@ export function loadConfig(): AppConfig {
     process.env.SESSION_IDLE_TTL_SECONDS, 3_600, 300, sessionAbsoluteTtlSeconds);
   const sessionCookieSecure = parseBoolean("SESSION_COOKIE_SECURE", process.env.SESSION_COOKIE_SECURE, true);
   const trustProxy = parseBoolean("TRUST_PROXY", process.env.TRUST_PROXY, false);
+  const adminApiKeyFallbackEnabled = parseBoolean("ADMIN_API_KEY_FALLBACK_ENABLED",
+    process.env.ADMIN_API_KEY_FALLBACK_ENABLED, false);
+  const adminApiKey = optionalMinimumLengthEnv("ADMIN_API_KEY", 32);
+  if (adminApiKeyFallbackEnabled && !adminApiKey) {
+    throw new Error("Missing required environment variable: ADMIN_API_KEY when ADMIN_API_KEY_FALLBACK_ENABLED=true");
+  }
   if (!sessionCookieSecure && (!isLoopbackHost(host) || trustProxy)) {
     throw new Error("Invalid environment: SESSION_COOKIE_SECURE=false requires a loopback HOST and TRUST_PROXY=false");
   }
@@ -141,7 +149,7 @@ export function loadConfig(): AppConfig {
     ...supabase,
     telegramBotToken: requireEnv("TELEGRAM_BOT_TOKEN"),
     internalApiKey: requireEnv("INTERNAL_API_KEY"),
-    adminApiKey: requireMinimumLengthEnv("ADMIN_API_KEY", 32),
+    adminApiKey,
     host,
     port: parsePort(process.env.PORT),
     telegramPollingEnabled: process.env.TELEGRAM_POLLING_ENABLED === "true",
@@ -155,7 +163,9 @@ export function loadConfig(): AppConfig {
     sessionIdleTtlSeconds,
     sessionCookieSecure,
     trustProxy,
-    adminApiKeyFallbackEnabled: parseBoolean("ADMIN_API_KEY_FALLBACK_ENABLED", process.env.ADMIN_API_KEY_FALLBACK_ENABLED, true),
+    adminApiKeyFallbackEnabled,
+    internalApiKeyFallbackEnabled: parseBoolean("INTERNAL_API_KEY_FALLBACK_ENABLED",
+      process.env.INTERNAL_API_KEY_FALLBACK_ENABLED, true),
     rateLimitEnabled: parseBoolean("RATE_LIMIT_ENABLED", process.env.RATE_LIMIT_ENABLED, true),
     rateLimitLoginPerMinute: parseBoundedInteger("RATE_LIMIT_LOGIN_PER_MINUTE", process.env.RATE_LIMIT_LOGIN_PER_MINUTE, 5, 1, 120),
     rateLimitLoginGlobalPerMinute: parseBoundedInteger("RATE_LIMIT_LOGIN_GLOBAL_PER_MINUTE", process.env.RATE_LIMIT_LOGIN_GLOBAL_PER_MINUTE, 60, 10, 6_000),

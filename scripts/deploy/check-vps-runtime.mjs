@@ -7,7 +7,8 @@ const REQUIRED_RUNTIME_ENV = [
   "SUPABASE_SERVICE_ROLE_KEY",
   "TELEGRAM_BOT_TOKEN",
   "INTERNAL_API_KEY",
-  "ADMIN_API_KEY",
+  "INTERNAL_API_KEY_FALLBACK_ENABLED",
+  "ADMIN_API_KEY_FALLBACK_ENABLED",
   "HOST",
   "PORT",
   "TELEGRAM_POLLING_ENABLED",
@@ -21,6 +22,8 @@ const BOOLEAN_RUNTIME_ENV = [
   "TELEGRAM_POLLING_ENABLED",
   "REMINDER_SCHEDULER_ENABLED",
   "CRITICAL_ALERT_EVALUATOR_ENABLED",
+  "INTERNAL_API_KEY_FALLBACK_ENABLED",
+  "ADMIN_API_KEY_FALLBACK_ENABLED",
 ];
 
 export function validateRuntimeEnvironment(environment) {
@@ -32,6 +35,9 @@ export function validateRuntimeEnvironment(environment) {
   if (environment.CRITICAL_ALERT_EVALUATOR_ENABLED === "true" && environment.REMINDER_SCHEDULER_ENABLED !== "true") {
     invalid.push("CRITICAL_ALERT_EVALUATOR_ENABLED");
   }
+  const adminKey = environment.ADMIN_API_KEY?.trim();
+  if (adminKey && adminKey.length < 32) invalid.push("ADMIN_API_KEY");
+  if (environment.ADMIN_API_KEY_FALLBACK_ENABLED === "true" && !adminKey) missing.push("ADMIN_API_KEY");
   return { missing, invalid: [...new Set(invalid)] };
 }
 

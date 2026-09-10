@@ -45,7 +45,7 @@ Do not introduce Telegram webhooks solely for architectural neatness.
 
 ## D-007 — Admin authentication target
 Decision: Human administrators use their scrypt password identity with opaque random, hashed-at-rest server sessions transported by `HttpOnly`, `Secure`, `SameSite=Strict` cookies and protected by a session-bound CSRF token. This realizes the original signed-session intent while permitting immediate database-backed revocation.
-Status: Implemented by P1-01. `ADMIN_API_KEY` remains a required, observable Stage A compatibility fallback, can be disabled explicitly, and is not used by the browser. Its staged removal remains tied to P1-04; OWNER actor redesign remains P2-01.
+Status: Implemented by P1-01 and advanced to Stage B by P1-04. `ADMIN_API_KEY` is optional while the observable compatibility fallback defaults off; explicitly enabling that fallback requires a key of at least 32 characters and emits a startup warning. OWNER actor redesign remains P2-01.
 
 Session-authenticated access to all 12 admin route groups currently requires an active `SYSTEM_ADMIN` authority assignment. This is an intentional P1-01 boundary until future role-onboarding work defines broader administrator eligibility; it does not change the separate OWNER actor redesign boundary.
 
@@ -59,9 +59,9 @@ External systems must not directly depend on Sotoayam's internal database schema
 
 ## D-009 — Integration credentials
 Decision: Machine integrations should have separable credentials and authenticated identity.
-Status: Approved target.
+Status: Implemented for P1-04.
 
-A caller-provided integration code must not be the sole identity assertion.
+A caller-provided integration code is never an identity assertion. Machine identity comes from a per-integration 256-bit credential stored only as a SHA-256 digest and checked by a service-only SECURITY DEFINER RPC on every request. Rotation permits at most two overlapping active credentials, revocation is immediate, and P1-03 limits by owning integration rather than credential. The legacy internal key remains an observable, default-enabled Stage A fallback; the administrator shared-key fallback advances to Stage B and defaults off.
 
 ## D-010 — Notification reliability
 Decision: External notification intake must converge on the existing persisted intent/delivery model.

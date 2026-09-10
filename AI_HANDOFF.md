@@ -28,7 +28,7 @@ P1-01 is implemented. All 12 admin route groups use the centralized fail-closed 
 
 The browser uses same-origin `HttpOnly`, `Secure`, `SameSite=Strict` session cookies and no longer receives or stores the shared key. `SESSION_COOKIE_SECURE=false` is allowed only on loopback with `TRUST_PROXY=false`. Session principals resolve the exact authenticated administrator and recheck active `SYSTEM_ADMIN` authority/capability on actor-protected routes, so two active system administrators no longer trigger the singleton failure. OWNER actor semantics remain intentionally unchanged for P2-01.
 
-`ADMIN_API_KEY` remains required with its 32-character minimum and works across all 12 groups while `ADMIN_API_KEY_FALLBACK_ENABLED=true`; fallback use is logged and audited once per process. `npm run admin:reset-password -- --email <address>` is the server-only recovery path and revokes all sessions for that account.
+`ADMIN_API_KEY` is now optional by default and remains accepted across all 12 groups only when `ADMIN_API_KEY_FALLBACK_ENABLED=true`; when present it retains its 32-character minimum. Explicit fallback enablement requires the key, logs a deprecation warning at every startup, and logs/audits use once per process. `npm run admin:reset-password -- --email <address>` is the server-only recovery path and revokes all sessions for that account.
 
 New admin route groups must use `defineAdminRoutes` and be added to the security manifest. Admin API-key checks must not be implemented locally in route files.
 
@@ -103,17 +103,27 @@ Every completed 401 charges a per-IP auth-failure bucket. Later credential reque
 
 P1-03 validation passed 58 focused tests and the full 699-test active suite, with 24 documented database tests skipped by default. Typecheck, build, nine contract tests, secret scan, governance checks, historical migration integrity, and diff checks passed. No migration or production dependency was added.
 
+## P1-04 Integration Credential State
+
+Per-integration machine credentials are implemented for internal task ingestion and notification intake. Credentials use an 80-bit selector plus a 256-bit opaque secret; only the SHA-256 secret digest is stored. Authentication executes through a service-role-only SECURITY DEFINER RPC on every request, resolves the owning integration and division, enforces required capability, and uses the existing P1-03 integration identity budget. `X-Integration-Code` is only an optional consistency assertion and never authenticates by itself.
+
+SYSTEM_ADMIN session routes and the server-side CLI provide create, metadata-only list, immediate/grace revoke, and rotation workflows. The CLI requires `--email` to select an active SYSTEM_ADMIN explicitly and remains valid with multiple administrators. Grace is monotonic: it cannot reactivate expired credentials or extend future expiry, while immediate revocation always overrides it. At most two credentials may be active per integration under the shared advisory lock. Lifecycle audit rows contain selector metadata but never raw credentials or digests. Notification attribution uses the new nullable `integration_id` while preserving `notification_events.source` and `(source, external_event_id)` idempotency exactly.
+
+The `INTERNAL_API_KEY` Stage A fallback remains enabled by default for zero-downtime upgrades and is observed once per process. `ADMIN_API_KEY` Stage B is now optional with its fallback disabled by default; operators can temporarily opt in, with startup deprecation warnings and usage checkers supporting removal evidence. One additive migration, `202609110001_create_integration_credentials.sql`, brings the repository total to 17 and preserves all 16 historical hashes. Focused disposable PostgreSQL validation applied 17/17 migrations and passed all 17 integration-credential database tests.
+
+Follow-up authorization risk M1 remains intentionally open: notification credential authorization currently has no dedicated `NOTIFICATION_SEND` capability. Adding that capability is a separate product authorization decision and was not included in the P1-04 lifecycle correction.
+
 ## Next Agent
-Recommended: Claude Code design for P1-04.
+Recommended: Codex implementation for P1-05.
 
 Next task:
-Design P1-04 per-integration credentials with hashed-at-rest rotation.
+Implement P1-05 persisted Telegram offset and update deduplication after its architecture contract is approved.
 
 Reason:
-P1-01 through P1-03 are complete; P1-04 is the next ordered Phase 1 security item.
+P1-01 through P1-04 are complete; P1-05 is the next ordered Phase 1 reliability item.
 
 ## Pending Higher-Level Work
-- Continue Phase 1 with P1-04 integration credentials; preserve the P1-01 session, P1-02 HTTP, and P1-03 limiter boundaries.
+- Continue Phase 1 with P1-05 Telegram offset persistence and update deduplication; preserve the P1-01 session, P1-02 HTTP, P1-03 limiter, and P1-04 integration-credential boundaries.
 - Preserve remaining launch gates: Phase 4 clean-room install, upgrade/rollback, restore drill, and final security review are still separate pre-customer requirements.
 
 ## Agent Handoff Format

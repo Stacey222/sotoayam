@@ -32,9 +32,9 @@ Persyaratan: versi Node.js pada `.node-version` dan project Supabase.
 7. Buka `http://localhost:3000`, lalu masuk dengan email dan password administrator yang dibuat oleh setup. Untuk localhost HTTP saja, set `SESSION_COOKIE_SECURE=false` dengan `TRUST_PROXY=false`; cookie tidak aman ditolak pada host non-loopback atau saat proxy trust aktif.
 8. Jalankan test: `npm test`; typecheck/build: `npm run typecheck` dan `npm run build`.
 
-Environment wajib: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TOKEN`, `INTERNAL_API_KEY`, dan `ADMIN_API_KEY` dengan panjang minimal 32 karakter. Untuk kompatibilitas instalasi lama, backend juga menerima alias `SUPABASE_SERVICE_KEY`, tetapi nama canonical yang dianjurkan adalah `SUPABASE_SERVICE_ROLE_KEY`.
+Environment wajib: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TOKEN`, dan `INTERNAL_API_KEY`. `ADMIN_API_KEY` hanya diperlukan bila fallback kompatibilitas diaktifkan, dan minimal 32 karakter. Untuk kompatibilitas instalasi lama, backend juga menerima alias `SUPABASE_SERVICE_KEY`, tetapi nama canonical yang dianjurkan adalah `SUPABASE_SERVICE_ROLE_KEY`.
 
-Environment sesi opsional: `SESSION_ABSOLUTE_TTL_SECONDS` (default 12 jam), `SESSION_IDLE_TTL_SECONDS` (default 1 jam), `SESSION_COOKIE_SECURE` (default `true`), `TRUST_PROXY` (default `false`), dan `ADMIN_API_KEY_FALLBACK_ENABLED` (sementara default `true`). UI memakai cookie sesi `HttpOnly`, tidak pernah menerima atau menyimpan `ADMIN_API_KEY`, dan mengirim token CSRF pada perubahan data. Production wajib memakai HTTPS; aktifkan `TRUST_PROXY=true` hanya di belakang reverse proxy tepercaya.
+Environment sesi opsional: `SESSION_ABSOLUTE_TTL_SECONDS` (default 12 jam), `SESSION_IDLE_TTL_SECONDS` (default 1 jam), `SESSION_COOKIE_SECURE` (default `true`), `TRUST_PROXY` (default `false`), dan `ADMIN_API_KEY_FALLBACK_ENABLED` (Stage B, default `false`). UI memakai cookie sesi `HttpOnly`, tidak pernah menerima atau menyimpan `ADMIN_API_KEY`, dan mengirim token CSRF pada perubahan data. Production wajib memakai HTTPS; aktifkan `TRUST_PROXY=true` hanya di belakang reverse proxy tepercaya.
 
 Rate limiting aktif secara default dan berjalan dalam memori proses; counter kembali penuh saat restart. Konfigurasinya adalah `RATE_LIMIT_ENABLED`, `RATE_LIMIT_LOGIN_PER_MINUTE`, `RATE_LIMIT_LOGIN_GLOBAL_PER_MINUTE`, `RATE_LIMIT_ADMIN_READ_PER_MINUTE`, `RATE_LIMIT_ADMIN_WRITE_PER_MINUTE`, `RATE_LIMIT_ADMIN_EXPENSIVE_PER_MINUTE`, `RATE_LIMIT_INTERNAL_PER_MINUTE`, `RATE_LIMIT_AUTH_FAILURE_PER_MINUTE`, `RATE_LIMIT_SHARED_ORIGIN_FACTOR`, `RATE_LIMIT_MAX_KEYS`, dan allowlist exact-address `RATE_LIMIT_TRUSTED_IPS`; default tercantum di `.env.example` dan seluruh batas tercantum di panduan instalasi. Pemeriksaan password administrator tetap 5 per 15 menit dan pembacaan sesi tetap 120 per menit. Pada deployment reverse proxy, proxy harus menimpa `X-Forwarded-For` dan `TRUST_PROXY=true` hanya boleh digunakan di belakang proxy tersebut. `RATE_LIMIT_ENABLED=false` adalah kill switch operasional, bukan bypass autentikasi.
 
@@ -70,7 +70,7 @@ Request:
 ```http
 POST /api/notifications/send
 Content-Type: application/json
-X-Internal-Api-Key: <credential yang disimpan di n8n>
+X-Integration-Key: <soto_ik_ credential yang disimpan di n8n>
 ```
 
 ```json
@@ -83,6 +83,8 @@ X-Internal-Api-Key: <credential yang disimpan di n8n>
 ```
 
 Jika `event_id` disertakan, kombinasi source dan event ID disimpan sebagai kunci idempotency: retry dengan payload identik mengembalikan hasil tersimpan tanpa broadcast ulang, sedangkan penggunaan ulang dengan payload berbeda ditolak dengan `409 NOTIFICATION_EVENT_CONFLICT`. Request tanpa `event_id` tetap didukung sebagai alur legacy non-idempotent. n8n tidak perlu mengetahui recipient maupun Telegram Chat ID.
+
+Setiap integrasi memakai kredensial `soto_ik_<selector>_<secret>` miliknya sendiri. Buat melalui sesi administrator pada `POST /api/admin/integrations/:id/credentials` atau dari server dengan `npm run integration:credential -- --code <CODE> --label "<label>" --email <admin-email>`. Email memilih actor SYSTEM_ADMIN secara eksplisit; CLI tidak memilih administrator secara arbitrer. Nilai mentah hanya ditampilkan sekali. Rotasi dilakukan dengan membuat kredensial kedua, memasangnya pada caller, menunggu lebih dari 60 detik sampai `last_used_at` kredensial baru terisi, lalu mencabut kredensial lama. Maksimal dua kredensial aktif diperbolehkan per integrasi.
 
 Mapping event:
 
@@ -101,9 +103,10 @@ Pengiriman memakai `Promise.allSettled`, jadi kegagalan satu recipient tidak mem
 ## Security Notes
 
 - Supabase service role key dan Telegram token hanya digunakan server-side.
-- Notification endpoint selalu dilindungi shared secret dengan perbandingan constant-time berbasis digest.
+- Endpoint internal mengutamakan kredensial per-integrasi 256-bit; hanya digest SHA-256 yang disimpan dan revocation diperiksa pada setiap request.
 - RLS diaktifkan pada tabel tanpa policy client; akses data dilakukan backend service role.
 - Error response tidak mengirim stack trace atau environment value.
 - Administrator manusia masuk dengan password scrypt dan sesi opaque yang hanya disimpan sebagai SHA-256 di database. Cookie sesi `HttpOnly`, `Secure`, `SameSite=Strict`; masa absolut, idle timeout, revocation langsung, CSRF, cooldown login, dan audit actor diterapkan server-side.
-- `ADMIN_API_KEY` tetap diwajibkan sementara sebagai fallback kompatibilitas Stage A dan dapat dimatikan dengan `ADMIN_API_KEY_FALLBACK_ENABLED=false`. UI tidak menggunakan fallback ini. Penggunaan fallback dicatat sekali per proses.
+- `ADMIN_API_KEY` hanya diperlukan bila fallback kompatibilitas diaktifkan, dan minimal 32 karakter. Stage B mematikan fallback secara default; opt-in sementara dicatat dan memunculkan peringatan startup.
+- `INTERNAL_API_KEY_FALLBACK_ENABLED=true` mempertahankan caller lama tanpa downtime. Jalankan `npm run check:integration-credentials -- --since <waktu-upgrade-ISO>` sebelum mematikannya; penggunaan fallback dicatat sekali per proses.
 - Pemulihan password dilakukan dari server dengan `npm run admin:reset-password -- --email <address>`; prompt tidak menampilkan password dan seluruh sesi akun dicabut.

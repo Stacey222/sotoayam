@@ -19,25 +19,26 @@ const historical: Record<string, string> = {
   "202609080001_create_notification_event_intake.sql": "3a97415a0460d4aa2b28c186f85949dceb0cba5af367d1e34e8d0f2826a2fa76",
   "202609090001_create_first_admin_bootstrap.sql": "09e43d6ac26e1fb89f0d3da0648ff7878f323b2a18f65d8e8d7c76754784b6a0",
   "202609090002_implement_customer_taxonomy_transition.sql": "5019817994fe0740bb38c8bd20248f7d22080beb49586a84a90fc06b029f3f0b",
+  "202609100001_create_admin_session_authentication.sql": "60a2612217e4780d3ce2070dbaff881f9bd7d30f433efc88292728c8cee52c48",
 };
 
 const migrationPath = path.resolve("supabase/migrations/202609090002_implement_customer_taxonomy_transition.sql");
 
 describe("P0-14 migration integrity", () => {
-  it("keeps all fifteen historical migration bytes unchanged", async () => {
+  it("keeps all sixteen historical migration bytes unchanged", async () => {
     for (const [name, expected] of Object.entries(historical)) {
       const bytes = await readFile(path.resolve("supabase/migrations", name));
       expect(createHash("sha256").update(bytes).digest("hex"), name).toBe(expected);
     }
   });
 
-  it("keeps P0-14 and adds exactly the approved P1-01 migration", async () => {
+  it("P4-29 keeps all historical migrations and adds exactly the approved P1-04 migration", async () => {
     const names = (await readdir(path.resolve("supabase/migrations"))).filter((name) => name.endsWith(".sql")).sort();
     expect(names.slice(-2)).toEqual([
-      "202609090002_implement_customer_taxonomy_transition.sql",
       "202609100001_create_admin_session_authentication.sql",
+      "202609110001_create_integration_credentials.sql",
     ]);
-    expect(names).toHaveLength(16);
+    expect(names).toHaveLength(17);
   });
 
   it("does not execute destructive operational DML during migration", async () => {

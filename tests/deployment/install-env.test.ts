@@ -21,7 +21,9 @@ function environmentText(overrides: Record<string, string> = {}): string {
     SUPABASE_SERVICE_ROLE_KEY: "test-server-key",
     TELEGRAM_BOT_TOKEN: "test-bot-token",
     INTERNAL_API_KEY: "test-internal-key",
+    INTERNAL_API_KEY_FALLBACK_ENABLED: "true",
     ADMIN_API_KEY: "test-admin-key-with-sufficient-length-123456",
+    ADMIN_API_KEY_FALLBACK_ENABLED: "false",
     HOST: "127.0.0.1",
     PORT: "3000",
     TELEGRAM_POLLING_ENABLED: "true",
@@ -67,6 +69,16 @@ describe("runtime environment installation", () => {
       CRITICAL_ALERT_EVALUATOR_ENABLED: "false",
     }));
     expect(result.status, result.stderr).toBe(0);
+  });
+
+  it("accepts no administrator key by default and requires it for explicit fallback", async () => {
+    const withoutKey = environmentText({ ADMIN_API_KEY: "" }).replace("ADMIN_API_KEY=\n", "");
+    expect((await runInstaller(withoutKey)).result.status).toBe(0);
+    const enabled = environmentText({ ADMIN_API_KEY: "", ADMIN_API_KEY_FALLBACK_ENABLED: "true" })
+      .replace("ADMIN_API_KEY=\n", "");
+    const rejected = await runInstaller(enabled);
+    expect(rejected.result.status).not.toBe(0);
+    expect(rejected.result.stderr).toContain("ADMIN_API_KEY is required when ADMIN_API_KEY_FALLBACK_ENABLED=true");
   });
 
   it("rejects invalid operational flag values", async () => {

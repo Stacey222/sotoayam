@@ -1,21 +1,20 @@
 import type { FastifyInstance } from "fastify";
-import { AppError } from "../errors.js";
-import { secureEqual } from "../security.js";
 import type { NotificationSender } from "../services/notification.service.js";
 import { parseNotificationEvent } from "../validation.js";
+import { authorizeInternalIntegration, type InternalIntegrationAuthorizationOptions } from "../auth/internal-integration-authorization.js";
 
-export interface NotificationRoutesOptions {
+export interface NotificationRoutesOptions extends InternalIntegrationAuthorizationOptions {
   notificationService: NotificationSender;
-  internalApiKey: string;
 }
 
 export async function notificationRoutes(app: FastifyInstance, options: NotificationRoutesOptions): Promise<void> {
   app.post("/send", { config: { rateLimit: "internal" } }, async (request) => {
-    const providedKey = request.headers["x-internal-api-key"] as string | undefined;
-    if (!secureEqual(providedKey, options.internalApiKey)) {
-      throw new AppError(401, "UNAUTHORIZED", "Invalid or missing internal API key");
+    const authorization = await authorizeInternalIntegration(request, options, null);
+    if (authorization.kind === "integration-credential") {
+      request.server.rateLimitIntegrationIdentity?.(request, authorization.principal.integrationId);
     }
     const event = parseNotificationEvent(request.body);
-    return options.notificationService.send(event);
+    return options.notificationService.send(event,
+      authorization.kind === "integration-credential" ? authorization.principal.integrationId : null);
   });
 }

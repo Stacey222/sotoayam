@@ -1,11 +1,14 @@
-import { defineAdminRoutes } from "../auth/admin-authorization.js";
+import { defineAdminRoutes, requireSessionPrincipal, type AdminAuthorizedRouteOptions } from "../auth/admin-authorization.js";
 import { AppError } from "../errors.js";
 import type { IntegrationAdministrationService } from "../services/integration-administration.service.js";
 import { parsePositiveId } from "../validation.js";
 import { resolveAdminActor, type TaskActorResolver } from "../services/task-actor.service.js";
 import type { FastifyRequest } from "fastify";
 
-export interface IntegrationAdministrationRoutesOptions { service: IntegrationAdministrationService; actorResolver?: TaskActorResolver; adminApiKey?: string }
+export interface IntegrationAdministrationRoutesOptions extends AdminAuthorizedRouteOptions {
+  service: IntegrationAdministrationService;
+  actorResolver?: TaskActorResolver;
+}
 const body = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new AppError(400, "VALIDATION_ERROR", "Request body must be an object");
   return value as Record<string, unknown>;
@@ -14,6 +17,11 @@ const body = (value: unknown): Record<string, unknown> => {
 export const integrationAdministrationRoutes = defineAdminRoutes<IntegrationAdministrationRoutesOptions>(async (app, options) => {
   const actorId = async (request: FastifyRequest) => {
     if (request.adminPrincipal?.kind !== "session") return undefined;
+    if (!options.actorResolver) throw new AppError(503, "INTEGRATION_ADMIN_UNAVAILABLE", "Administrator actor resolution is unavailable");
+    return (await resolveAdminActor(options.actorResolver, request.adminPrincipal)).id;
+  };
+  const sessionActorId = async (request: FastifyRequest) => {
+    requireSessionPrincipal(request);
     if (!options.actorResolver) throw new AppError(503, "INTEGRATION_ADMIN_UNAVAILABLE", "Administrator actor resolution is unavailable");
     return (await resolveAdminActor(options.actorResolver, request.adminPrincipal)).id;
   };
@@ -43,4 +51,28 @@ export const integrationAdministrationRoutes = defineAdminRoutes<IntegrationAdmi
   app.delete<{ Params: { id: string; capability: string } }>("/:id/capabilities/:capability", async (request) => ({
     success: true, data: await options.service.revokeCapability(parsePositiveId(request.params.id), request.params.capability, await actorId(request)),
   }));
+  app.get<{ Params: { id: string } }>("/:id/credentials", async (request) => ({
+    success: true, data: await options.service.listCredentials(parsePositiveId(request.params.id), await sessionActorId(request)),
+  }));
+  app.post<{ Params: { id: string } }>("/:id/credentials", async (request, reply) => {
+    const value = body(request.body);
+    if (Object.keys(value).some((key) => !["label", "expires_at", "rotation_of_credential_id"].includes(key))) {
+      throw new AppError(400, "VALIDATION_ERROR", "Invalid credential creation payload");
+    }
+    const created = await options.service.createCredential(parsePositiveId(request.params.id), {
+      label: value.label, expiresAt: value.expires_at, rotationOfCredentialId: value.rotation_of_credential_id,
+    }, await sessionActorId(request));
+    reply.header("Cache-Control", "no-store");
+    return reply.status(201).send({ success: true, data: { id: created.id, selector: created.selector,
+      credential: created.credential, expires_at: created.expires_at } });
+  });
+  app.post<{ Params: { id: string; credentialId: string } }>("/:id/credentials/:credentialId/revoke", async (request) => {
+    const value = body(request.body ?? {});
+    if (Object.keys(value).some((key) => !["reason", "grace_seconds"].includes(key))) {
+      throw new AppError(400, "VALIDATION_ERROR", "Invalid credential revocation payload");
+    }
+    return { success: true, data: await options.service.revokeCredential(parsePositiveId(request.params.id),
+      parsePositiveId(request.params.credentialId), { reason: value.reason, graceSeconds: value.grace_seconds },
+      await sessionActorId(request)) };
+  });
 });

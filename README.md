@@ -42,7 +42,9 @@ Rate limiting aktif secara default dan berjalan dalam memori proses; counter kem
 
 Instalasi lama dapat memiliki nama teknis yang sudah menjadi kontrak deployment atau data persisten: path `/opt/gwens-automation`, unit `gwens-automation.service`, akun/grup sistem `gwens`, project ID Supabase lokal `gwensoto`, contract ID `GWENS_LEGACY_SCHEMA_V1`, serta advisory-lock key `gwens_*` di migration historis. Jangan mengubahnya tanpa migrasi deployment dan database yang terkoordinasi. Penyimpanan browser legacy `gwens-admin-key` telah dipensiunkan oleh migrasi sesi P1-01 dan tidak lagi dibaca. Identifier lain tersebut hanya untuk kompatibilitas; identitas produk resminya adalah Sotoayam.
 
-Telegram polling memakai `getUpdates`. Jangan jalankan lebih dari satu instance polling dengan token yang sama. Set `TELEGRAM_POLLING_ENABLED=false` pada instance tambahan atau saat memakai integrasi lain.
+Telegram polling memakai `getUpdates` dengan offset dan ledger dedupe yang disimpan di PostgreSQL. Pemrosesan bersifat at-least-once: restart melanjutkan offset tersimpan dan redelivery terminal dilewati, tetapi crash tepat di tengah atau setelah handler sebelum completion atomik dapat mengulang satu update. Jangan jalankan lebih dari satu instance polling dengan token yang sama. Set `TELEGRAM_POLLING_ENABLED=false` pada instance tambahan atau saat memakai integrasi lain.
+
+Kebijakan polling dapat dibatasi melalui `TELEGRAM_UPDATE_MAX_ATTEMPTS` (default 3), `TELEGRAM_PROCESSED_RETENTION_DAYS` (default 7), `TELEGRAM_DB_BACKOFF_MS` (default 5000), dan `TELEGRAM_MALFORMED_MAX_BATCHES` (default 3). Batch dengan `update_id` tidak valid ditolak seluruhnya tanpa memajukan offset; polling berhenti dengan log fatal setelah ambang malformed tercapai dan memerlukan pemulihan SYSTEM_ADMIN yang diaudit.
 
 ## Telegram Registration
 

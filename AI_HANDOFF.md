@@ -113,17 +113,25 @@ The `INTERNAL_API_KEY` Stage A fallback remains enabled by default for zero-down
 
 Follow-up authorization risk M1 remains intentionally open: notification credential authorization currently has no dedicated `NOTIFICATION_SEND` capability. Adding that capability is a separate product authorization decision and was not included in the P1-04 lifecycle correction.
 
+## P1-05 Telegram Polling Durability State
+
+Telegram polling now resumes from a PostgreSQL singleton cursor and deduplicates through a content-free update ledger. Every non-empty batch is validated as a whole, duplicate ids collapse to their first occurrence, and updates are processed sequentially in ascending order. Claim precedes the handler; terminal status and cursor advance commit atomically afterward. SQL prevents the cursor from passing a lower `PROCESSING` row, attempts are bounded, terminal rows prune at most hourly, and empty polls write nothing.
+
+Malformed batches create no claims or completions and leave the cursor unchanged. After the configured consecutive threshold, Telegram polling halts with runtime health inactive while the HTTP tier remains available. Recovery is the service-role RPC `force_advance_telegram_offset`, which accepts only a forward move from an active SYSTEM_ADMIN and writes one audit row. Processing is at-least-once: a crash during a handler or before atomic completion can repeat one update's external side effects.
+
+One additive migration, `202609120001_create_telegram_polling_state.sql`, brings the repository total to 18 and preserves all 17 historical hashes. Fresh disposable PostgreSQL applied 18/18 migrations and passed all 11 polling database tests. The full active suite passed 755 tests with 52 opt-in database tests skipped.
+
 ## Next Agent
-Recommended: Codex implementation for P1-05.
+Recommended: Codex implementation for P1-06.
 
 Next task:
-Implement P1-05 persisted Telegram offset and update deduplication after its architecture contract is approved.
+Implement P1-06 bounded pacing for Telegram fan-out.
 
 Reason:
-P1-01 through P1-04 are complete; P1-05 is the next ordered Phase 1 reliability item.
+P1-01 through P1-05 are complete; P1-06 is the next ordered Phase 1 reliability item.
 
 ## Pending Higher-Level Work
-- Continue Phase 1 with P1-05 Telegram offset persistence and update deduplication; preserve the P1-01 session, P1-02 HTTP, P1-03 limiter, and P1-04 integration-credential boundaries.
+- Continue Phase 1 with P1-06 Telegram fan-out pacing; preserve the P1-01 session, P1-02 HTTP, P1-03 limiter, P1-04 integration-credential, and P1-05 polling durability boundaries.
 - Preserve remaining launch gates: Phase 4 clean-room install, upgrade/rollback, restore drill, and final security review are still separate pre-customer requirements.
 
 ## Agent Handoff Format

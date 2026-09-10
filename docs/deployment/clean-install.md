@@ -63,6 +63,10 @@ Create `${APP_ROOT}/shared/.env` from `.env.example` in the repository, then rep
 | `HOST` | Optional | Defaults to `127.0.0.1`. Keep the port private to the server |
 | `PORT` | Optional | Defaults to `3000`. Match `HEALTH_PORT` if you change it |
 | `TELEGRAM_POLLING_ENABLED` | Optional | `true` or `false`. See **Telegram Setup** |
+| `TELEGRAM_UPDATE_MAX_ATTEMPTS` | Optional | 1–10, default 3; bounds retries after a crash leaves an update processing |
+| `TELEGRAM_PROCESSED_RETENTION_DAYS` | Optional | 1–90, default 7; terminal dedupe-ledger retention |
+| `TELEGRAM_DB_BACKOFF_MS` | Optional | 1000–60000, default 5000; abort-aware retry delay after polling-state database failure |
+| `TELEGRAM_MALFORMED_MAX_BATCHES` | Optional | 1–20, default 3; consecutive malformed batches before polling halts loudly |
 | `REMINDER_SCHEDULER_ENABLED` | Optional | `true` or `false`. Enables automatic reminder evaluation |
 | `REMINDER_SCHEDULER_INTERVAL_SECONDS` | Optional | 60–3600, default 300 |
 | `CRITICAL_ALERT_EVALUATOR_ENABLED` | Optional | `true` or `false`. Requires the reminder scheduler to be enabled |
@@ -239,6 +243,8 @@ Telegram is not required to install Sotoayam, and it is not required to create y
 1. Create a bot with BotFather and put the token in `TELEGRAM_BOT_TOKEN`.
 2. Set `TELEGRAM_POLLING_ENABLED=true` — only when this instance's bot is not being polled by any other process.
 3. Restart the service. Polling starts and stops with the process; there is no runtime toggle.
+
+The polling offset and update dedupe ledger are persisted in PostgreSQL. Processing is at-least-once: terminal redeliveries are skipped, but a process crash during the handler or after its side effects and before atomic completion can repeat that update after restart. Empty polls write nothing. A batch containing any unusable `update_id` is rejected as a whole without changing the offset; after the configured threshold polling halts while the HTTP tier remains available. Skipping such an update requires the SYSTEM_ADMIN-only, forward-only, audited `force_advance_telegram_offset` recovery RPC through authorized database tooling.
 
 **Never run two pollers on one bot token.** If you also run Sotoayam on a laptop, that copy must have `TELEGRAM_POLLING_ENABLED=false`.
 

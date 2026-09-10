@@ -64,23 +64,33 @@ describe("Telegram outbound HTTP behavior", () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  it("exits TelegramBot.start after exactly three exhausted polling attempts", async () => {
+  it("P5-12 preserves polling options and exits after exactly three exhausted attempts", async () => {
     const fetch = vi.fn()
       .mockResolvedValueOnce(telegramResponse(200, { ok: true, result: { username: "test_bot" } }))
       .mockResolvedValue(telegramResponse(503, { ok: false, error_code: 503 }));
     const http = new OutboundHttpClient({ fetch, sleep: async () => undefined, maxRetries: 2 });
     const api = new TelegramApiClient(http);
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const polling = { loadPollingState: vi.fn().mockResolvedValue(0), claim: vi.fn(), complete: vi.fn() };
     const bot = new TelegramBot("test-bot-token",
       new TelegramRegistrationService({ upsertTelegramRegistration: vi.fn() }),
       { resolveByLegacyTelegramUserId: vi.fn() }, { sendMessage: vi.fn() }, logger,
-      undefined, undefined, undefined, undefined, api);
+      undefined, undefined, undefined, undefined, api, polling);
 
     await expect(bot.start()).rejects.toMatchObject({ attempts: 3, retryExhausted: true, httpStatus: 503 });
 
     const pollingCalls = fetch.mock.calls.filter(([input]) => String(input).includes("/getUpdates"));
     expect(pollingCalls).toHaveLength(3);
     expect(fetch).toHaveBeenCalledTimes(4);
+    for (const [input, options] of pollingCalls) {
+      const url = new URL(String(input));
+      expect(Object.fromEntries(url.searchParams)).toMatchObject({
+        offset: "0", timeout: "25", allowed_updates: JSON.stringify(["message", "callback_query"]),
+      });
+      expect((options as RequestInit).signal).toBeInstanceOf(AbortSignal);
+    }
+    expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ transportKind: "HTTP", attempts: 3,
+      retryExhausted: true, httpStatus: 503 }), "Telegram polling stopped after bounded request retries");
   });
 
   it("does not retry an unsafe Telegram POST on 5xx and preserves the caller contract", async () => {

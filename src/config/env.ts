@@ -13,6 +13,10 @@ export interface AppConfig extends SupabaseConfig {
   host?: string;
   port: number;
   telegramPollingEnabled: boolean;
+  telegramUpdateMaxAttempts?: number;
+  telegramProcessedRetentionDays?: number;
+  telegramDbBackoffMs?: number;
+  telegramMalformedMaxBatches?: number;
   reminderSchedulerEnabled: boolean;
   reminderSchedulerIntervalSeconds: number;
   businessTimeZone: string;
@@ -153,6 +157,14 @@ export function loadConfig(): AppConfig {
     host,
     port: parsePort(process.env.PORT),
     telegramPollingEnabled: process.env.TELEGRAM_POLLING_ENABLED === "true",
+    telegramUpdateMaxAttempts: parseBoundedInteger("TELEGRAM_UPDATE_MAX_ATTEMPTS",
+      process.env.TELEGRAM_UPDATE_MAX_ATTEMPTS, 3, 1, 10),
+    telegramProcessedRetentionDays: parseBoundedInteger("TELEGRAM_PROCESSED_RETENTION_DAYS",
+      process.env.TELEGRAM_PROCESSED_RETENTION_DAYS, 7, 1, 90),
+    telegramDbBackoffMs: parseBoundedInteger("TELEGRAM_DB_BACKOFF_MS",
+      process.env.TELEGRAM_DB_BACKOFF_MS, 5_000, 1_000, 60_000),
+    telegramMalformedMaxBatches: parseBoundedInteger("TELEGRAM_MALFORMED_MAX_BATCHES",
+      process.env.TELEGRAM_MALFORMED_MAX_BATCHES, 3, 1, 20),
     reminderSchedulerEnabled: process.env.REMINDER_SCHEDULER_ENABLED === "true",
     reminderSchedulerIntervalSeconds: parseSchedulerInterval(process.env.REMINDER_SCHEDULER_INTERVAL_SECONDS),
     businessTimeZone: parseBusinessTimeZone(process.env.BUSINESS_TIME_ZONE),

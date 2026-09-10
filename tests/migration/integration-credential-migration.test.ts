@@ -8,7 +8,7 @@ const migration = path.resolve("supabase/migrations/202609110001_create_integrat
 describe("P1-04 additive migration contract", () => {
   it("P4-29 adds exactly one seventeenth migration with only additive top-level operations", async () => {
     const names = (await readdir(path.resolve("supabase/migrations"))).filter((name) => name.endsWith(".sql")).sort();
-    expect(names).toHaveLength(17); expect(names.at(-1)).toBe("202609110001_create_integration_credentials.sql");
+    expect(names).toHaveLength(18); expect(names.at(-2)).toBe("202609110001_create_integration_credentials.sql");
     const sql = await readFile(migration, "utf8");
     const topLevel = sql.replace(/as \$\$[\s\S]*?\n\$\$;/g, "as $$\n[function body]\n$$;");
     expect(topLevel).not.toMatch(/\b(drop|truncate|delete\s+from)\b/i);

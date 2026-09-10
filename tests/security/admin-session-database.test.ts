@@ -33,7 +33,7 @@ async function sql(url: string, statement: string) {
 async function migrate(url: string): Promise<void> {
   const directory = path.resolve("supabase/migrations");
   const migrations = (await readdir(directory)).filter((file) => file.endsWith(".sql")).sort();
-  expect(migrations).toHaveLength(17);
+  expect(migrations).toHaveLength(18);
   for (const migration of migrations) {
     await execute(psql, ["-d", url, "-v", "ON_ERROR_STOP=1", "-q", "-f", path.join(directory, migration)],
       { maxBuffer: 4 * 1024 * 1024 });

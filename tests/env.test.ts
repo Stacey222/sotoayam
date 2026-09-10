@@ -77,6 +77,33 @@ describe("Supabase server credential validation", () => {
     expect(loadConfig().telegramPollingEnabled).toBe(false);
   });
 
+  it("loads the P1-05 Telegram polling durability defaults", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("TELEGRAM_UPDATE_MAX_ATTEMPTS", "");
+    vi.stubEnv("TELEGRAM_PROCESSED_RETENTION_DAYS", "");
+    vi.stubEnv("TELEGRAM_DB_BACKOFF_MS", "");
+    vi.stubEnv("TELEGRAM_MALFORMED_MAX_BATCHES", "");
+    expect(loadConfig()).toMatchObject({ telegramUpdateMaxAttempts: 3, telegramProcessedRetentionDays: 7,
+      telegramDbBackoffMs: 5_000, telegramMalformedMaxBatches: 3 });
+  });
+
+  it.each([
+    ["TELEGRAM_UPDATE_MAX_ATTEMPTS", "11"],
+    ["TELEGRAM_PROCESSED_RETENTION_DAYS", "0"],
+    ["TELEGRAM_DB_BACKOFF_MS", "999"],
+    ["TELEGRAM_MALFORMED_MAX_BATCHES", "21"],
+  ])("rejects an out-of-bounds %s value", (name, value) => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv(name, value);
+    expect(() => loadConfig()).toThrow(`Invalid environment variable: ${name}`);
+  });
+
   it("keeps the critical alert evaluator disabled by default", () => {
     vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");

@@ -56,7 +56,7 @@ describe.skipIf(!runDatabase)("P1-04 disposable PostgreSQL credential invariants
     expect((await sql(`create database ${databaseName}`, adminUrl!)).code).toBe(0);
     const directory = path.resolve("supabase/migrations");
     const migrations = (await readdir(directory)).filter((file) => file.endsWith(".sql")).sort();
-    expect(migrations).toHaveLength(17);
+    expect(migrations).toHaveLength(18);
     for (const migration of migrations) await execute(psql,
       ["-d", databaseUrl(), "-v", "ON_ERROR_STOP=1", "-q", "-f", path.join(directory, migration)],
       { maxBuffer: 4 * 1024 * 1024 });

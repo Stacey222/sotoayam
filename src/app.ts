@@ -87,6 +87,7 @@ import { adminAuthRoutes } from "./routes/admin-auth.routes.js";
 import { SupabaseIntegrationCredentialRepository } from "./repositories/integration-credential.repository.js";
 import { IntegrationCredentialService } from "./services/integration-credential.service.js";
 import { InternalApiKeyFallbackObserver } from "./auth/internal-integration-authorization.js";
+import { SupabaseTelegramPollingRepository, type TelegramPollingRepository } from "./repositories/telegram-polling.repository.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -96,6 +97,7 @@ export interface BuildAppOptions {
   telegramSender?: TelegramSender;
   notificationIntakeRepository?: NotificationIntakeRepository;
   reminderNotificationsRepository?: ReminderNotificationsRepository;
+  telegramPollingRepository?: TelegramPollingRepository;
   logger?: boolean;
 }
 
@@ -258,6 +260,8 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const ownerConsole = telegramTaskActor && reportingService
     ? new TelegramOwnerConsoleService(telegramTaskActor, reportingService, criticalAlertService, installationLineage !== "FRESH")
     : undefined;
+  const telegramPollingRepository = options.telegramPollingRepository
+    ?? (client ? new SupabaseTelegramPollingRepository(client) : undefined);
   const bot = new TelegramBot(
     options.config.telegramBotToken,
     registrationService,
@@ -269,6 +273,13 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     ownerConsole,
     runtimeHealth,
     telegramApi,
+    telegramPollingRepository,
+    {
+      maxAttempts: options.config.telegramUpdateMaxAttempts ?? 3,
+      retentionDays: options.config.telegramProcessedRetentionDays ?? 7,
+      databaseBackoffMs: options.config.telegramDbBackoffMs ?? 5_000,
+      malformedMaxBatches: options.config.telegramMalformedMaxBatches ?? 3,
+    },
   );
 
   app.setErrorHandler((error, request, reply) => {

@@ -8,8 +8,9 @@ import type { TelegramItConsole } from "./it-console.js";
 import type { TelegramTaskConsole } from "./task-console.js";
 import type { TelegramOwnerConsole } from "./owner-console.js";
 import type { RuntimeHealthState } from "../runtime/health-state.js";
+import type { TelegramPollingRepository, TelegramUpdateType } from "../repositories/telegram-polling.repository.js";
 
-interface TelegramUpdate {
+export interface TelegramUpdate {
   update_id: number;
   message?: {
     text?: string;
@@ -24,22 +25,57 @@ interface TelegramUpdate {
   };
 }
 
+export interface TelegramPollingPolicy {
+  maxAttempts: number;
+  retentionDays: number;
+  databaseBackoffMs: number;
+  malformedMaxBatches: number;
+}
+
+const DEFAULT_POLLING_POLICY: TelegramPollingPolicy = {
+  maxAttempts: 3,
+  retentionDays: 7,
+  databaseBackoffMs: 5_000,
+  malformedMaxBatches: 3,
+};
+const TELEGRAM_SHUTDOWN_GRACE_MS = 5_000;
+
+function abortableDelay(milliseconds: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { cleanup(); resolve(); }, milliseconds);
+    timer.unref?.();
+    const onAbort = () => { clearTimeout(timer); cleanup(); reject(signal.reason ?? new DOMException("Aborted", "AbortError")); };
+    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+type TelegramBotLogger = Pick<FastifyBaseLogger, "info" | "warn" | "error">
+  & Partial<Pick<FastifyBaseLogger, "fatal">>;
+
 export class TelegramBot {
   private offset = 0;
   private stopped = false;
   private controller?: AbortController;
+  private activeUpdate?: Promise<void>;
+  private abandonActiveUpdate = false;
 
   constructor(
     private readonly token: string,
     private readonly registrationService: TelegramRegistrationService,
     private readonly accessStateResolver: UserAccessStateResolver,
     private readonly sender: TelegramSender,
-    private readonly logger: Pick<FastifyBaseLogger, "info" | "warn" | "error">,
+    private readonly logger: TelegramBotLogger,
     private readonly itConsole?: TelegramItConsole,
     private readonly taskConsole?: TelegramTaskConsole,
     private readonly ownerConsole?: TelegramOwnerConsole,
     private readonly runtimeHealth?: RuntimeHealthState,
     private readonly telegramApi = new TelegramApiClient(),
+    private readonly pollingRepository?: TelegramPollingRepository,
+    private readonly pollingPolicy: TelegramPollingPolicy = DEFAULT_POLLING_POLICY,
+    private readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void> = abortableDelay,
+    private readonly shutdownGraceMs = TELEGRAM_SHUTDOWN_GRACE_MS,
   ) {}
 
   async handleUpdate(update: TelegramUpdate): Promise<void> {
@@ -281,6 +317,7 @@ export class TelegramBot {
 
   async start(): Promise<void> {
     this.stopped = false;
+    this.abandonActiveUpdate = false;
     this.controller = new AbortController();
     try {
       this.logger.info("Telegram bot initialization started");
@@ -288,10 +325,14 @@ export class TelegramBot {
         signal: this.controller.signal,
       });
       this.logger.info("Telegram getMe succeeded");
+      if (!this.pollingRepository) throw new Error("Telegram polling repository is unavailable");
+      this.offset = await this.pollingRepository.loadPollingState();
+      this.logger.info({ nextOffset: this.offset }, "Telegram polling state resumed");
       if (this.runtimeHealth) this.runtimeHealth.telegramPollingActive = true;
       this.logger.info("Telegram polling started");
+      let malformedBatches = 0;
       while (!this.stopped) {
-        const updates = await this.telegramApi.call<TelegramUpdate[]>(this.token, "getUpdates", {
+        const received = await this.telegramApi.call<unknown[]>(this.token, "getUpdates", {
           query: {
             offset: String(this.offset),
             timeout: "25",
@@ -300,21 +341,43 @@ export class TelegramBot {
           signal: this.controller.signal,
           timeoutMs: 30_000,
         });
-        for (const update of updates) {
-          this.offset = update.update_id + 1;
-          this.logger.info(
-            { updateId: update.update_id, updateType: update.callback_query ? "callback_query" : "message" },
-            "Telegram update received",
-          );
+        if (this.stopped) break;
+        const normalized = this.normalizeBatch(received);
+        if (!normalized.ok) {
+          malformedBatches += 1;
+          this.logger.error({ code: "TELEGRAM_MALFORMED_UPDATE", batchSize: received.length,
+            offendingIndex: normalized.index, structuralKeys: this.safeDiagnostic(normalized.keys.join(",")),
+            consecutiveMalformedBatches: malformedBatches }, "Telegram update batch rejected");
+          if (malformedBatches >= this.pollingPolicy.malformedMaxBatches) {
+            this.stopped = true;
+            if (this.runtimeHealth) this.runtimeHealth.telegramPollingActive = false;
+            const detail = { code: "TELEGRAM_MALFORMED_BATCH_LIMIT", consecutiveMalformedBatches: malformedBatches };
+            if (this.logger.fatal) this.logger.fatal(detail, "Telegram polling halted after malformed batches");
+            else this.logger.error(detail, "Telegram polling halted after malformed batches");
+            break;
+          }
+          await this.waitForBackoff();
+          continue;
+        }
+        malformedBatches = 0;
+        if (normalized.updates.length === 0) continue;
+
+        let databaseFailed = false;
+        for (const update of normalized.updates) {
+          if (this.stopped) break;
+          this.activeUpdate = this.processUpdate(update);
           try {
-            await this.handleUpdate(update);
+            await this.activeUpdate;
           } catch (error) {
-            this.logger.error(
-              { errorType: error instanceof Error ? error.name : "UnknownError", updateId: update.update_id },
-              "Telegram update failed",
-            );
+            databaseFailed = true;
+            this.logger.error({ errorType: error instanceof Error ? error.name : "UnknownError",
+              updateId: update.update_id, nextOffset: this.offset }, "Telegram polling database operation failed");
+            break;
+          } finally {
+            this.activeUpdate = undefined;
           }
         }
+        if (databaseFailed && !this.stopped) await this.waitForBackoff();
       }
     } catch (error) {
       if (this.stopped) return;
@@ -337,6 +400,71 @@ export class TelegramBot {
     }
   }
 
+  private normalizeBatch(received: unknown[]): { ok: true; updates: TelegramUpdate[] }
+    | { ok: false; index: number; keys: string[] } {
+    const unique = new Map<number, TelegramUpdate>();
+    for (let index = 0; index < received.length; index += 1) {
+      const candidate = received[index];
+      const updateId = candidate && typeof candidate === "object" && "update_id" in candidate
+        ? (candidate as { update_id?: unknown }).update_id : undefined;
+      if (typeof updateId !== "number" || !Number.isSafeInteger(updateId) || updateId < 0) {
+        return { ok: false, index, keys: candidate && typeof candidate === "object"
+          ? Object.keys(candidate).sort() : [] };
+      }
+      if (!unique.has(updateId)) unique.set(updateId, candidate as TelegramUpdate);
+    }
+    return { ok: true, updates: [...unique.values()].sort((left, right) => left.update_id - right.update_id) };
+  }
+
+  private updateType(update: TelegramUpdate): TelegramUpdateType {
+    if (update.callback_query) return "callback_query";
+    if (update.message) return "message";
+    return "other";
+  }
+
+  private async processUpdate(update: TelegramUpdate): Promise<void> {
+    const repository = this.pollingRepository!;
+    const updateType = this.updateType(update);
+    const claim = await repository.claim(update.update_id, updateType, this.pollingPolicy.maxAttempts);
+    if (claim.action === "SKIP_DUPLICATE") {
+      this.logger.warn({ updateId: update.update_id, attemptCount: claim.attemptCount }, "Duplicate Telegram update skipped");
+      this.offset = await repository.complete(update.update_id, "COMPLETED", null, this.pollingPolicy.retentionDays);
+      return;
+    }
+    if (claim.action === "SKIP_EXHAUSTED") {
+      this.logger.error({ updateId: update.update_id, attemptCount: claim.attemptCount }, "Telegram update attempts exhausted");
+      this.offset = await repository.complete(update.update_id, "FAILED", "ATTEMPTS_EXHAUSTED",
+        this.pollingPolicy.retentionDays);
+      return;
+    }
+    if (claim.attemptCount > 1) {
+      this.logger.warn({ updateId: update.update_id, attemptCount: claim.attemptCount }, "Retrying interrupted Telegram update");
+    }
+    this.logger.info({ updateId: update.update_id, updateType }, "Telegram update received");
+    let status: "COMPLETED" | "FAILED" = "COMPLETED";
+    let failureClass: string | null = null;
+    try {
+      await this.handleUpdate(update);
+    } catch (error) {
+      status = "FAILED";
+      failureClass = "HANDLER_ERROR";
+      this.logger.error({ errorType: error instanceof Error ? error.name : "UnknownError", updateId: update.update_id },
+        "Telegram update failed");
+    }
+    if (this.abandonActiveUpdate) return;
+    this.offset = await repository.complete(update.update_id, status, failureClass, this.pollingPolicy.retentionDays);
+  }
+
+  private async waitForBackoff(): Promise<void> {
+    this.logger.error({ backoffMs: this.pollingPolicy.databaseBackoffMs }, "Telegram polling backoff entered");
+    try {
+      await this.sleep(this.pollingPolicy.databaseBackoffMs, this.controller!.signal);
+      this.logger.info("Telegram polling backoff completed");
+    } catch (error) {
+      if (!this.stopped) throw error;
+    }
+  }
+
   private redact(value: string | undefined): string | undefined {
     return value?.replaceAll(this.token, "[REDACTED]").slice(0, 300);
   }
@@ -350,9 +478,21 @@ export class TelegramBot {
       .slice(0, 300);
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     this.stopped = true;
     if (this.runtimeHealth) this.runtimeHealth.telegramPollingActive = false;
     this.controller?.abort();
+    const active = this.activeUpdate;
+    if (!active) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        active.catch(() => undefined),
+        new Promise<void>((resolve) => { timer = setTimeout(() => { this.abandonActiveUpdate = true; resolve(); },
+          this.shutdownGraceMs); timer.unref?.(); }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 }

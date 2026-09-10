@@ -131,3 +131,9 @@ Decision: Request-volume limiting is an in-process token bucket with bounded mem
 Status: Implemented for P1-03.
 
 The limiter is an availability boundary and fails open only on its own internal errors; authentication remains independently fail-closed. Durable credential cooldown remains in `admin_login_attempts`. Route policies are attached structurally, administrator fairness is keyed by authenticated user (or the compatibility API-key identity), and 401 responses feed a per-IP penalty that gates later credential attempts. Auth-session reads are fixed at 120/minute; `RATE_LIMIT_ADMIN_READ_PER_MINUTE` applies only to normal admin reads.
+
+## D-020 — Telegram polling durability
+Decision: PostgreSQL stores the Telegram polling cursor and the content-free update dedupe ledger.
+Status: Implemented for P1-05.
+
+Terminal update status and cursor advancement are one atomic SECURITY DEFINER operation. Batches are rejected wholly if any `update_id` is unusable, otherwise duplicate ids are collapsed and processed in ascending order. SQL clamps the cursor behind every lower `PROCESSING` row. Delivery remains honestly at-least-once because a crash inside the handler can repeat external side effects; retries are bounded and terminal evidence is retained. Malformed batches halt polling rather than inventing an offset, with recovery limited to a forward-only, audited SYSTEM_ADMIN action.

@@ -73,8 +73,9 @@ Legend:
 - [x] P1-04 Per-integration credentials, hashed at rest, with rotation path.
   Owner: Claude Code design -> Codex implement
   Note: machine integrations now authenticate with per-integration 256-bit opaque credentials stored only as SHA-256 digests behind service-role RPCs. Rotation supports at most two active credentials, immediate or grace-period revocation, audited lifecycle events, integration attribution without changing notification idempotency semantics, and staged legacy-key fallbacks. One additive migration brings the total to 17; all 16 historical hashes remain unchanged.
-- [ ] P1-05 Persist Telegram offset and update dedupe.
+- [x] P1-05 Persist Telegram offset and update dedupe.
   Owner: Codex
+  Note: PostgreSQL now stores the Telegram cursor and a content-free update ledger. Batches are validated wholly, deduplicated and sorted before sequential processing; terminal state and clamped monotonic offset advance are atomic, crash retries are bounded, malformed batches halt loudly, and SYSTEM_ADMIN force-advance is forward-only and audited. One additive migration brings the total to 18; all 17 historical hashes remain unchanged.
 - [ ] P1-06 Bound/pacing for Telegram fan-out.
   Owner: Codex
 - [ ] P1-07 Implement meaningful `/ready`.

@@ -8,7 +8,7 @@ async function main(): Promise<void> {
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, "Shutting down");
-    bot.stop();
+    await bot.stop();
     await reminderScheduler?.stop();
     await app.close();
   };

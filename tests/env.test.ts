@@ -104,6 +104,30 @@ describe("Supabase server credential validation", () => {
     expect(() => loadConfig()).toThrow(`Invalid environment variable: ${name}`);
   });
 
+  it("loads conservative P1-06 Telegram fan-out defaults", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("TELEGRAM_FANOUT_CONCURRENCY", "");
+    vi.stubEnv("TELEGRAM_FANOUT_INTERVAL_MS", "");
+    expect(loadConfig()).toMatchObject({ telegramFanoutConcurrency: 3, telegramFanoutIntervalMs: 100 });
+  });
+
+  it.each([
+    ["TELEGRAM_FANOUT_CONCURRENCY", "0"],
+    ["TELEGRAM_FANOUT_CONCURRENCY", "11"],
+    ["TELEGRAM_FANOUT_INTERVAL_MS", "9"],
+    ["TELEGRAM_FANOUT_INTERVAL_MS", "5001"],
+  ])("rejects an out-of-bounds P1-06 %s value", (name, value) => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv(name, value);
+    expect(() => loadConfig()).toThrow(`Invalid environment variable: ${name}`);
+  });
+
   it("keeps the critical alert evaluator disabled by default", () => {
     vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");

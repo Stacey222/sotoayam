@@ -88,6 +88,7 @@ import { SupabaseIntegrationCredentialRepository } from "./repositories/integrat
 import { IntegrationCredentialService } from "./services/integration-credential.service.js";
 import { InternalApiKeyFallbackObserver } from "./auth/internal-integration-authorization.js";
 import { SupabaseTelegramPollingRepository, type TelegramPollingRepository } from "./repositories/telegram-polling.repository.js";
+import { TelegramFanoutService } from "./services/telegram-fanout.service.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -120,6 +121,13 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const registrationService = new TelegramRegistrationService(registrationWriter);
   const telegramApi = new TelegramApiClient();
   const telegramSender = options.telegramSender ?? new TelegramService(options.config.telegramBotToken, app.log, telegramApi);
+  const telegramFanout = new TelegramFanoutService(telegramSender, {
+    concurrency: options.config.telegramFanoutConcurrency ?? 3,
+    intervalMs: options.config.telegramFanoutIntervalMs ?? 100,
+  });
+  // preClose runs before Fastify waits on long-lived request work, so queued
+  // notification sends cannot extend process shutdown through pacing delays.
+  app.addHook("preClose", async () => telegramFanout.stop());
   const accessStateResolver = options.accessStateResolver
     ?? (client
       ? new UserAccessStateService(new SupabaseUserAccessStateRepository(client))
@@ -143,8 +151,9 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     ?? (client ? new SupabaseNotificationIntakeRepository(client) : undefined);
   const persistedNotificationIntake = Boolean(notificationIntakeRepository && reminderNotifications);
   const notificationService = notificationIntakeRepository && reminderNotifications
-    ? new NotificationIntakeService(resolver, telegramSender, app.log, notificationIntakeRepository, reminderNotifications)
-    : new NotificationService(resolver, telegramSender, app.log);
+    ? new NotificationIntakeService(resolver, telegramSender, app.log, notificationIntakeRepository, reminderNotifications,
+      telegramFanout)
+    : new NotificationService(resolver, telegramSender, app.log, telegramFanout);
   app.log.info({ persistedNotificationIntake }, "Notification intake configured");
   const divisionsRepository = client ? new SupabaseDivisionsRepository(client) : undefined;
   const rolesRepository = client ? new SupabaseRolesRepository(client) : undefined;
@@ -208,7 +217,7 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const reminderEvaluator = client && taskUsers && reminderNotifications && reminderSchedulerRepository ? new ReminderEvaluatorService(
     new SupabaseReminderTasksRepository(client), new SupabaseReminderStateRepository(client), reminderNotifications,
     new ReminderRoutingService(taskUsers, new SupabaseReminderChannelsRepository(client), new SupabaseReminderRoutingRepository(client)),
-    new NotificationDeliveryService(reminderNotifications, taskUsers, new SupabaseReminderChannelsRepository(client), new TelegramNotificationAdapter(telegramSender)),
+    new NotificationDeliveryService(reminderNotifications, taskUsers, new SupabaseReminderChannelsRepository(client), new TelegramNotificationAdapter(telegramFanout)),
     reminderSchedulerRepository,
   ) : undefined;
   const reminderScheduler = reminderEvaluator ? new ReminderSchedulerService(reminderEvaluator,

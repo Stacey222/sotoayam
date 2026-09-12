@@ -76,8 +76,9 @@ Legend:
 - [x] P1-05 Persist Telegram offset and update dedupe.
   Owner: Codex
   Note: PostgreSQL now stores the Telegram cursor and a content-free update ledger. Batches are validated wholly, deduplicated and sorted before sequential processing; terminal state and clamped monotonic offset advance are atomic, crash retries are bounded, malformed batches halt loudly, and SYSTEM_ADMIN force-advance is forward-only and audited. One additive migration brings the total to 18; all 17 historical hashes remain unchanged.
-- [ ] P1-06 Bound/pacing for Telegram fan-out.
+- [x] P1-06 Bound/pacing for Telegram fan-out.
   Owner: Codex
+  Note: all production notification fan-out shares one in-process gate with bounded concurrency and paced request starts; arbitrary recipient-wide `Promise.all` was replaced by fixed worker slots, while P1-02 retains retry and Telegram 429 ownership.
 - [ ] P1-07 Implement meaningful `/ready`.
   Owner: Claude Code define -> Codex implement
 - [ ] P1-08 End-to-end request/event/intent correlation IDs.

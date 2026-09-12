@@ -137,3 +137,10 @@ Decision: PostgreSQL stores the Telegram polling cursor and the content-free upd
 Status: Implemented for P1-05.
 
 Terminal update status and cursor advancement are one atomic SECURITY DEFINER operation. Batches are rejected wholly if any `update_id` is unusable, otherwise duplicate ids are collapsed and processed in ascending order. SQL clamps the cursor behind every lower `PROCESSING` row. Delivery remains honestly at-least-once because a crash inside the handler can repeat external side effects; retries are bounded and terminal evidence is retained. Malformed batches halt polling rather than inventing an offset, with recovery limited to a forward-only, audited SYSTEM_ADMIN action.
+
+## D-021 — Telegram notification fan-out pacing
+
+Decision: all production notification fan-out shares one dependency-free, in-process concurrency and start-rate gate.
+Status: Implemented for P1-06.
+
+The small-VPS default permits three active Telegram notification sends and spaces starts by at least 100 milliseconds. Recipient work uses a fixed worker pool, shutdown prevents queued work from starting, and each outcome remains isolated and input-ordered. Transport retries and Telegram 429 handling remain exclusively in P1-02.

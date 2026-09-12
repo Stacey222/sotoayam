@@ -44,7 +44,7 @@ Instalasi lama dapat memiliki nama teknis yang sudah menjadi kontrak deployment 
 
 Telegram polling memakai `getUpdates` dengan offset dan ledger dedupe yang disimpan di PostgreSQL. Pemrosesan bersifat at-least-once: restart melanjutkan offset tersimpan dan redelivery terminal dilewati, tetapi crash tepat di tengah atau setelah handler sebelum completion atomik dapat mengulang satu update. Jangan jalankan lebih dari satu instance polling dengan token yang sama. Set `TELEGRAM_POLLING_ENABLED=false` pada instance tambahan atau saat memakai integrasi lain.
 
-Kebijakan polling dapat dibatasi melalui `TELEGRAM_UPDATE_MAX_ATTEMPTS` (default 3), `TELEGRAM_PROCESSED_RETENTION_DAYS` (default 7), `TELEGRAM_DB_BACKOFF_MS` (default 5000), dan `TELEGRAM_MALFORMED_MAX_BATCHES` (default 3). Batch dengan `update_id` tidak valid ditolak seluruhnya tanpa memajukan offset; polling berhenti dengan log fatal setelah ambang malformed tercapai dan memerlukan pemulihan SYSTEM_ADMIN yang diaudit.
+Kebijakan polling dapat dibatasi melalui `TELEGRAM_UPDATE_MAX_ATTEMPTS` (default 3), `TELEGRAM_PROCESSED_RETENTION_DAYS` (default 7), `TELEGRAM_DB_BACKOFF_MS` (default 5000), dan `TELEGRAM_MALFORMED_MAX_BATCHES` (default 3). Batch dengan `update_id` tidak valid ditolak seluruhnya tanpa memajukan offset; polling berhenti dengan log fatal setelah ambang malformed tercapai dan memerlukan pemulihan SYSTEM_ADMIN yang diaudit. Fan-out notifikasi memakai gate proses tunggal dengan `TELEGRAM_FANOUT_CONCURRENCY` (default 3) dan jarak minimum start `TELEGRAM_FANOUT_INTERVAL_MS` (default 100 ms); retry dan Telegram 429 tetap ditangani oleh klien HTTP bersama.
 
 ## Telegram Registration
 

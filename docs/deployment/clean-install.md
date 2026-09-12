@@ -67,6 +67,8 @@ Create `${APP_ROOT}/shared/.env` from `.env.example` in the repository, then rep
 | `TELEGRAM_PROCESSED_RETENTION_DAYS` | Optional | 1–90, default 7; terminal dedupe-ledger retention |
 | `TELEGRAM_DB_BACKOFF_MS` | Optional | 1000–60000, default 5000; abort-aware retry delay after polling-state database failure |
 | `TELEGRAM_MALFORMED_MAX_BATCHES` | Optional | 1–20, default 3; consecutive malformed batches before polling halts loudly |
+| `TELEGRAM_FANOUT_CONCURRENCY` | Optional | 1–10, default 3; process-wide active notification-send bound |
+| `TELEGRAM_FANOUT_INTERVAL_MS` | Optional | 10–5000, default 100; minimum spacing between notification-send starts |
 | `REMINDER_SCHEDULER_ENABLED` | Optional | `true` or `false`. Enables automatic reminder evaluation |
 | `REMINDER_SCHEDULER_INTERVAL_SECONDS` | Optional | 60–3600, default 300 |
 | `CRITICAL_ALERT_EVALUATOR_ENABLED` | Optional | `true` or `false`. Requires the reminder scheduler to be enabled |

@@ -17,6 +17,8 @@ export interface AppConfig extends SupabaseConfig {
   telegramProcessedRetentionDays?: number;
   telegramDbBackoffMs?: number;
   telegramMalformedMaxBatches?: number;
+  telegramFanoutConcurrency?: number;
+  telegramFanoutIntervalMs?: number;
   reminderSchedulerEnabled: boolean;
   reminderSchedulerIntervalSeconds: number;
   businessTimeZone: string;
@@ -165,6 +167,10 @@ export function loadConfig(): AppConfig {
       process.env.TELEGRAM_DB_BACKOFF_MS, 5_000, 1_000, 60_000),
     telegramMalformedMaxBatches: parseBoundedInteger("TELEGRAM_MALFORMED_MAX_BATCHES",
       process.env.TELEGRAM_MALFORMED_MAX_BATCHES, 3, 1, 20),
+    telegramFanoutConcurrency: parseBoundedInteger("TELEGRAM_FANOUT_CONCURRENCY",
+      process.env.TELEGRAM_FANOUT_CONCURRENCY, 3, 1, 10),
+    telegramFanoutIntervalMs: parseBoundedInteger("TELEGRAM_FANOUT_INTERVAL_MS",
+      process.env.TELEGRAM_FANOUT_INTERVAL_MS, 100, 10, 5_000),
     reminderSchedulerEnabled: process.env.REMINDER_SCHEDULER_ENABLED === "true",
     reminderSchedulerIntervalSeconds: parseSchedulerInterval(process.env.REMINDER_SCHEDULER_INTERVAL_SECONDS),
     businessTimeZone: parseBusinessTimeZone(process.env.BUSINESS_TIME_ZONE),

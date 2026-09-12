@@ -12,6 +12,7 @@ import { NotificationDeliveryService, TelegramNotificationAdapter } from "./noti
 import type { NotificationResult, NotificationSender } from "./notification.service.js";
 import type { RecipientResolverService } from "./recipient-resolver.service.js";
 import type { TelegramSender } from "./telegram.service.js";
+import { TelegramFanoutService } from "./telegram-fanout.service.js";
 
 const SOURCE = "INTERNAL_API";
 
@@ -59,14 +60,18 @@ class SnapshotChannels implements ReminderChannelsRepository {
 
 export class NotificationIntakeService implements NotificationSender {
   private readonly active = new Map<string, Promise<NotificationResult>>();
+  private readonly fanout: TelegramFanoutService;
 
   constructor(
     private readonly resolver: RecipientResolverService,
-    private readonly telegram: TelegramSender,
+    telegram: TelegramSender,
     private readonly logger: Pick<FastifyBaseLogger, "info" | "warn">,
     private readonly intake: NotificationIntakeRepository,
     private readonly deliveries: ReminderNotificationsRepository,
-  ) {}
+    fanout?: TelegramFanoutService,
+  ) {
+    this.fanout = fanout ?? new TelegramFanoutService(telegram);
+  }
 
   async send(event: NotificationEvent, integrationId: number | null = null): Promise<NotificationResult> {
     const externalEventId = event.event_id ?? `gen:${randomUUID()}`;
@@ -152,7 +157,7 @@ export class NotificationIntakeService implements NotificationSender {
       scopedRepository,
       new SnapshotUsers(chatIdsByUser),
       new SnapshotChannels(chatIdsByUser),
-      new TelegramNotificationAdapter(this.telegram),
+      new TelegramNotificationAdapter(this.fanout),
     );
     for (let batch = 0; batch < 10; batch += 1) {
       const processed = await deliveryService.processDue(50);
@@ -163,9 +168,10 @@ export class NotificationIntakeService implements NotificationSender {
     const unroutedRecipients = dispatchState.unroutedDedupeKeys
       .map((key) => recipientByKey.get(key))
       .filter((recipient): recipient is TelegramUser => recipient !== undefined);
-    const unroutedOutcomes = await Promise.allSettled(
-      unroutedRecipients.map((recipient) => this.telegram.sendMessage(recipient.telegram_chat_id, event.message)),
-    );
+    const unroutedOutcomes = await this.fanout.sendAll(unroutedRecipients.map((recipient) => ({
+      chatId: recipient.telegram_chat_id,
+      message: event.message,
+    })));
     const unroutedSent = unroutedOutcomes.filter((item) => item.status === "fulfilled").length;
     const missingUnrouted = dispatchState.unroutedDedupeKeys.length - unroutedRecipients.length;
     const sent = dispatchState.delivered + unroutedSent;

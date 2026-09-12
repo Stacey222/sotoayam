@@ -121,17 +121,23 @@ Malformed batches create no claims or completions and leave the cursor unchanged
 
 One additive migration, `202609120001_create_telegram_polling_state.sql`, brings the repository total to 18 and preserves all 17 historical hashes. Fresh disposable PostgreSQL applied 18/18 migrations and passed all 11 polling database tests. The full active suite passed 755 tests with 52 opt-in database tests skipped.
 
+## P1-06 Telegram Fan-Out Pacing State
+
+All production notification sends now share one dependency-free in-process fan-out gate. The small-VPS defaults allow at most three active Telegram sends and space request starts by at least 100 milliseconds. Direct and persisted notification intake use fixed worker slots rather than recipient-wide promises; persisted delivery and reminder paths retain their existing sequential accounting while passing through the same global gate.
+
+Shutdown aborts queued pacing waits and prevents additional sends from starting. Each recipient outcome remains isolated and input-ordered, and the coordinator never retries: timeout, bounded retry, and Telegram 429 handling remain owned by the unchanged P1-02 client. P1-06 added no migration or dependency. Focused notification, delivery, Telegram HTTP, and configuration coverage passed 126 tests; the full suite passed 771 tests with 52 opt-in database tests skipped.
+
 ## Next Agent
-Recommended: Codex implementation for P1-06.
+Recommended: Claude Code definition followed by Codex implementation for P1-07.
 
 Next task:
-Implement P1-06 bounded pacing for Telegram fan-out.
+Define and implement P1-07 meaningful `/ready` behavior.
 
 Reason:
-P1-01 through P1-05 are complete; P1-06 is the next ordered Phase 1 reliability item.
+P1-01 through P1-06 are complete; P1-07 is the next ordered Phase 1 reliability item.
 
 ## Pending Higher-Level Work
-- Continue Phase 1 with P1-06 Telegram fan-out pacing; preserve the P1-01 session, P1-02 HTTP, P1-03 limiter, P1-04 integration-credential, and P1-05 polling durability boundaries.
+- Continue Phase 1 with P1-07 readiness; preserve the P1-01 session, P1-02 HTTP, P1-03 limiter, P1-04 integration-credential, P1-05 polling durability, and P1-06 fan-out pacing boundaries.
 - Preserve remaining launch gates: Phase 4 clean-room install, upgrade/rollback, restore drill, and final security review are still separate pre-customer requirements.
 
 ## Agent Handoff Format

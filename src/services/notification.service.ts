@@ -2,6 +2,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { NotificationEvent } from "../types/index.js";
 import type { RecipientResolverService } from "./recipient-resolver.service.js";
 import type { TelegramSender } from "./telegram.service.js";
+import { TelegramFanoutService } from "./telegram-fanout.service.js";
 
 export interface NotificationResult {
   success: boolean;
@@ -20,17 +21,23 @@ export interface NotificationSender {
 }
 
 export class NotificationService {
+  private readonly fanout: TelegramFanoutService;
+
   constructor(
     private readonly resolver: RecipientResolverService,
-    private readonly telegram: TelegramSender,
+    telegram: TelegramSender,
     private readonly logger: Pick<FastifyBaseLogger, "info" | "warn">,
-  ) {}
+    fanout?: TelegramFanoutService,
+  ) {
+    this.fanout = fanout ?? new TelegramFanoutService(telegram);
+  }
 
   async send(event: NotificationEvent): Promise<NotificationResult> {
     const recipients = await this.resolver.resolve(event.type);
-    const outcomes = await Promise.allSettled(
-      recipients.map((recipient) => this.telegram.sendMessage(recipient.telegram_chat_id, event.message)),
-    );
+    const outcomes = await this.fanout.sendAll(recipients.map((recipient) => ({
+      chatId: recipient.telegram_chat_id,
+      message: event.message,
+    })));
     const sent = outcomes.filter((outcome) => outcome.status === "fulfilled").length;
     const failed = outcomes.length - sent;
     if (failed > 0) this.logger.warn({ type: event.type, failed }, "Some Telegram deliveries failed");

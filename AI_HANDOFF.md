@@ -127,6 +127,10 @@ All production notification sends now share one dependency-free in-process fan-o
 
 Shutdown aborts queued pacing waits and prevents additional sends from starting. Each recipient outcome remains isolated and input-ordered, and the coordinator never retries: timeout, bounded retry, and Telegram 429 handling remain owned by the unchanged P1-02 client. P1-06 added no migration or dependency. Focused notification, delivery, Telegram HTTP, and configuration coverage passed 126 tests; the full suite passed 771 tests with 52 opt-in database tests skipped.
 
+## Runnable UI Demo State
+
+The Fastify-served vanilla browser UI is now a responsive Tabler Free-based Sotoayam operational dashboard rather than the earlier user-only screen. Only compiled Tabler CSS and the locally used SVG icons are vendored under `public/vendor`; there is no CDN or frontend framework/toolchain in the application. It logs in through P1-01 sessions, sends the CSRF cookie on mutations, handles logout and expired sessions, and never reads or stores shared, service-role, or integration secrets. Dashboard, task, integration, credential-metadata, notification-activity, system-health, and available alert views consume existing APIs only; unavailable metrics render a neutral state. Eight focused UI tests and the 779-test repository suite pass, with 52 opt-in database tests skipped. This is a demo milestone, not completion of the broader Phase 2 settings work or Phase 3 operational UI backlog.
+
 ## Next Agent
 Recommended: Claude Code definition followed by Codex implementation for P1-07.
 

@@ -1,6 +1,6 @@
 # Sotoayam
 
-Backend internal dan web admin sederhana untuk registrasi pengguna Telegram serta routing notifikasi dari n8n. Business logic recipient berada di backend, sehingga n8n hanya mengirim event dan tidak menyimpan Telegram Chat ID.
+Backend dan dashboard operasional untuk tugas, integrasi, notifikasi, kesehatan layanan, registrasi pengguna Telegram, serta routing notifikasi dari n8n. Business logic recipient berada di backend, sehingga n8n hanya mengirim event dan tidak menyimpan Telegram Chat ID.
 
 ## Architecture
 
@@ -31,6 +31,8 @@ Persyaratan: versi Node.js pada `.node-version` dan project Supabase.
 6. Setelah setup fresh, restart service bila sudah berjalan agar provenance baru dibaca. Untuk development lokal, jalankan `npm run dev`.
 7. Buka `http://localhost:3000`, lalu masuk dengan email dan password administrator yang dibuat oleh setup. Untuk localhost HTTP saja, set `SESSION_COOKIE_SECURE=false` dengan `TRUST_PROXY=false`; cookie tidak aman ditolak pada host non-loopback atau saat proxy trust aktif.
 8. Jalankan test: `npm test`; typecheck/build: `npm run typecheck` dan `npm run build`.
+
+Dashboard browser memakai HTML/CSS/JavaScript bawaan dengan aset runtime Tabler Free yang disimpan lokal di `public/vendor`; tidak ada build frontend, CDN, atau font/icon eksternal. Setelah login, halaman root membaca data langsung dari endpoint tugas, integrasi, metadata kredensial aman, status/aktivitas notifikasi, health, dan alert yang dapat diakses sesi tersebut. Data atau izin yang belum tersedia ditampilkan sebagai `Belum tersedia`, bukan angka contoh.
 
 Environment wajib: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TELEGRAM_BOT_TOKEN`, dan `INTERNAL_API_KEY`. `ADMIN_API_KEY` hanya diperlukan bila fallback kompatibilitas diaktifkan, dan minimal 32 karakter. Untuk kompatibilitas instalasi lama, backend juga menerima alias `SUPABASE_SERVICE_KEY`, tetapi nama canonical yang dianjurkan adalah `SUPABASE_SERVICE_ROLE_KEY`.
 
@@ -100,7 +102,7 @@ Mapping event:
 | `OWNER_DAILY_REPORT` | `owner_report` |
 | `SYSTEM_ERROR` | `system_error` |
 
-Pengiriman memakai `Promise.allSettled`, jadi kegagalan satu recipient tidak membatalkan recipient lain.
+Pengiriman memakai worker pool dan pacing global yang terbatas; kegagalan satu recipient tidak membatalkan recipient lain dan hasil accounting tetap deterministik.
 
 ## Security Notes
 

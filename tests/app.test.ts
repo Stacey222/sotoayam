@@ -130,8 +130,18 @@ describe("HTTP API", () => {
     const response = await app.inject({ method: "GET", url: "/" });
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain("<title>Sotoayam</title>");
-    expect(response.body).toContain('<p class="eyebrow">Sotoayam</p>');
+    expect(response.body).toContain('href="/vendor/tabler/tabler.min.css"');
     expect(response.body).not.toMatch(/Gwens|GWENS/);
+    const script = await app.inject({ method: "GET", url: "/app.js" });
+    const core = await app.inject({ method: "GET", url: "/ui-core.js" });
+    const tabler = await app.inject({ method: "GET", url: "/vendor/tabler/tabler.min.css" });
+    const icon = await app.inject({ method: "GET", url: "/vendor/tabler-icons/layout-dashboard.svg" });
+    expect(script.statusCode).toBe(200);
+    expect(core.statusCode).toBe(200);
+    expect(tabler.statusCode).toBe(200);
+    expect(icon.statusCode).toBe(200);
+    expect(script.body).toContain('from "./ui-core.js"');
+    expect(`${response.body}\n${script.body}\n${core.body}`).not.toMatch(/ADMIN_API_KEY|INTERNAL_API_KEY|SUPABASE_SERVICE_ROLE_KEY/);
     await app.close();
   });
 

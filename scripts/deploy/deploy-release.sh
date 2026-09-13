@@ -87,10 +87,10 @@ if ! sudo systemctl restart "${SERVICE_NAME}"; then
   echo "POST_ACTIVATION_RESTART=FAIL" >&2
   exit 1
 fi
-if ! "${CURL_COMMAND}" -fsS --retry 10 --retry-connrefused --retry-delay 1 --max-time 30 "http://127.0.0.1:${HEALTH_PORT}/health" >/dev/null; then
-  echo "POST_ACTIVATION_HEALTH=FAIL" >&2
+if ! "${CURL_COMMAND}" -fsS --retry 15 --retry-all-errors --retry-connrefused --retry-delay 2 --max-time 5 "http://127.0.0.1:${HEALTH_PORT}/ready" >/dev/null; then
+  echo "POST_ACTIVATION_READINESS=FAIL" >&2
   exit 1
 fi
 
 echo "DEPLOYED_RELEASE=${RELEASE_ID}"
-echo "POST_ACTIVATION_HEALTH=PASS"
+echo "POST_ACTIVATION_READINESS=PASS"

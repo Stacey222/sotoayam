@@ -25,5 +25,5 @@ ln -s "${PREVIOUS}" "${APP_ROOT}/current.next"
 mv -Tf "${APP_ROOT}/current.next" "${APP_ROOT}/current"
 printf '%s\n' "${CURRENT}" >"${PREVIOUS_FILE}"
 sudo systemctl restart "${SERVICE_NAME}"
-curl -fsS "http://127.0.0.1:${HEALTH_PORT}/health" >/dev/null
+curl -fsS --retry 15 --retry-all-errors --retry-connrefused --retry-delay 2 --max-time 5 "http://127.0.0.1:${HEALTH_PORT}/ready" >/dev/null
 echo "ROLLBACK=PASS"

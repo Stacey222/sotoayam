@@ -127,6 +127,14 @@ All production notification sends now share one dependency-free in-process fan-o
 
 Shutdown aborts queued pacing waits and prevents additional sends from starting. Each recipient outcome remains isolated and input-ordered, and the coordinator never retries: timeout, bounded retry, and Telegram 429 handling remain owned by the unchanged P1-02 client. P1-06 added no migration or dependency. Focused notification, delivery, Telegram HTTP, and configuration coverage passed 126 tests; the full suite passed 771 tests with 52 opt-in database tests skipped.
 
+## P1-07 Readiness State
+
+`GET /health` remains rate-limit-exempt, database-independent liveness. `GET /ready` is also exempt and returns only the approved sanitized contract with `Cache-Control: no-store`; it fails with 503 on database, required-schema, admin-session wiring, or persisted-notification-intake failure. Its single `load_telegram_polling_state` RPC is abortable, has a 2000 ms default timeout, does not retry, and uses a 1000 ms single-flight cache without stale-while-error. Enabled but inactive Telegram polling, reminder scheduling, and alert evaluation produce non-gating warnings only. Deployment, rollback, generic VPS runtime validation, and the browser System view now use real readiness while retaining `/health` for liveness. Focused validation passed 102 tests; the full suite passed 801 tests with 52 opt-in database tests skipped.
+
+## P1-08 Correlation State
+
+Notification intake now emits a structured chain from Fastify `request_id` to external/generated `event_id`, persisted `notification_event_id`, intent `notification_id`, delivery `delivery_id`, and Telegram send outcome. The existing notification-event foreign key is selected for background delivery retries, so event tracing survives beyond the original request without a migration. Correlation fields are carried through the existing delivery adapter and P1-06 fan-out while P1-02 retains transport retry ownership; no request body, message, token, credential, or secret is logged. Focused correlation/regression coverage passed 99 tests and the full suite passed 805 tests with 52 opt-in database tests skipped.
+
 ## Runnable UI Demo State
 
 The Fastify-served vanilla browser UI is now a responsive Tabler Free-based Sotoayam operational dashboard rather than the earlier user-only screen. Only compiled Tabler CSS and the locally used SVG icons are vendored under `public/vendor`; there is no CDN or frontend framework/toolchain in the application. It logs in through P1-01 sessions, sends the CSRF cookie on mutations, handles logout and expired sessions, and never reads or stores shared, service-role, or integration secrets. Dashboard, task, integration, credential-metadata, notification-activity, system-health, and available alert views consume existing APIs only; unavailable metrics render a neutral state. Eight focused UI tests and the 779-test repository suite pass, with 52 opt-in database tests skipped. This is a demo milestone, not completion of the broader Phase 2 settings work or Phase 3 operational UI backlog.
@@ -135,13 +143,13 @@ The Fastify-served vanilla browser UI is now a responsive Tabler Free-based Soto
 Recommended: Claude Code definition followed by Codex implementation for P1-07.
 
 Next task:
-Define and implement P1-07 meaningful `/ready` behavior.
+Implement P1-09 migration tests against clean throwaway PostgreSQL.
 
 Reason:
-P1-01 through P1-06 are complete; P1-07 is the next ordered Phase 1 reliability item.
+P1-01 through P1-08 are complete; P1-09 is the next ordered Phase 1 reliability item.
 
 ## Pending Higher-Level Work
-- Continue Phase 1 with P1-07 readiness; preserve the P1-01 session, P1-02 HTTP, P1-03 limiter, P1-04 integration-credential, P1-05 polling durability, and P1-06 fan-out pacing boundaries.
+- Continue Phase 1 with P1-09 clean throwaway PostgreSQL migration tests; preserve the P1-01 through P1-08 security and reliability boundaries.
 - Preserve remaining launch gates: Phase 4 clean-room install, upgrade/rollback, restore drill, and final security review are still separate pre-customer requirements.
 
 ## Agent Handoff Format

@@ -1,4 +1,5 @@
 import type { TelegramMessageOptions, TelegramSender } from "./telegram.service.js";
+import type { CorrelationContext } from "../observability/correlation.js";
 
 export interface TelegramFanoutPolicy {
   concurrency: number;
@@ -9,6 +10,7 @@ export interface TelegramFanoutRequest {
   chatId: number;
   message: string;
   options?: TelegramMessageOptions;
+  correlation?: CorrelationContext;
 }
 
 const DEFAULT_POLICY: TelegramFanoutPolicy = { concurrency: 3, intervalMs: 100 };
@@ -48,12 +50,14 @@ export class TelegramFanoutService implements TelegramSender {
     private readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void> = abortableDelay,
   ) {}
 
-  async sendMessage(chatId: number, message: string, options?: TelegramMessageOptions): Promise<void> {
+  async sendMessage(chatId: number, message: string, options?: TelegramMessageOptions,
+    correlation?: CorrelationContext): Promise<void> {
     const release = await this.acquire();
     try {
       await this.pace();
-      if (options === undefined) await this.telegram.sendMessage(chatId, message);
-      else await this.telegram.sendMessage(chatId, message, options);
+      if (correlation !== undefined) await this.telegram.sendMessage(chatId, message, options, correlation);
+      else if (options !== undefined) await this.telegram.sendMessage(chatId, message, options);
+      else await this.telegram.sendMessage(chatId, message);
     } finally {
       release();
     }
@@ -70,7 +74,7 @@ export class TelegramFanoutService implements TelegramSender {
         cursor += 1;
         const request = requests[index]!;
         try {
-          await this.sendMessage(request.chatId, request.message, request.options);
+          await this.sendMessage(request.chatId, request.message, request.options, request.correlation);
           outcomes[index] = { status: "fulfilled", value: undefined };
         } catch (reason) {
           outcomes[index] = { status: "rejected", reason };

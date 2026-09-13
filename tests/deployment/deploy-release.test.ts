@@ -130,6 +130,9 @@ describe("release deployment migration gate", () => {
     expect(commands.indexOf("npm run migrate")).toBeLessThan(commands.indexOf("npm prune --omit=dev --ignore-scripts"));
     expect(commands.indexOf("npm prune --omit=dev --ignore-scripts")).toBeLessThan(commands.indexOf("sudo systemctl restart"));
     expect(commands.indexOf("sudo systemctl restart")).toBeLessThan(commands.indexOf("curl -fsS"));
+    expect(commands).toContain("--retry 15 --retry-all-errors --retry-connrefused --retry-delay 2 --max-time 5");
+    expect(commands).toContain("/ready");
+    expect(commands).not.toContain("/health");
     await expect(readFile(path.join(fixture.appRoot, "current", "package.json"), "utf8")).resolves.toBe("{}\n");
     await expect(readFile(path.join(fixture.appRoot, "current", "supabase", "config.toml"), "utf8")).rejects.toThrow();
     await expect(readFile(path.join(fixture.appRoot, "current", "supabase", "migrations", "202609070001_test.sql"), "utf8"))
@@ -162,7 +165,7 @@ describe("release deployment migration gate", () => {
     expect(result.stderr ?? "").toContain("SUPABASE_ACCESS_TOKEN");
   });
 
-  it("reports post-activation health failure without attempting database rollback", async () => {
+  it("reports post-activation readiness failure without attempting database rollback", async () => {
     const fixture = await deploymentFixture(false);
     const result = fixture.run({ DEPLOY_TEST_HEALTH_EXIT: "5" });
     const commands = await readFile(fixture.log, "utf8");
@@ -170,7 +173,7 @@ describe("release deployment migration gate", () => {
     expect(result.status).not.toBe(0);
     expect(commands).toContain("npm run migrate");
     expect(commands).toContain("sudo systemctl restart sotoayam.service");
-    expect(result.stderr).toContain("POST_ACTIVATION_HEALTH=FAIL");
+    expect(result.stderr).toContain("POST_ACTIVATION_READINESS=FAIL");
     expect(commands).not.toMatch(/rollback|db reset|migration down/);
   });
 });

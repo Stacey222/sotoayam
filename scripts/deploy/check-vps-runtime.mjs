@@ -73,17 +73,17 @@ export async function checkVpsRuntime(options = {}) {
 
   let response;
   try {
-    response = await fetchImplementation(`http://127.0.0.1:${environment.PORT}/health`);
+    response = await fetchImplementation(`http://127.0.0.1:${environment.PORT}/ready`);
   } catch {
-    stderr("HEALTH_CHECK=FAIL reason=unreachable");
+    stderr("READINESS_CHECK=FAIL reason=unreachable");
     return 1;
   }
   const payload = await response.json().catch(() => ({}));
-  if (response.status !== 200 || payload?.status !== "ok") {
-    stderr(`HEALTH_CHECK=FAIL status=${response.status}`);
+  if (response.status !== 200 || payload?.ready !== true || payload?.status !== "READY") {
+    stderr(`READINESS_CHECK=FAIL status=${response.status}`);
     return 1;
   }
-  stdout("HEALTH_CHECK=PASS");
+  stdout("READINESS_CHECK=PASS");
   stdout("RUNTIME_CHECK=PASS");
   return 0;
 }

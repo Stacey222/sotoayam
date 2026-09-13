@@ -91,10 +91,11 @@ class Store implements NotificationIntakeRepository, ReminderNotificationsReposi
         continue;
       }
       routedCount += 1;
-      const notification: NotificationIntent = {
+      const notification: DueDelivery["notification"] = {
         id: this.rows.length + 1, task_id: null, event_type: input.eventType as NotificationIntent["event_type"],
         recipient_user_id: recipient.legacyId + 100, routing_status: "ROUTED", routing_failure_code: null,
         dedupe_key: recipient.dedupeKey, message: input.message, occurrence_at: new Date().toISOString(), created_at: new Date().toISOString(),
+        notification_event_id: eventId, event: { external_event_id: input.externalEventId },
       };
       const deliveryId = this.rows.length + 1;
       this.rows.push({ id: deliveryId, notification_id: notification.id, channel: "TELEGRAM", state: "PENDING",
@@ -150,12 +151,14 @@ class Store implements NotificationIntakeRepository, ReminderNotificationsReposi
   async recent() { return []; }
 }
 
-function harness(options: { users?: TelegramUser[]; sender?: TelegramSender; store?: Store } = {}) {
+function harness(options: { users?: TelegramUser[]; sender?: TelegramSender; store?: Store;
+  testLogger?: ReturnType<typeof logger> } = {}) {
   const users = new Users(options.users);
   const store = options.store ?? new Store();
   const sender = options.sender ?? { sendMessage: vi.fn().mockResolvedValue(undefined) };
-  const service = new NotificationIntakeService(new RecipientResolverService(users), sender, logger(), store, store);
-  return { users, store, sender, service };
+  const testLogger = options.testLogger ?? logger();
+  const service = new NotificationIntakeService(new RecipientResolverService(users), sender, testLogger, store, store);
+  return { users, store, sender, service, logger: testLogger };
 }
 
 const event = (overrides: Partial<NotificationEvent> = {}): NotificationEvent => ({
@@ -163,6 +166,50 @@ const event = (overrides: Partial<NotificationEvent> = {}): NotificationEvent =>
 });
 
 describe("persisted notification intake identity", () => {
+  it("keeps one request_id and event_id through intake, delivery, and Telegram send logs", async () => {
+    const h = harness();
+    await h.service.send(event(), null, { requestId: "req-correlation-1" });
+    const structured = [...h.logger.info.mock.calls, ...h.logger.warn.mock.calls]
+      .map(([fields]) => fields).filter((fields) => fields && typeof fields === "object");
+    expect(structured.length).toBeGreaterThanOrEqual(5);
+    expect(structured.every((fields) => fields.request_id === "req-correlation-1")).toBe(true);
+    expect(structured.every((fields) => fields.event_id === "workflow:run:1")).toBe(true);
+    expect(structured.some((fields) => fields.notification_event_id === 1 && fields.delivery_id === 1)).toBe(true);
+    expect(h.sender.sendMessage).toHaveBeenCalledWith(1001, "Service unavailable", undefined,
+      expect.objectContaining({ requestId: "req-correlation-1", eventId: "workflow:run:1",
+        notificationEventId: 1, notificationId: 1, deliveryId: 1 }));
+  });
+
+  it("traces a retry by the same event_id without changing duplicate-effect semantics", async () => {
+    const store = new Store();
+    const firstLogger = logger();
+    const firstSender = { sendMessage: vi.fn().mockRejectedValue(new Error("temporary")) };
+    await harness({ store, sender: firstSender, testLogger: firstLogger }).service
+      .send(event(), null, { requestId: "req-first" });
+    store.rows[0]!.next_attempt_at = new Date(0).toISOString();
+    const retryLogger = logger();
+    const retrySender = { sendMessage: vi.fn().mockResolvedValue(undefined) };
+    const users = { findById: async () => ({ id: 101, displayName: null, active: true, divisionId: 1,
+      divisionCode: "IT", roleId: 1, roleCode: "STAFF" }), findTrustedAdminActorUser: async () => { throw new Error(); } };
+    const channels = { findActiveTelegramForUser: async () => [{ userId: 101, channel: "TELEGRAM" as const,
+      externalId: "1001" }] };
+    await new NotificationDeliveryService(store, users, channels, new TelegramNotificationAdapter(retrySender),
+      () => new Date(), retryLogger).processDue();
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0]).toMatchObject({ id: 1, state: "DELIVERED", attempt_count: 2 });
+    expect(firstSender.sendMessage).toHaveBeenCalledOnce();
+    expect(retrySender.sendMessage).toHaveBeenCalledOnce();
+    const retryLogs = [...retryLogger.info.mock.calls, ...retryLogger.warn.mock.calls].map(([fields]) => fields);
+    expect(retryLogs.some((fields) => fields.event_id === "workflow:run:1"
+      && fields.notification_event_id === 1 && fields.delivery_id === 1)).toBe(true);
+  });
+
+  it("never copies message or credential-shaped secret material into correlation logs", async () => {
+    const h = harness();
+    await h.service.send(event({ message: "password=pw-secret session_token=session-secret integration_secret=raw-secret" }),
+      null, { requestId: "req-secret-test" });
+    expect(JSON.stringify([...h.logger.info.mock.calls, ...h.logger.warn.mock.calls])).not.toMatch(/pw-secret|session-secret|raw-secret/);
+  });
   it("creates one intent, notification, and routed delivery for a first event", async () => {
     const h = harness(); const result = await h.service.send(event());
     expect(h.store.events).toHaveLength(1); expect(h.store.rows).toHaveLength(1);

@@ -13,7 +13,7 @@ Deployment scripts share this small environment-variable contract:
 | `APP_USER` | `sotoayam` | Optional non-root system service account override. |
 | `APP_GROUP` | `sotoayam` | Optional non-root system service group override. |
 | `SERVICE_NAME` | `sotoayam.service` | Optional systemd `.service` unit name override; paths are rejected. |
-| `HEALTH_PORT` | `3000` | Optional localhost port used by deployment and rollback health checks; set it to the runtime `PORT` when overriding that value. |
+| `HEALTH_PORT` | `3000` | Optional localhost port used by deployment and rollback readiness checks; set it to the runtime `PORT` when overriding that value. |
 
 Set configuration in the invoking operator environment; no repository edit is required. Bootstrap validates all values before package installation or account/filesystem changes. For example:
 
@@ -66,6 +66,8 @@ INTERNAL_API_KEY
 ADMIN_API_KEY
 HOST
 PORT
+READY_DB_TIMEOUT_MS
+READY_CACHE_MS
 TELEGRAM_POLLING_ENABLED
 REMINDER_SCHEDULER_ENABLED
 REMINDER_SCHEDULER_INTERVAL_SECONDS
@@ -104,7 +106,7 @@ The first-administrator setup password is also setup-time only. Prefer the no-ec
 5. Upload the archive, `scripts/deploy/deploy-release.sh`, and `scripts/deploy/deployment-config.sh` over SSH, preserving their relative location.
 6. Provide the three deploy-only Supabase variables through the approved protected operator environment, then run the deployment script.
 7. The script installs pinned migration tooling in the inactive release, runs `npm run migrate`, removes link state and development tooling, and only then atomically updates `current`.
-8. The script restarts systemd and requires localhost `/health` to pass.
+8. The script restarts systemd and requires localhost `/ready` to pass, with bounded retries so a temporary startup `503` does not cause an immediate rollback decision. `/health` remains database-independent liveness.
 9. Bootstrap the first administrator exactly once, as the configured service account and with the runtime environment loaded:
 
    ```bash
@@ -126,7 +128,7 @@ The first-administrator setup password is also setup-time only. Prefer the no-ec
    ```
 
    Fresh setup retires origin seed taxonomy only when the preview and locked transaction prove the exact seed is untouched and unreferenced. Any user, task, Telegram mapping, non-seed audit evidence, changed seed, or inbound reference refuses retirement with zero provisioning writes. Setup requires no Telegram bot or Telegram identity. It is permanently refused after any bootstrap or historical system-authority assignment; reruns return `FIRST_ADMIN_ALREADY_EXISTS` with exit code 3 and do not prompt for a password. Do not use setup for administrator recovery.
-10. After successful fresh setup, restart the service and require `/health` to pass. Installation provenance is intentionally read once at process startup; the pre-setup process sees absent provenance as legacy-compatible, so the restart removes the benign temporary legacy report alias for a `FRESH` installation. Then, from a protected operator environment containing the runtime configuration, run `node scripts/deploy/check-vps-runtime.mjs` in the active release. It verifies configuration shape, the pinned Node runtime, and generic health only. Confirm `GET /api/admin/system-authority/status` reports `READY`.
+10. After successful fresh setup, restart the service and require `/ready` to pass; use `/health` separately for liveness. Installation provenance is intentionally read once at process startup; the pre-setup process sees absent provenance as legacy-compatible, so the restart removes the benign temporary legacy report alias for a `FRESH` installation. Then, from a protected operator environment containing the runtime configuration, run `node scripts/deploy/check-vps-runtime.mjs` in the active release. It verifies configuration shape, the pinned Node runtime, and generic readiness only. Confirm `GET /api/admin/system-authority/status` reports `READY`.
 11. Verify exactly one process and, when polling was selected, exactly one Telegram poller.
 
 The bootstrap creates a credential for the future session system, but administrator login does not exist until P1-01; HTTP admin routes continue to require `ADMIN_API_KEY`. The bootstrap administrator has no legacy Telegram mapping but can be managed through normalized user-access APIs. If the same person later registers through Telegram, that registration creates a separate user identity; setup does not merge identities.
@@ -153,13 +155,14 @@ sudo systemctl restart "${SERVICE_NAME}"
 sudo journalctl -u "${SERVICE_NAME}" -n 100 --no-pager
 sudo journalctl -u "${SERVICE_NAME}" -f
 curl -fsS "http://127.0.0.1:${HEALTH_PORT}/health"
+curl -fsS "http://127.0.0.1:${HEALTH_PORT}/ready"
 ```
 
-The configured port is for localhost health and internal operation. Do not expose it publicly unless a separately reviewed API ingress is required. Do not expose database or Supabase-related ports.
+The configured port is for localhost liveness, readiness, and internal operation. Do not expose it publicly unless a separately reviewed API ingress is required. Do not expose database or Supabase-related ports.
 
 ## Rollback
 
-Run `scripts/deploy/rollback.sh` on the VPS. It validates that the previous target remains inside `releases`, swaps `current` atomically, restarts systemd, and checks health. Database migrations are never rolled back automatically; schema compatibility must be reviewed separately.
+Run `scripts/deploy/rollback.sh` on the VPS. It validates that the previous target remains inside `releases`, swaps `current` atomically, restarts systemd, and checks `/ready` with a bounded warm-up window. Database migrations are never rolled back automatically; schema compatibility must be reviewed separately.
 
 ## Security
 

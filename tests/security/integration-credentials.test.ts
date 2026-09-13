@@ -120,10 +120,16 @@ describe("P1-04 integration credential authentication", () => {
     try {
       expect((await app.inject({ method: "POST", url: "/send", headers: {
         "x-integration-key": generated.credential }, payload })).statusCode).toBe(200);
-      expect(send).toHaveBeenLastCalledWith(expect.objectContaining({ event_id: "event-1" }), 7);
+      expect(send).toHaveBeenLastCalledWith(expect.objectContaining({ event_id: "event-1" }), 7,
+        { requestId: expect.any(String) });
       expect((await app.inject({ method: "POST", url: "/send", headers: {
         "x-internal-api-key": "legacy" }, payload: { ...payload, event_id: "event-2" } })).statusCode).toBe(200);
-      expect(send).toHaveBeenLastCalledWith(expect.objectContaining({ event_id: "event-2" }), null);
+      expect(send).toHaveBeenLastCalledWith(expect.objectContaining({ event_id: "event-2" }), null,
+        { requestId: expect.any(String) });
+      const requestIds = send.mock.calls.map((call) => call[2]?.requestId);
+      expect(requestIds[0]).toBeTruthy();
+      expect(requestIds[1]).toBeTruthy();
+      expect(requestIds[0]).not.toBe(requestIds[1]);
     } finally { await app.close(); }
   });
 });

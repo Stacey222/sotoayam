@@ -40,6 +40,8 @@ Environment sesi opsional: `SESSION_ABSOLUTE_TTL_SECONDS` (default 12 jam), `SES
 
 Rate limiting aktif secara default dan berjalan dalam memori proses; counter kembali penuh saat restart. Konfigurasinya adalah `RATE_LIMIT_ENABLED`, `RATE_LIMIT_LOGIN_PER_MINUTE`, `RATE_LIMIT_LOGIN_GLOBAL_PER_MINUTE`, `RATE_LIMIT_ADMIN_READ_PER_MINUTE`, `RATE_LIMIT_ADMIN_WRITE_PER_MINUTE`, `RATE_LIMIT_ADMIN_EXPENSIVE_PER_MINUTE`, `RATE_LIMIT_INTERNAL_PER_MINUTE`, `RATE_LIMIT_AUTH_FAILURE_PER_MINUTE`, `RATE_LIMIT_SHARED_ORIGIN_FACTOR`, `RATE_LIMIT_MAX_KEYS`, dan allowlist exact-address `RATE_LIMIT_TRUSTED_IPS`; default tercantum di `.env.example` dan seluruh batas tercantum di panduan instalasi. Pemeriksaan password administrator tetap 5 per 15 menit dan pembacaan sesi tetap 120 per menit. Pada deployment reverse proxy, proxy harus menimpa `X-Forwarded-For` dan `TRUST_PROXY=true` hanya boleh digunakan di belakang proxy tersebut. `RATE_LIMIT_ENABLED=false` adalah kill switch operasional, bukan bypass autentikasi.
 
+Readiness memakai satu RPC read-only tanpa retry, dibatasi oleh `READY_DB_TIMEOUT_MS` (default 2000) dan cache proses `READY_CACHE_MS` (default 1000). `/health` tetap liveness yang tidak melakukan probe database; release gate memakai `/ready`.
+
 ## Legacy Compatibility Identifiers
 
 Instalasi lama dapat memiliki nama teknis yang sudah menjadi kontrak deployment atau data persisten: path `/opt/gwens-automation`, unit `gwens-automation.service`, akun/grup sistem `gwens`, project ID Supabase lokal `gwensoto`, contract ID `GWENS_LEGACY_SCHEMA_V1`, serta advisory-lock key `gwens_*` di migration historis. Jangan mengubahnya tanpa migrasi deployment dan database yang terkoordinasi. Penyimpanan browser legacy `gwens-admin-key` telah dipensiunkan oleh migrasi sesi P1-01 dan tidak lagi dibaca. Identifier lain tersebut hanya untuk kompatibilitas; identitas produk resminya adalah Sotoayam.
@@ -59,6 +61,7 @@ Registrasi pertama membuat user `UNASSIGNED` dan inactive. `/start` berikutnya h
 ## Admin API
 
 - `GET /health` — liveness check tanpa informasi credential.
+- `GET /ready` — readiness fail-closed untuk database/schema dan wiring inti, tanpa detail internal.
 - `GET /api/users` — list user; menerima `status=pending|active|inactive`, `division=<Divisi>`, dan `active=true|false`.
 - `GET /api/users/:id` — detail user.
 - `PATCH /api/users/:id` — ubah Nama, Divisi, Role, status, dan preference. `telegram_chat_id` tidak dapat diubah dari endpoint ini.

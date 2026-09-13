@@ -323,6 +323,7 @@ async function loadSystem() {
   const grid = $("#system-grid"); grid.replaceChildren(systemCard("Aplikasi", "PROCESSING", "Memeriksa kesehatan…"));
   const resources = await loadResources(api, [
     { key: "health", path: "/health" },
+    { key: "readiness", path: "/ready", options: { acceptStatuses: [503] } },
     { key: "automation", path: "/api/alerts/automation-status" },
     { key: "notifications", path: "/api/admin/notifications/status" },
   ]);
@@ -330,6 +331,20 @@ async function loadSystem() {
   grid.replaceChildren();
   grid.append(systemCard("Aplikasi", resources.health.available && resources.health.data.status === "ok" ? "HEALTHY" : "UNHEALTHY",
     resources.health.available ? "Endpoint /health merespons." : "Health tidak dapat diakses."));
+  const readinessCard = $("#readiness-card");
+  if (resources.readiness.available) {
+    const readiness = resources.readiness.data;
+    const checks = readiness.checks || {};
+    const warningText = Array.isArray(readiness.warnings) && readiness.warnings.length > 0
+      ? `Peringatan: ${readiness.warnings.join(", ")}` : "Tidak ada peringatan runtime.";
+    readinessCard.replaceChildren(
+      badge(readiness.status),
+      element("p", "mt-3 mb-1", `Database ${checks.database || "SKIPPED"} · Schema ${checks.schema || "SKIPPED"} · Rute inti ${checks.core_routes || "SKIPPED"}`),
+      element("small", "text-secondary", warningText),
+    );
+  } else {
+    readinessCard.replaceChildren(element("div", "alert alert-danger mb-0", "Kesiapan layanan tidak dapat diperiksa."));
+  }
   if (resources.automation.available) {
     const data = resources.automation.data;
     grid.append(systemCard("Telegram polling", data.telegramPolling, "Status runtime polling yang tersedia."),

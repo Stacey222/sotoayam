@@ -128,6 +128,25 @@ describe("Supabase server credential validation", () => {
     expect(() => loadConfig()).toThrow(`Invalid environment variable: ${name}`);
   });
 
+  it("loads and bounds the P1-07 readiness timeout and cache", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("READY_DB_TIMEOUT_MS", "");
+    vi.stubEnv("READY_CACHE_MS", "");
+    expect(loadConfig()).toMatchObject({ readyDbTimeoutMs: 2_000, readyCacheMs: 1_000 });
+    vi.stubEnv("READY_DB_TIMEOUT_MS", "249");
+    expect(() => loadConfig()).toThrow("Invalid environment variable: READY_DB_TIMEOUT_MS");
+    vi.stubEnv("READY_DB_TIMEOUT_MS", "10001");
+    expect(() => loadConfig()).toThrow("Invalid environment variable: READY_DB_TIMEOUT_MS");
+    vi.stubEnv("READY_DB_TIMEOUT_MS", "250");
+    vi.stubEnv("READY_CACHE_MS", "-1");
+    expect(() => loadConfig()).toThrow("Invalid environment variable: READY_CACHE_MS");
+    vi.stubEnv("READY_CACHE_MS", "10001");
+    expect(() => loadConfig()).toThrow("Invalid environment variable: READY_CACHE_MS");
+  });
+
   it("keeps the critical alert evaluator disabled by default", () => {
     vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");

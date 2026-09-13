@@ -25,7 +25,7 @@ export function csrfTokenFromCookie(cookieValue) {
 export function createApiClient({ fetchImpl = globalThis.fetch, cookie = () => globalThis.document?.cookie ?? "",
   onUnauthorized = () => undefined } = {}) {
   return async function api(path, options = {}) {
-    const { handleUnauthorized = true, ...requestOptions } = options;
+    const { handleUnauthorized = true, acceptStatuses = [], ...requestOptions } = options;
     const method = String(requestOptions.method || "GET").toUpperCase();
     const headers = { Accept: "application/json", ...(requestOptions.body ? { "Content-Type": "application/json" } : {}),
       ...(requestOptions.headers || {}) };
@@ -40,7 +40,7 @@ export function createApiClient({ fetchImpl = globalThis.fetch, cookie = () => g
       throw new ApiError(0, "NETWORK_ERROR", "Tidak dapat terhubung ke Sotoayam.");
     }
     const payload = response.status === 204 ? null : await response.json().catch(() => null);
-    if (!response.ok) {
+    if (!response.ok && !acceptStatuses.includes(response.status)) {
       const error = new ApiError(response.status, payload?.error?.code || "REQUEST_FAILED",
         payload?.error?.message || "Permintaan tidak dapat diproses.");
       if (response.status === 401 && handleUnauthorized) onUnauthorized(error);
@@ -51,9 +51,9 @@ export function createApiClient({ fetchImpl = globalThis.fetch, cookie = () => g
 }
 
 export async function loadResources(api, resources) {
-  const entries = await Promise.all(resources.map(async ({ key, path }) => {
+  const entries = await Promise.all(resources.map(async ({ key, path, options }) => {
     try {
-      const payload = await api(path);
+      const payload = await api(path, options);
       return [key, { available: true, data: payload?.data ?? payload }];
     } catch (error) {
       return [key, { available: false, error }];

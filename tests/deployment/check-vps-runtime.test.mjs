@@ -41,7 +41,7 @@ describe("generic VPS runtime validation", () => {
   it("passes without historical users, divisions, rules, or row counts", async () => {
     const fetchImplementation = vi.fn().mockResolvedValue({
       status: 200,
-      json: async () => ({ status: "ok" }),
+      json: async () => ({ ready: true, status: "READY" }),
     });
     const output = [];
 
@@ -55,8 +55,8 @@ describe("generic VPS runtime validation", () => {
     })).resolves.toBe(0);
 
     expect(fetchImplementation).toHaveBeenCalledOnce();
-    expect(fetchImplementation).toHaveBeenCalledWith("http://127.0.0.1:3000/health");
-    expect(output).toEqual(["RUNTIME_CONFIG=PASS", "NODE_VERSION_CHECK=PASS", "HEALTH_CHECK=PASS", "RUNTIME_CHECK=PASS"]);
+    expect(fetchImplementation).toHaveBeenCalledWith("http://127.0.0.1:3000/ready");
+    expect(output).toEqual(["RUNTIME_CONFIG=PASS", "NODE_VERSION_CHECK=PASS", "READINESS_CHECK=PASS", "RUNTIME_CHECK=PASS"]);
   });
 
   it("fails closed for missing or inconsistent runtime configuration", () => {
@@ -72,7 +72,7 @@ describe("generic VPS runtime validation", () => {
       .toContain("ADMIN_API_KEY");
   });
 
-  it("rejects an unsupported Node runtime before the health request", async () => {
+  it("rejects an unsupported Node runtime before the readiness request", async () => {
     const fetchImplementation = vi.fn();
     const errors = [];
     await expect(checkVpsRuntime({
@@ -87,7 +87,7 @@ describe("generic VPS runtime validation", () => {
     expect(errors).toContain("NODE_VERSION_CHECK=FAIL expected=v24.20.0 actual=v22.14.0");
   });
 
-  it("fails when health is unavailable or not healthy", async () => {
+  it("fails when readiness is unavailable or not ready", async () => {
     const common = {
       environment: freshEnvironment(),
       nodeVersion: "v24.20.0",

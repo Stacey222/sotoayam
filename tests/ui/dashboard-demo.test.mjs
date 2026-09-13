@@ -65,12 +65,21 @@ describe("Sotoayam runnable dashboard demo", () => {
     expect(taskSummary(undefined)).toEqual({ total: 0, active: 0, overdue: 0, completed: 0 });
   });
 
+  it("accepts a real NOT_READY payload for the System view without treating it as a session failure", async () => {
+    const fetch = vi.fn().mockResolvedValue(json({ ready: false, status: "NOT_READY",
+      checks: { database: "FAIL", schema: "SKIPPED", core_routes: "PASS" }, warnings: [],
+      observed_at: "2026-09-12T00:00:00.000Z" }, 503));
+    const api = createApiClient({ fetchImpl: fetch });
+    await expect(api("/ready", { acceptStatuses: [503] })).resolves.toMatchObject({ status: "NOT_READY" });
+  });
+
   it("contains all required navigation and neutral unavailable states", async () => {
     const html = await asset("index.html");
     for (const label of ["Dashboard", "Tugas", "Integrasi", "Notifikasi / Aktivitas", "Sistem"]) {
       expect(html).toContain(label);
     }
-    expect(html).toContain("Belum tersedia");
+    expect(html).toContain('id="readiness-card"');
+    expect(html).not.toContain("dijadwalkan pada P1-07");
     expect(html).toContain('id="login-form"');
     expect(html).toContain('id="logout"');
   });

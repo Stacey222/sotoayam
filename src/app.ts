@@ -89,6 +89,7 @@ import { IntegrationCredentialService } from "./services/integration-credential.
 import { InternalApiKeyFallbackObserver } from "./auth/internal-integration-authorization.js";
 import { SupabaseTelegramPollingRepository, type TelegramPollingRepository } from "./repositories/telegram-polling.repository.js";
 import { TelegramFanoutService } from "./services/telegram-fanout.service.js";
+import { ReadinessService, SupabaseReadinessProbe, UnavailableReadinessProbe } from "./readiness/readiness.service.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -217,7 +218,8 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const reminderEvaluator = client && taskUsers && reminderNotifications && reminderSchedulerRepository ? new ReminderEvaluatorService(
     new SupabaseReminderTasksRepository(client), new SupabaseReminderStateRepository(client), reminderNotifications,
     new ReminderRoutingService(taskUsers, new SupabaseReminderChannelsRepository(client), new SupabaseReminderRoutingRepository(client)),
-    new NotificationDeliveryService(reminderNotifications, taskUsers, new SupabaseReminderChannelsRepository(client), new TelegramNotificationAdapter(telegramFanout)),
+    new NotificationDeliveryService(reminderNotifications, taskUsers, new SupabaseReminderChannelsRepository(client),
+      new TelegramNotificationAdapter(telegramFanout), undefined, app.log),
     reminderSchedulerRepository,
   ) : undefined;
   const reminderScheduler = reminderEvaluator ? new ReminderSchedulerService(reminderEvaluator,
@@ -323,7 +325,22 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     error: { code: "NOT_FOUND", message: "Route not found" },
   }));
 
-  await app.register(healthRoutes);
+  const readiness = new ReadinessService(
+    client ? new SupabaseReadinessProbe(client) : new UnavailableReadinessProbe(),
+    {
+      adminSessionAuthentication: Boolean(adminAuthenticationService && sessionAuthenticator),
+      persistedNotificationIntake,
+      telegramPolling: { enabled: options.config.telegramPollingEnabled,
+        active: () => runtimeHealth.telegramPollingActive },
+      reminderScheduler: { enabled: options.config.reminderSchedulerEnabled,
+        active: () => reminderScheduler?.active ?? false },
+      alertEvaluator: { enabled: options.config.criticalAlertEvaluatorEnabled,
+        active: () => Boolean(reminderScheduler?.active && criticalAlertEvaluator) },
+    },
+    options.config.readyDbTimeoutMs ?? 2_000,
+    options.config.readyCacheMs ?? 1_000,
+  );
+  await app.register(healthRoutes, { readiness });
   if (adminAuthenticationService && sessionAuthenticator) await app.register(adminAuthRoutes, {
     prefix: "/api/admin/auth", service: adminAuthenticationService,
     authenticator: sessionAuthenticator, cookieSecure: options.config.sessionCookieSecure,

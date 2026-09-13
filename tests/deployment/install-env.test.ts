@@ -10,6 +10,7 @@ const bashCommand = process.platform === "win32"
   ? path.join(process.env.ProgramFiles ?? "C:\\Program Files", "Git/bin/bash.exe")
   : "bash";
 const temporaryDirectories: string[] = [];
+const INSTALLER_TEST_TIMEOUT_MS = process.platform === "win32" ? 15_000 : 5_000;
 
 function bashPath(value: string): string {
   return value.replaceAll("\\", "/").replace(/^([A-Za-z]):/, (_match, drive: string) => `/${drive.toLowerCase()}`);
@@ -53,7 +54,7 @@ afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-describe("runtime environment installation", () => {
+describe("runtime environment installation", { timeout: INSTALLER_TEST_TIMEOUT_MS }, () => {
   it("accepts explicit operational flags enabled for a fresh customer", async () => {
     const { appRoot, result } = await runInstaller(environmentText());
     expect(result.status, result.stderr).toBe(0);

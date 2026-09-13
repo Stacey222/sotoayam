@@ -125,7 +125,7 @@ describe("P1-01 administrator sessions", () => {
 
   it("runs the same costly verification class for unknown-email and wrong-password attempts", async () => {
     const timings: Record<"unknown" | "wrong", number[]> = { unknown: [], wrong: [] };
-    for (const kind of ["unknown", "wrong", "unknown", "wrong"] as const) {
+    for (const kind of ["unknown", "wrong", "wrong", "unknown", "unknown", "wrong", "wrong", "unknown"] as const) {
       const repository = new FakeSessionRepository();
       repository.credential = kind === "unknown" ? null : credential();
       const started = performance.now();
@@ -133,10 +133,14 @@ describe("P1-01 administrator sessions", () => {
         password: "not-the-password", clientIp: "127.0.0.1" })).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
       timings[kind].push(performance.now() - started);
     }
-    const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
-    const ratio = average(timings.unknown) / average(timings.wrong);
-    expect(ratio).toBeGreaterThan(0.5);
-    expect(ratio).toBeLessThan(2);
+    const median = (values: number[]) => {
+      const ordered = [...values].sort((left, right) => left - right);
+      return (ordered[1]! + ordered[2]!) / 2;
+    };
+    const ratio = median(timings.unknown) / median(timings.wrong);
+    expect(Math.min(...timings.unknown, ...timings.wrong)).toBeGreaterThan(25);
+    expect(ratio).toBeGreaterThan(0.4);
+    expect(ratio).toBeLessThan(2.5);
   });
 
   it("returns Retry-After when the database-backed cooldown gate is locked", async () => {

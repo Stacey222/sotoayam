@@ -19,6 +19,20 @@ function service(fetch: ReturnType<typeof vi.fn>, sleep = vi.fn().mockResolvedVa
 }
 
 describe("Telegram outbound HTTP behavior", () => {
+  it("logs a sanitized Telegram send result with the supplied correlation identifiers", async () => {
+    const fetch = vi.fn().mockResolvedValue(telegramResponse(200, { ok: true, result: { message_id: 1 } }));
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    const telegram = new TelegramService("telegram-token-must-not-log", logger,
+      new TelegramApiClient(new OutboundHttpClient({ fetch, maxRetries: 0 })));
+
+    await telegram.sendMessage(42, "message-secret-must-not-log", undefined,
+      { requestId: "req-1", eventId: "event-1", notificationEventId: 10, notificationId: 20, deliveryId: 30 });
+
+    expect(logger.info).toHaveBeenCalledWith({ request_id: "req-1", event_id: "event-1",
+      notification_event_id: 10, notification_id: 20, delivery_id: 30 }, "Telegram sendMessage succeeded");
+    expect(JSON.stringify(logger.info.mock.calls)).not.toMatch(/telegram-token-must-not-log|message-secret-must-not-log/);
+  });
+
   it.each([
     ["Retry-After header", { "retry-after": "2" }, {}, 2_000],
     ["Telegram retry_after body", {}, { parameters: { retry_after: 3 } }, 3_000],

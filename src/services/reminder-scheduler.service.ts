@@ -14,6 +14,7 @@ export class ReminderSchedulerService {
     private readonly criticalAlerts?: CriticalAlertEvaluatorService,
     private readonly criticalAlertsEnabled = false,
   ) {}
+  get active(): boolean { return this.timer !== null; }
   start(): void {
     if (!this.enabled || this.timer) return;
     this.timer = setInterval(() => this.trigger(), this.intervalMs);

@@ -87,7 +87,7 @@ export class SupabaseNotificationIntakeRepository implements NotificationIntakeR
 
   async findDueForEvent(eventId: number, now: string, staleBefore: string, limit: number): Promise<DueDelivery[]> {
     const { data, error } = await this.client.from("notification_deliveries")
-      .select("*,notification:notifications!inner(*)")
+      .select("*,notification:notifications!inner(*,event:notification_events(external_event_id))")
       .eq("notification.notification_event_id", eventId)
       .in("state", ["PENDING", "PROCESSING"])
       .lte("next_attempt_at", now)

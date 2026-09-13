@@ -3,14 +3,16 @@ import path from "node:path";
 import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
 import { AppError } from "../../src/errors.js";
+import { OutboundHttpClient } from "../../src/http/outbound-http-client.js";
 import type { DueDelivery, ReminderChannel, ReminderChannelsRepository, ReminderNotificationsRepository, ReminderRoutingRepository, ReminderSchedulerRepository, ReminderStateRepository, ReminderTasksRepository, SchedulerStateView } from "../../src/repositories/reminders.repository.js";
 import type { TaskUsersRepository } from "../../src/repositories/task-users.repository.js";
 import { TaskReminderPolicy } from "../../src/reminders/reminder-policy.js";
 import type { FailureClass, NotificationDelivery, NotificationIntent, NotificationRoutingRule, TaskReminderState } from "../../src/reminders/types.js";
 import { adminNotificationsRoutes } from "../../src/routes/admin-notifications.routes.js";
-import { NotificationDeliveryService, type NotificationChannelAdapter } from "../../src/services/notification-delivery.service.js";
+import { NotificationDeliveryService, TelegramNotificationAdapter, type NotificationChannelAdapter } from "../../src/services/notification-delivery.service.js";
 import { ReminderEvaluatorService } from "../../src/services/reminder-evaluator.service.js";
 import { ReminderRoutingService } from "../../src/services/reminder-routing.service.js";
+import { TelegramApiClient, TelegramApiError, TelegramOperationError, TelegramService } from "../../src/services/telegram.service.js";
 import type { Task, TaskActor, TaskUser } from "../../src/tasks/types.js";
 
 const now = new Date("2026-09-01T12:00:00.000Z");
@@ -87,6 +89,47 @@ describe("delivery and bounded retry", () => {
   it("permanently fails if recipient is deactivated after generation", async () => { const notifications = new Notifications(); notifications.due = [due()]; const users = new Users(); users.rows[0]!.active = false; await new NotificationDeliveryService(notifications, users, new Channels(), new Adapter(), () => now).processDue(); expect(notifications.marks[0]).toMatchObject({ state: "FAILED", failureCode: "RECIPIENT_INACTIVE" }); });
   it("permanently fails a missing channel without sending", async () => { const notifications = new Notifications(); notifications.due = [due()]; const channels = new Channels(); channels.rows = []; const adapter = new Adapter(); await new NotificationDeliveryService(notifications, new Users(), channels, adapter, () => now).processDue(); expect(notifications.marks[0]).toMatchObject({ state: "FAILED", failureCode: "CHANNEL_UNAVAILABLE" }); expect(adapter.calls).toHaveLength(0); });
   it("does not expose Telegram external IDs in persisted failure metadata", async () => { const notifications = new Notifications(); notifications.due = [due()]; const adapter = new Adapter(); adapter.error = new Error("failure containing transport internals"); await new NotificationDeliveryService(notifications, new Users(), new Channels(), adapter, () => now).processDue(); expect(JSON.stringify(notifications.marks)).not.toContain("100200300"); });
+
+  it.each([
+    [400, "chat not found"],
+    [403, "bot was blocked"],
+    [404, "endpoint not found"],
+  ])("classifies permanent Telegram %i failures as PERMANENT without scheduling a retry", async (status, description) => {
+    const notifications = new Notifications(); notifications.due = [due()];
+    const adapter = new Adapter();
+    adapter.error = new TelegramOperationError("TELEGRAM_SEND_FAILED", "Telegram rejected sendMessage request",
+      new TelegramApiError("HTTP", 1, false, false, status, status, description));
+    await new NotificationDeliveryService(notifications, new Users(), new Channels(), adapter, () => now).processDue();
+    expect(notifications.marks[0]).toMatchObject({ state: "FAILED", nextAttemptAt: null,
+      failureClass: "PERMANENT", failureCode: "TELEGRAM_SEND_FAILED" });
+  });
+
+  it("preserves a permanent Telegram rejection through API, sender, adapter, and delivery state", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: false, error_code: 403,
+      description: "Forbidden: bot was blocked by the user" }), { status: 403,
+      headers: { "content-type": "application/json" } }));
+    const api = new TelegramApiClient(new OutboundHttpClient({ fetch, maxRetries: 2 }));
+    const adapter = new TelegramNotificationAdapter(new TelegramService("test-bot-token", undefined, api));
+    const notifications = new Notifications(); notifications.due = [due()];
+    await new NotificationDeliveryService(notifications, new Users(), new Channels(), adapter, () => now).processDue();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(notifications.marks[0]).toMatchObject({ state: "FAILED", nextAttemptAt: null,
+      failureClass: "PERMANENT", failureCode: "TELEGRAM_SEND_FAILED" });
+  });
+
+  it.each([
+    ["network", new TelegramApiError("NETWORK", 1, false, false)],
+    ["rate limit", new TelegramApiError("HTTP", 3, true, true, 429, 429, "Too Many Requests", 2_000)],
+    ["server error", new TelegramApiError("HTTP", 1, false, false, 503, 503, "Unavailable")],
+  ])("keeps Telegram %s failures TRANSIENT for the durable delivery retry", async (_label, classification) => {
+    const notifications = new Notifications(); notifications.due = [due()];
+    const adapter = new Adapter();
+    adapter.error = new TelegramOperationError("TELEGRAM_SEND_FAILED", "Telegram rejected sendMessage request", classification);
+    await new NotificationDeliveryService(notifications, new Users(), new Channels(), adapter, () => now).processDue();
+    expect(notifications.marks[0]).toMatchObject({ state: "PENDING", failureClass: "TRANSIENT",
+      failureCode: "TELEGRAM_SEND_FAILED" });
+    expect(notifications.marks[0]!.nextAttemptAt).not.toBeNull();
+  });
 });
 
 function evaluatorHarness() {

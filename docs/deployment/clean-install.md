@@ -91,6 +91,8 @@ Create `${APP_ROOT}/shared/.env` from `.env.example` in the repository, then rep
 | `RATE_LIMIT_SHARED_ORIGIN_FACTOR` | Optional | 1–100, default 10; IP-only multiplier when loopback plus `TRUST_PROXY=false` collapses origins |
 | `RATE_LIMIT_MAX_KEYS` | Optional | 1000–200000, default 10000 |
 | `RATE_LIMIT_TRUSTED_IPS` | Optional | Empty by default; comma-separated exact IP addresses (IPv6 entries compare at /64) |
+| `READY_DB_TIMEOUT_MS` | Optional | 250–10000, default 2000; batas satu probe database/schema tanpa retry |
+| `READY_CACHE_MS` | Optional | 0–10000, default 1000; cache readiness proses lokal, tanpa stale-while-error |
 | `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF` | **Deploy-time only** | Required by the deployment script to reach your database. Supply them in the operator's protected environment. **Never** put them in `shared/.env`, the package, or shell history |
 | `SOTOAYAM_BOOTSTRAP_ADMIN_PASSWORD` | **Setup-time only** | Optional automation fallback for the first-administrator password. Prefer `--password-file` or the prompt. Remove it immediately after setup |
 
@@ -170,14 +172,15 @@ Setup will refuse to remove anything if it finds *any* sign the installation is 
 
 ## Start Sotoayam
 
-The deployment script restarts the service and requires a health check to pass. Afterwards, **restart the service once more** so it picks up the new installation record:
+The deployment script restarts the service and gives the bounded readiness probe a retry warm-up window before requiring it to pass. Afterwards, **restart the service once more** so it picks up the new installation record:
 
 ```bash
 sudo systemctl restart "${SERVICE_NAME}"
 curl -fsS "http://127.0.0.1:${HEALTH_PORT}/health"
+curl -fsS "http://127.0.0.1:${HEALTH_PORT}/ready"
 ```
 
-Expected: `{"status":"ok"}`.
+Expected: `/health` returns `{"status":"ok"}` for liveness and `/ready` reports `READY` for the release gate.
 
 This restart is required after fresh setup. Skipping it leaves an obsolete legacy report route registered until the next restart.
 

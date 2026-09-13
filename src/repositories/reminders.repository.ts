@@ -4,7 +4,10 @@ import type { DeliveryState, FailureClass, NotificationDelivery, NotificationEve
 import { governanceDatabaseError } from "./governance-database-error.js";
 
 export interface DueDelivery extends NotificationDelivery {
-  notification: NotificationIntent;
+  notification: NotificationIntent & {
+    notification_event_id?: number | null;
+    event?: { external_event_id: string } | null;
+  };
 }
 
 export interface ReminderTasksRepository { findCandidates(limit: number): Promise<Task[]> }
@@ -84,7 +87,7 @@ export class SupabaseReminderNotificationsRepository implements ReminderNotifica
   }
   async findDue(now: string, staleBefore: string, limit: number): Promise<DueDelivery[]> {
     const { data, error } = await this.client.from("notification_deliveries")
-      .select("*,notification:notifications(*)").in("state", ["PENDING", "PROCESSING"])
+      .select("*,notification:notifications(*,event:notification_events(external_event_id))").in("state", ["PENDING", "PROCESSING"])
       .lte("next_attempt_at", now).order("next_attempt_at", { ascending: true }).limit(limit);
     if (error) throw governanceDatabaseError("Unable to load due notification deliveries", error);
     return ((data ?? []) as unknown as DueDelivery[]).filter((row) => row.state === "PENDING" || row.updated_at <= staleBefore);

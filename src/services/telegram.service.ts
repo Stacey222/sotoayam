@@ -1,9 +1,11 @@
 import { AppError } from "../errors.js";
 import type { FastifyBaseLogger } from "fastify";
 import { OutboundHttpClient, OutboundHttpError, type OutboundErrorKind } from "../http/outbound-http-client.js";
+import { correlationBindings, type CorrelationContext } from "../observability/correlation.js";
 
 export interface TelegramSender {
-  sendMessage(chatId: number, message: string, options?: TelegramMessageOptions): Promise<void>;
+  sendMessage(chatId: number, message: string, options?: TelegramMessageOptions,
+    correlation?: CorrelationContext): Promise<void>;
   editMessage?(chatId: number, messageId: number, message: string, options?: TelegramMessageOptions): Promise<void>;
   removeInlineKeyboard?(chatId: number, messageId: number): Promise<void>;
   answerCallbackQuery?(callbackQueryId: string): Promise<void>;
@@ -104,11 +106,12 @@ export class TelegramOperationError extends AppError {
 export class TelegramService implements TelegramSender {
   constructor(
     private readonly botToken: string,
-    private readonly logger?: Pick<FastifyBaseLogger, "info">,
+    private readonly logger?: Pick<FastifyBaseLogger, "info" | "warn">,
     private readonly api = new TelegramApiClient(),
   ) {}
 
-  async sendMessage(chatId: number, message: string, options?: TelegramMessageOptions): Promise<void> {
+  async sendMessage(chatId: number, message: string, options?: TelegramMessageOptions,
+    correlation: CorrelationContext = {}): Promise<void> {
     try {
       await this.api.call(this.botToken, "sendMessage", { body: {
         chat_id: chatId,
@@ -117,11 +120,15 @@ export class TelegramService implements TelegramSender {
       } });
     } catch (error) {
       if (error instanceof TelegramApiError) {
+        this.logger?.warn({ ...correlationBindings(correlation), transport_kind: error.transportKind,
+          attempts: error.attempts, retry_exhausted: error.retryExhausted }, "Telegram sendMessage failed");
         throw new TelegramOperationError("TELEGRAM_SEND_FAILED", "Telegram rejected sendMessage request", error);
       }
+      this.logger?.warn({ ...correlationBindings(correlation), error_type: error instanceof Error ? error.name : "UnknownError" },
+        "Telegram sendMessage failed");
       throw error;
     }
-    this.logger?.info("Telegram sendMessage succeeded");
+    this.logger?.info(correlationBindings(correlation), "Telegram sendMessage succeeded");
   }
 
   async answerCallbackQuery(callbackQueryId: string): Promise<void> {

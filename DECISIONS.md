@@ -144,3 +144,17 @@ Decision: all production notification fan-out shares one dependency-free, in-pro
 Status: Implemented for P1-06.
 
 The small-VPS default permits three active Telegram notification sends and spaces starts by at least 100 milliseconds. Recipient work uses a fixed worker pool, shutdown prevents queued work from starting, and each outcome remains isolated and input-ordered. Transport retries and Telegram 429 handling remain exclusively in P1-02.
+
+## D-022 — Liveness and readiness separation
+
+Decision: `/health` is pure process liveness; `/ready` is the sanitized fail-closed release/runtime gate.
+Status: Implemented for P1-07.
+
+Readiness performs one abortable read-only `load_telegram_polling_state` RPC with no retry, proving database reachability and required schema, then requires admin-session authentication and persisted notification intake wiring. Telegram polling, reminder scheduling, and alert evaluation are non-gating and report only approved inactive warnings. Results use a short in-process cache without stale-while-error; deployment retries temporary startup `503` responses for a bounded warm-up window.
+
+## D-023 — Correlation identifier chain
+
+Decision: operational tracing reuses Fastify request IDs and existing notification identifiers rather than adding a parallel persisted correlation identity.
+Status: Implemented for P1-08.
+
+Structured logs use `request_id`, caller/generated `event_id`, internal `notification_event_id`, intent `notification_id`, and `delivery_id` when each becomes available. Immediate HTTP work carries the Fastify request ID in-process; background retry reconstructs durable event correlation through the existing `notification_deliveries -> notifications -> notification_events` relationship. No correlation value changes idempotency, delivery retries, Telegram offset/dedupe, or public response contracts, and secrets/message bodies are excluded from correlation logs.

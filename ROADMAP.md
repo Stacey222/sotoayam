@@ -79,10 +79,12 @@ Legend:
 - [x] P1-06 Bound/pacing for Telegram fan-out.
   Owner: Codex
   Note: all production notification fan-out shares one in-process gate with bounded concurrency and paced request starts; arbitrary recipient-wide `Promise.all` was replaced by fixed worker slots, while P1-02 retains retry and Telegram 429 ownership.
-- [ ] P1-07 Implement meaningful `/ready`.
+- [x] P1-07 Implement meaningful `/ready`.
   Owner: Claude Code define -> Codex implement
-- [ ] P1-08 End-to-end request/event/intent correlation IDs.
+  Note: `/health` remains database-independent liveness. `/ready` uses one abortable, bounded, read-only schema RPC plus core-route wiring gates; optional workers produce warnings only. Readiness results are briefly cached, rate-limit exempt, sanitized, and now gate deploy, rollback, runtime checks, and the System dashboard.
+- [x] P1-08 End-to-end request/event/intent correlation IDs.
   Owner: Codex
+  Note: notification intake uses the Fastify request ID and existing external event, notification-event, notification-intent, and delivery identifiers in structured logs through Telegram outcomes. Background retries recover event correlation through the existing database relationship; no schema or idempotency change was required.
 - [ ] P1-09 Migration tests against clean throwaway Postgres.
   Owner: Codex
 - [ ] P1-10 Adversarial review of auth/intake/integration rewrite.

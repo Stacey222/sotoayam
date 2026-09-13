@@ -42,6 +42,8 @@ export interface AppConfig extends SupabaseConfig {
   rateLimitSharedOriginFactor: number;
   rateLimitMaxKeys: number;
   rateLimitTrustedIps: string[];
+  readyDbTimeoutMs?: number;
+  readyCacheMs?: number;
 }
 
 function parseHost(value: string | undefined): string {
@@ -195,6 +197,8 @@ export function loadConfig(): AppConfig {
     rateLimitSharedOriginFactor: parseBoundedInteger("RATE_LIMIT_SHARED_ORIGIN_FACTOR", process.env.RATE_LIMIT_SHARED_ORIGIN_FACTOR, 10, 1, 100),
     rateLimitMaxKeys: parseBoundedInteger("RATE_LIMIT_MAX_KEYS", process.env.RATE_LIMIT_MAX_KEYS, 10_000, 1_000, 200_000),
     rateLimitTrustedIps: (process.env.RATE_LIMIT_TRUSTED_IPS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
+    readyDbTimeoutMs: parseBoundedInteger("READY_DB_TIMEOUT_MS", process.env.READY_DB_TIMEOUT_MS, 2_000, 250, 10_000),
+    readyCacheMs: parseBoundedInteger("READY_CACHE_MS", process.env.READY_CACHE_MS, 1_000, 0, 10_000),
   };
   if (config.criticalAlertEvaluatorEnabled && !config.reminderSchedulerEnabled) {
     throw new Error("Invalid environment: CRITICAL_ALERT_EVALUATOR_ENABLED requires REMINDER_SCHEDULER_ENABLED");

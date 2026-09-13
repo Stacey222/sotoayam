@@ -13,6 +13,7 @@ import type { NotificationResult, NotificationSender } from "./notification.serv
 import type { RecipientResolverService } from "./recipient-resolver.service.js";
 import type { TelegramSender } from "./telegram.service.js";
 import { TelegramFanoutService } from "./telegram-fanout.service.js";
+import { correlationLogger, type CorrelationContext } from "../observability/correlation.js";
 
 const SOURCE = "INTERNAL_API";
 
@@ -73,7 +74,8 @@ export class NotificationIntakeService implements NotificationSender {
     this.fanout = fanout ?? new TelegramFanoutService(telegram);
   }
 
-  async send(event: NotificationEvent, integrationId: number | null = null): Promise<NotificationResult> {
+  async send(event: NotificationEvent, integrationId: number | null = null,
+    context: CorrelationContext = {}): Promise<NotificationResult> {
     const externalEventId = event.event_id ?? `gen:${randomUUID()}`;
     const identityOrigin = event.event_id === undefined ? "GENERATED" as const : "CALLER" as const;
     const identity = `${SOURCE}\u0000${externalEventId}`;
@@ -84,7 +86,7 @@ export class NotificationIntakeService implements NotificationSender {
         if (this.active.get(identity) === preceding) this.active.delete(identity);
         continue;
       }
-      const operation = this.persistAndDispatch(event, externalEventId, identityOrigin, integrationId);
+      const operation = this.persistAndDispatch(event, externalEventId, identityOrigin, integrationId, context);
       this.active.set(identity, operation);
       try {
         return await operation;
@@ -99,7 +101,10 @@ export class NotificationIntakeService implements NotificationSender {
     externalEventId: string,
     identityOrigin: "CALLER" | "GENERATED",
     integrationId: number | null,
+    context: CorrelationContext,
   ): Promise<NotificationResult> {
+    const requestLogger = correlationLogger(this.logger, { ...context, eventId: externalEventId });
+    requestLogger.info({ source: SOURCE, type: event.type }, "Notification event processing started");
     const recipients = await this.resolver.resolve(event.type);
     const recipientExpansion = recipients.map<NotificationIntakeRecipient>((recipient) => ({
       legacyId: recipient.id,
@@ -117,7 +122,7 @@ export class NotificationIntakeService implements NotificationSender {
     });
 
     if (outcome.conflict) {
-      this.logger.warn({ notificationEventId: outcome.eventId, source: SOURCE, externalEventId, outcome: "CONFLICT" }, "Notification event identity conflict");
+      requestLogger.warn({ notification_event_id: outcome.eventId, source: SOURCE, outcome: "CONFLICT" }, "Notification event identity conflict");
       throw new AppError(409, "NOTIFICATION_EVENT_CONFLICT", "This event_id was already accepted with a different payload");
     }
     if (outcome.created && (outcome.recipientCount !== recipients.length || outcome.routedCount > outcome.recipientCount)) {
@@ -125,19 +130,18 @@ export class NotificationIntakeService implements NotificationSender {
     }
 
     const classification = outcome.created ? "CREATED" : outcome.dispatched ? "REPLAY" : "RESUMED";
+    const eventLogger = correlationLogger(requestLogger, { notificationEventId: outcome.eventId });
     const commonLog = {
-      notificationEventId: outcome.eventId,
       source: SOURCE,
-      externalEventId,
-      identityOrigin,
+      identity_origin: identityOrigin,
       type: event.type,
       outcome: classification,
       recipients: outcome.recipientCount,
       routed: outcome.routedCount,
       unrouted: outcome.recipientCount - outcome.routedCount,
     };
-    if (identityOrigin === "GENERATED") this.logger.warn(commonLog, "Notification event has generated non-idempotent identity");
-    else this.logger.info(commonLog, "Notification event persisted");
+    if (identityOrigin === "GENERATED") eventLogger.warn(commonLog, "Notification event has generated non-idempotent identity");
+    else eventLogger.info(commonLog, "Notification event persisted");
 
     if (outcome.dispatched) return this.result(event, externalEventId, identityOrigin, true, outcome.recipientCount, outcome.dispatchSent, outcome.dispatchFailed);
 
@@ -158,6 +162,9 @@ export class NotificationIntakeService implements NotificationSender {
       new SnapshotUsers(chatIdsByUser),
       new SnapshotChannels(chatIdsByUser),
       new TelegramNotificationAdapter(this.fanout),
+      undefined,
+      eventLogger,
+      { ...context, eventId: externalEventId, notificationEventId: outcome.eventId },
     );
     for (let batch = 0; batch < 10; batch += 1) {
       const processed = await deliveryService.processDue(50);
@@ -171,14 +178,15 @@ export class NotificationIntakeService implements NotificationSender {
     const unroutedOutcomes = await this.fanout.sendAll(unroutedRecipients.map((recipient) => ({
       chatId: recipient.telegram_chat_id,
       message: event.message,
+      correlation: { ...context, eventId: externalEventId, notificationEventId: outcome.eventId },
     })));
     const unroutedSent = unroutedOutcomes.filter((item) => item.status === "fulfilled").length;
     const missingUnrouted = dispatchState.unroutedDedupeKeys.length - unroutedRecipients.length;
     const sent = dispatchState.delivered + unroutedSent;
     const failed = dispatchState.unresolved + (unroutedOutcomes.length - unroutedSent) + missingUnrouted;
     await this.intake.completeDispatch(outcome.eventId, sent, failed);
-    this.logger.info({ notificationEventId: outcome.eventId, source: SOURCE, externalEventId,
-      outcome: classification, deliveryCount: outcome.routedCount, sent, failed }, "Notification event dispatch completed");
+    eventLogger.info({ source: SOURCE, outcome: classification, delivery_count: outcome.routedCount,
+      sent, failed }, "Notification event dispatch completed");
     return this.result(event, externalEventId, identityOrigin, !outcome.created, outcome.recipientCount, sent, failed);
   }
 

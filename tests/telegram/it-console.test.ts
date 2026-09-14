@@ -154,8 +154,8 @@ describe("Slice 3.1 Telegram IT console", () => {
   it("19. reauthorizes every callback", async () => {
     const test = harness(); await test.console.handleCallback(9001, "ac:u"); await test.console.handleCallback(9001, "ac:s"); expect(test.channels.findByExternalIdentity).toHaveBeenCalledTimes(2);
   });
-  it("20. returns a safe message when final SYSTEM_ADMIN deactivation is rejected", async () => {
-    expect((await harness().console.handleCallback(9001, "ac:c:z:1")).text).toContain("SYSTEM_ADMIN aktif terakhir");
+  it("20. returns a safe message when self-deactivation is rejected", async () => {
+    expect((await harness().console.handleCallback(9001, "ac:c:z:1")).text).toContain("tidak dapat menonaktifkan dirinya sendiri");
   });
   it("21. never exposes Telegram external identity or username in lists", async () => {
     const text = (await harness().console.handleCallback(9001, "ac:l:p:0")).text; expect(text).not.toContain("9001"); expect(text).not.toContain("username");

@@ -23,17 +23,17 @@ const user = (overrides: Partial<ManagedUser> = {}): ManagedUser => ({
 
 class MemoryUsers {
   values: ManagedUser[] = [];
-  updates: Array<{ id: number; update: AccessUpdate; source: string }> = [];
+  updates: Array<{ id: number; update: AccessUpdate; source: string; actorUserId?: number | null }> = [];
   async findAll(status?: UserManagementStatus) {
     return this.values.filter((item) => !status || (status === "active" ? item.active : status === "pending" ? !item.active && (!item.division || !item.role) : !item.active && !!item.division && !!item.role));
   }
   async findById(id: number) { return this.values.find((item) => item.id === id) ?? null; }
   async findNormalizedByLegacyId(id: number) { return this.findById(id); }
-  async updateAccess(id: number, update: AccessUpdate, source: string) {
+  async updateAccess(id: number, update: AccessUpdate, source: string, actorUserId?: number | null) {
     const value = await this.findById(id); if (!value) throw new AppError(404, "NOT_FOUND", "missing");
     value.division = divisions.find((item) => item.id === update.division_id) ?? null;
     value.role = roles.find((item) => item.id === update.role_id) ?? null;
-    value.active = update.active; this.updates.push({ id, update, source }); return value;
+    value.active = update.active; this.updates.push({ id, update, source, actorUserId }); return value;
   }
   async updateBusinessUserCode(id: number, update: BusinessUserCodeUpdate) {
     const value = await this.findById(id); if (!value) throw new AppError(404, "NOT_FOUND", "missing");
@@ -46,6 +46,17 @@ const divisionRepo = {
 };
 const roleRepo = {
   findAll: vi.fn(async () => roles), findByCode: vi.fn(async (code: string) => roles.find((item) => item.code === code) ?? null),
+};
+const sessionAuthenticator = {
+  authenticate: vi.fn(async (): Promise<null | { kind: "session"; adminUserId: number; sessionId: string;
+    email: string; displayName: string; expiresAt: string }> => ({ kind: "session", adminUserId: 9, sessionId: "session-9",
+    email: "admin@example.test", displayName: "Administrator", expiresAt: "2099-01-01T00:00:00.000Z" })),
+  verifyCsrf: vi.fn(() => true),
+};
+const systemAdminActorResolver = {
+  resolveTrustedActor: vi.fn(),
+  resolveActor: vi.fn(async () => ({ id: 9, displayName: "IT", active: true, divisionId: 1, divisionCode: "IT",
+    divisionGrantsSystemAuthority: true, roleId: 2, roleCode: "ADMIN", permissions: new Set<string>() })),
 };
 
 describe("Slice 2.5 user management acceptance", () => {
@@ -68,7 +79,7 @@ describe("Slice 2.5 user management acceptance", () => {
   it("13. stores exactly one home division", async () => { const sql = await readFile(identityPath, "utf8"); expect(sql).toContain("division_id bigint references public.divisions (id)"); expect(sql).not.toContain("user_divisions"); });
   it("14. stores exactly one business role", async () => { const sql = await readFile(identityPath, "utf8"); expect(sql).toContain("role_id bigint references public.roles (id)"); expect(sql).not.toContain("user_roles"); });
   it("15. atomically synchronizes normalized and legacy access", async () => { const sql = await readFile(migrationPath, "utf8"); const fn = sql.split("create or replace function public.update_user_access")[1] ?? ""; expect(fn).toContain("update public.users"); expect(fn).toContain("update public.telegram_users"); });
-  it("16. routes legacy compatibility through the synchronized source", async () => { users.values = [user()]; await service.updateLegacyAccess(1, { division: "IT", role: "Staff", active: true }); expect(users.updates[0]?.source).toBe("legacy_admin_api_compatibility"); });
+  it("16. routes legacy compatibility through the synchronized source with the real actor", async () => { users.values = [user()]; await service.updateLegacyAccess(1, { division: "IT", role: "Staff", active: true }, 9); expect(users.updates[0]).toMatchObject({ source: "legacy_admin_api_compatibility", actorUserId: 9 }); });
   it("17. synchronizes deactivation in the database function", async () => { const sql = await readFile(migrationPath, "utf8"); expect(sql).toMatch(/update public\.telegram_users set[\s\S]*active = p_active/); });
   it("18. audits division changes", async () => { expect(await readFile(migrationPath, "utf8")).toContain("USER_DIVISION_CHANGED"); });
   it("19. audits role changes", async () => { expect(await readFile(migrationPath, "utf8")).toContain("USER_ROLE_CHANGED"); });
@@ -82,23 +93,30 @@ describe("Slice 2.5 user management acceptance", () => {
   it("27. protects the final active SYSTEM_ADMIN", async () => { const sql = await readFile(migrationPath, "utf8"); expect(sql).toContain("Final active SYSTEM_ADMIN cannot be revoked without a replacement"); expect(sql).toContain("Final active SYSTEM_ADMIN must remain active in IT until handover"); });
   it("28. supports grant-then-revoke handover", async () => { const sql = await readFile(migrationPath, "utf8"); expect(sql).toContain("function public.assign_system_admin"); expect(sql).toContain("function public.revoke_system_admin"); });
   it("29. keeps reconciliation keys unchanged", async () => { const sql = await readFile(migrationPath, "utf8"); expect(sql).not.toMatch(/legacy_telegram_user_id\s*=/); expect(sql).not.toMatch(/external_id\s*=/); });
-  it("30. protects normalized endpoints with the shared admin boundary", async () => {
-    users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service, adminApiKey: "safe-key" });
+  it("30. protects normalized endpoints with a SYSTEM_ADMIN session boundary", async () => {
+    users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service,
+      adminApiKey: "safe-key", sessionAuthenticator, actorResolver: systemAdminActorResolver });
+    sessionAuthenticator.authenticate.mockResolvedValueOnce(null);
     const denied = await app.inject({ method: "GET", url: "/api/admin/users?status=pending" });
-    const accepted = await app.inject({ method: "GET", url: "/api/admin/users?status=pending", headers: { "x-admin-api-key": "safe-key" } });
-    expect(denied.statusCode).toBe(401); expect(accepted.statusCode).toBe(200); await app.close();
+    sessionAuthenticator.authenticate.mockResolvedValueOnce(null);
+    const sharedKey = await app.inject({ method: "GET", url: "/api/admin/users?status=pending", headers: { "x-admin-api-key": "safe-key" } });
+    const accepted = await app.inject({ method: "GET", url: "/api/admin/users?status=pending" });
+    expect(denied.statusCode).toBe(401); expect(sharedKey.statusCode).toBe(401); expect(accepted.statusCode).toBe(200); await app.close();
   });
   it("31. normalizes and assigns a business user code", async () => { users.values = [user()]; const updated = await service.updateBusinessUserCode(1, { business_user_code: " gw-it-001 ", confirm_change: false }, "test", 9); expect(updated.business_user_code).toBe("GW-IT-001"); });
   it("32. rejects invalid and numeric-only business identifiers", async () => { users.values = [user()]; await expect(service.updateBusinessUserCode(1, { business_user_code: "12345", confirm_change: false }, "test", 9)).rejects.toMatchObject({ code: "BUSINESS_USER_CODE_INVALID" }); });
-  it("33. protects code administration with shared key plus active IT SYSTEM_ADMIN resolution", async () => {
-    users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service, adminApiKey: "safe-key",
-      actorResolver: { resolveTrustedActor: async () => ({ id: 9, displayName: "IT", active: true, divisionId: 1, divisionCode: "IT", divisionGrantsSystemAuthority: true, roleId: 2, roleCode: "ADMIN", permissions: new Set() }) } });
-    const response = await app.inject({ method: "PATCH", url: "/api/admin/users/1/business-user-code", headers: { "x-admin-api-key": "safe-key" }, payload: { business_user_code: "GW-IT-001", confirm_change: false } });
+  it("33. protects code administration with the active SYSTEM_ADMIN session actor", async () => {
+    users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service,
+      adminApiKey: "safe-key", sessionAuthenticator, actorResolver: systemAdminActorResolver });
+    const response = await app.inject({ method: "PATCH", url: "/api/admin/users/1/business-user-code",
+      payload: { business_user_code: "GW-IT-001", confirm_change: false } });
     expect(response.statusCode).toBe(200); expect(response.json().data.business_user_code).toBe("GW-IT-001"); await app.close();
   });
   it("34. denies code administration when normalized IT authority is unavailable", async () => {
-    users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service, adminApiKey: "safe-key" });
-    const response = await app.inject({ method: "PATCH", url: "/api/admin/users/1/business-user-code", headers: { "x-admin-api-key": "safe-key" }, payload: { business_user_code: "GW-IT-001", confirm_change: false } });
+    users.values = [user()]; const app = Fastify(); await app.register(adminUserManagementRoutes, { prefix: "/api/admin/users", service,
+      adminApiKey: "safe-key", sessionAuthenticator });
+    const response = await app.inject({ method: "PATCH", url: "/api/admin/users/1/business-user-code",
+      payload: { business_user_code: "GW-IT-001", confirm_change: false } });
     expect(response.statusCode).toBe(503); await app.close();
   });
 });

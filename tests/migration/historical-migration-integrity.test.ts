@@ -21,6 +21,8 @@ const historical: Record<string, string> = {
   "202609090002_implement_customer_taxonomy_transition.sql": "5019817994fe0740bb38c8bd20248f7d22080beb49586a84a90fc06b029f3f0b",
   "202609100001_create_admin_session_authentication.sql": "60a2612217e4780d3ce2070dbaff881f9bd7d30f433efc88292728c8cee52c48",
   "202609110001_create_integration_credentials.sql": "d735cb8a89cf25c32abec549673257a63aa3126b92e93100c596c2cff4cb573b",
+  "202609120001_create_telegram_polling_state.sql": "92106510973d58cf9c5fbb7ad77991940dcb7e9ef7abdec97005fc18a8218b70",
+  "202609130001_harden_effective_system_admin_invariant.sql": "3b7113fb091685cf3dfe070b99917ae485be197369508943b8fc96c426c0498f",
 };
 
 const migrationPath = path.resolve("supabase/migrations/202609090002_implement_customer_taxonomy_transition.sql");
@@ -33,13 +35,13 @@ describe("P0-14 migration integrity", () => {
     }
   });
 
-  it("P5-21 keeps all historical migrations and adds exactly the approved P1-05 migration", async () => {
+  it("keeps all nineteen historical migrations and adds exactly the P2-09 user-management migration", async () => {
     const names = (await readdir(path.resolve("supabase/migrations"))).filter((name) => name.endsWith(".sql")).sort();
     expect(names.slice(-2)).toEqual([
-      "202609110001_create_integration_credentials.sql",
-      "202609120001_create_telegram_polling_state.sql",
+      "202609130001_harden_effective_system_admin_invariant.sql",
+      "202609140001_create_admin_user_management.sql",
     ]);
-    expect(names).toHaveLength(18);
+    expect(names).toHaveLength(20);
   });
 
   it("does not execute destructive operational DML during migration", async () => {

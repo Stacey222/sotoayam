@@ -15,6 +15,7 @@ export interface SessionPrincipal {
   readonly email: string;
   readonly displayName: string;
   readonly expiresAt: string;
+  readonly passwordChangeRequired?: boolean;
 }
 
 export interface AdminSessionAuthenticator {
@@ -73,6 +74,7 @@ export class DatabaseAdminSessionAuthenticator implements AdminSessionAuthentica
     if (!session) return null;
     const principal: SessionPrincipal = { kind: "session", adminUserId: session.userId, sessionId: session.sessionId,
       email: session.email, displayName: session.displayName, expiresAt: session.expiresAt,
+      passwordChangeRequired: session.passwordChangeRequired,
     };
     this.csrfHashes.set(principal, session.csrfTokenHash);
     return principal;

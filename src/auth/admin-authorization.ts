@@ -40,7 +40,12 @@ export async function resolveAdminPrincipal(
   settings: AdminRouteScopeSettings = {},
 ): Promise<AdminPrincipal> {
   const session = await options.sessionAuthenticator?.authenticate(request);
-  if (session) return session;
+  if (session) {
+    if (session.passwordChangeRequired) {
+      throw new AppError(403, "PASSWORD_CHANGE_REQUIRED", "Password change is required before accessing administrator routes");
+    }
+    return session;
+  }
   const configuredKey = options.adminApiKey;
   const providedKey = request.headers[ADMIN_API_KEY_HEADER];
   if (options.adminApiKeyFallbackEnabled === false || !configuredKey

@@ -158,13 +158,14 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   app.log.info({ persistedNotificationIntake }, "Notification intake configured");
   const divisionsRepository = client ? new SupabaseDivisionsRepository(client) : undefined;
   const rolesRepository = client ? new SupabaseRolesRepository(client) : undefined;
+  const systemAuthorityService = client ? new SystemAuthorityService(
+    new SupabaseUsersRepository(client), new SupabaseSystemAuthorityRepository(client),
+  ) : undefined;
   const userManagementService = client && divisionsRepository && rolesRepository ? new UserManagementService(
     new SupabaseUserManagementRepository(client),
     divisionsRepository,
     rolesRepository,
-  ) : undefined;
-  const systemAuthorityService = client ? new SystemAuthorityService(
-    new SupabaseUsersRepository(client), new SupabaseSystemAuthorityRepository(client),
+    systemAuthorityService,
   ) : undefined;
   const taskUsers = client ? new SupabaseTaskUsersRepository(client) : undefined;
   const collaborationRepository = client ? new SupabaseDivisionCollaborationRepository(client) : undefined;
@@ -350,6 +351,7 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     repository,
     ...adminAuthorization,
     accessService: userManagementService,
+    actorResolver: adminActorResolver,
   });
   if (userManagementService) await app.register(adminUserManagementRoutes, {
     prefix: "/api/admin/users",

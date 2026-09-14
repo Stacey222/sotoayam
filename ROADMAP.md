@@ -92,6 +92,9 @@ Legend:
 
 ## Phase 2 — Productization
 
+- [x] P2-00 Harden effective SYSTEM_ADMIN invariant and actor attribution.
+  Owner: Codex
+  Note: authority mutations now require a session-authenticated effective SYSTEM_ADMIN and attribute the real user. One forward migration serializes every path that can remove the last effective administrator under the compatibility advisory lock.
 - [ ] P2-01 Define and implement runtime settings surface for legitimate customer settings.
   Owner: Claude Code scope -> Codex implement
 - [ ] P2-02 Extract maintainable Sotoayam message/string catalog.
@@ -109,6 +112,9 @@ Legend:
   Owner: Codex -> Antigravity failure review
 - [ ] P2-08 Require external reference where automation idempotency depends on it.
   Owner: Codex
+- [x] P2-09 Implement Admin & User Management Foundation.
+  Owner: Claude Code design -> Codex implement -> Antigravity review
+  Note: implemented from `docs/adr/P2-09-admin-user-management.md` with a session-only effective-SYSTEM_ADMIN API, migration #20, one-time temporary credentials, restricted temporary-password sessions, and the modular `Pengguna` dashboard. P2-01 remains the runtime-settings and OWNER-actor-redesign milestone.
 
 ## Phase 3 — UI/UX & Operations
 

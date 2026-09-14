@@ -6,7 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { discoverMigrations } from "./migrate.js";
 
-const EXPECTED_MIGRATION_COUNT = 18;
+const EXPECTED_MIGRATION_COUNT = 20;
 const REQUIRED_READINESS_RPC = "load_telegram_polling_state()";
 
 export interface MigrationManifest {
@@ -270,7 +270,7 @@ async function applyCleanDatabase(
   database: string,
   migrationsDirectory: string,
   manifest: MigrationManifest,
-): Promise<void> {
+): Promise<string> {
   const adminUrl = postgresUrl(port, "postgres");
   await run(tools.psql, ["-X", "-v", "ON_ERROR_STOP=1", "-d", adminUrl, "-c",
     `create database ${database} template template0 encoding 'UTF8';`]);
@@ -280,6 +280,317 @@ async function applyCleanDatabase(
       path.join(migrationsDirectory, migration)]);
   }
   await verifySchema(tools.psql, url, manifest);
+  return url;
+}
+
+export interface DisposablePostgresDatabase {
+  readonly url: string;
+  query(sql: string): Promise<string[]>;
+  attempt(sql: string): Promise<{ ok: boolean; rows: string[]; error: string }>;
+  close(): Promise<void>;
+}
+
+/** Starts a migration-complete PostgreSQL cluster owned by a newly-created temporary directory.
+ * The identity probe deliberately fails closed before exposing the handle to a test. */
+export async function startDisposablePostgresDatabase(prefix = "sotoayam-integration-"): Promise<DisposablePostgresDatabase> {
+  const migrationsDirectory = path.resolve("supabase/migrations");
+  const manifest = await buildMigrationManifest(migrationsDirectory);
+  if (manifest.migrations.length !== EXPECTED_MIGRATION_COUNT) {
+    throw new Error(`Expected ${EXPECTED_MIGRATION_COUNT} migrations, found ${manifest.migrations.length}`);
+  }
+  const tools = await resolvePostgresTools();
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), prefix));
+  const dataDirectory = path.join(temporaryRoot, "postgres-data");
+  const logFile = path.join(temporaryRoot, "postgres.log");
+  const port = await reserveLoopbackPort();
+  let started = false;
+  try {
+    await run(tools.initdb, ["-D", dataDirectory, "-U", "postgres", "--auth=trust", "--encoding=UTF8", "--no-locale"]);
+    await run(tools.pgCtl, ["-D", dataDirectory, "-l", logFile, "-o", `-p ${port} -h 127.0.0.1`, "-w", "-t", "30", "start"]);
+    started = true;
+    const adminUrl = postgresUrl(port, "postgres");
+    const identityParts = (await query(tools.psql, adminUrl, `select coalesce(inet_server_addr()::text, ''),
+      inet_server_port(), current_database(), current_setting('data_directory'), current_setting('server_version');`))[0]!.split("|");
+    assertDisposableIdentity({ address: identityParts[0]!, port: Number(identityParts[1]), database: identityParts[2]!,
+      dataDirectory: identityParts[3]!, version: identityParts[4]! }, port, dataDirectory);
+    await run(tools.psql, ["-X", "-v", "ON_ERROR_STOP=1", "-d", adminUrl, "-c", `
+      create role anon nologin;
+      create role authenticated nologin;
+      create role service_role nologin bypassrls;
+    `]);
+    const database = `sotoayam_integration_${process.pid}_${Date.now()}`;
+    const url = await applyCleanDatabase(tools, port, database, migrationsDirectory, manifest);
+    let closed = false;
+    return {
+      url,
+      query: (sql) => query(tools.psql, url, sql),
+      attempt: async (sql) => {
+        try { return { ok: true, rows: await query(tools.psql, url, sql), error: "" }; }
+        catch (error) { return { ok: false, rows: [], error: error instanceof Error ? error.message : String(error) }; }
+      },
+      close: async () => {
+        if (closed) return;
+        closed = true;
+        if (started) await run(tools.pgCtl, ["-D", dataDirectory, "-m", "fast", "-w", "-t", "30", "stop"])
+          .catch(() => undefined);
+        await rm(temporaryRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      },
+    };
+  } catch (error) {
+    if (started) await run(tools.pgCtl, ["-D", dataDirectory, "-m", "fast", "-w", "-t", "30", "stop"])
+      .catch(() => undefined);
+    await rm(temporaryRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    throw error;
+  }
+}
+
+async function verifyBootstrapCompatibility(psql: string, url: string): Promise<void> {
+  await query(psql, url, `
+    begin;
+    select * from public.provision_first_installation(
+      'P2 Bootstrap Admin', 'p2-bootstrap@example.test', 'scrypt', repeat('h', 64),
+      'FRESH', 'OPERATIONS', 'Operations'
+    );
+    do $verify$
+    begin
+      if not exists (
+        select 1 from public.system_authority_assignments assignments
+        join public.users users on users.id = assignments.user_id
+        join public.divisions divisions on divisions.id = users.division_id
+        where assignments.revoked_at is null and users.active and divisions.active
+          and divisions.grants_system_authority
+      ) then raise exception 'bootstrap did not create an effective SYSTEM_ADMIN'; end if;
+    end $verify$;
+    rollback;
+  `);
+}
+
+async function verifySystemAdminInvariant(psql: string, url: string): Promise<void> {
+  await query(psql, url, `
+    insert into public.divisions (id, code, name, active, grants_system_authority, provisioning_source)
+    overriding system value
+    values (91001, 'P2_AUTHORITY', 'P2 Authority', true, true, 'CUSTOMER'),
+           (91002, 'P2_STANDARD', 'P2 Standard', true, false, 'CUSTOMER');
+    insert into public.users (id, display_name, division_id, role_id, active)
+    overriding system value
+    select fixture.id, fixture.name, 91001, roles.id, true
+    from (values (91101::bigint, 'Admin A'), (91102::bigint, 'Admin B')) fixture(id, name)
+    cross join public.roles roles where roles.code = 'ADMIN';
+    insert into public.system_authority_assignments (user_id, authority_code, reason)
+    values (91101, 'SYSTEM_ADMIN', 'P2 invariant fixture'),
+           (91102, 'SYSTEM_ADMIN', 'P2 invariant fixture');
+  `);
+
+  await query(psql, url, `
+    begin;
+    select * from public.update_user_access(91101, 91001, (select id from public.roles where code='ADMIN'), false,
+      91102, 'p2_invariant_test');
+    do $verify$ begin
+      begin
+        perform public.update_user_access(91102, 91001, (select id from public.roles where code='ADMIN'), false,
+          91102, 'p2_invariant_test');
+        raise exception using errcode='P9999', message='expected SELF_DEACTIVATION_FORBIDDEN';
+      exception when insufficient_privilege then
+        if sqlerrm <> 'SELF_DEACTIVATION_FORBIDDEN' then raise; end if;
+      end;
+    end $verify$;
+    rollback;
+
+    begin;
+    select * from public.update_user_access(91102, 91001, (select id from public.roles where code='ADMIN'), false,
+      91101, 'p2_invariant_test');
+    do $verify$ begin
+      begin
+        perform public.revoke_system_admin(91101, 'must retain one', 91101);
+        raise exception using errcode='P9999', message='expected LAST_SYSTEM_ADMIN';
+      exception when sqlstate 'P0001' then
+        if sqlerrm <> 'LAST_SYSTEM_ADMIN' then raise; end if;
+      end;
+    end $verify$;
+    rollback;
+
+    begin;
+    select * from public.update_user_access(91102, 91001, (select id from public.roles where code='ADMIN'), false,
+      91101, 'p2_invariant_test');
+    do $verify$ begin
+      begin
+        perform public.update_user_access(91101, 91002, (select id from public.roles where code='ADMIN'), true,
+          91101, 'p2_invariant_test');
+        raise exception using errcode='P9999', message='expected SELF_DEMOTION_CONFIRMATION_REQUIRED';
+      exception when sqlstate 'P0001' then
+        if sqlerrm <> 'SELF_DEMOTION_CONFIRMATION_REQUIRED' then raise; end if;
+      end;
+    end $verify$;
+    rollback;
+
+    begin;
+    do $verify$ begin
+      begin
+        perform public.set_division_system_authority(91001, false, 91101, 'p2_invariant_test');
+        raise exception using errcode='P9999', message='expected LAST_SYSTEM_ADMIN';
+      exception when sqlstate 'P0001' then
+        if sqlerrm <> 'LAST_SYSTEM_ADMIN' then raise; end if;
+      end;
+    end $verify$;
+    rollback;
+
+    begin;
+    do $verify$ begin
+      begin
+        perform public.update_customer_division(91001, null, false, 91101, 'p2_invariant_test');
+        raise exception using errcode='P9999', message='expected LAST_SYSTEM_ADMIN';
+      exception when sqlstate 'P0001' then
+        if sqlerrm <> 'LAST_SYSTEM_ADMIN' then raise; end if;
+      end;
+    end $verify$;
+    rollback;
+
+    begin;
+    select * from public.revoke_system_admin(91102, 'demote before attempted self grant', 91101);
+    do $verify$ begin
+      begin
+        perform public.assign_system_admin(91102, 'unauthorized self restore', 91102);
+        raise exception using errcode='P9999', message='expected actor rejection';
+      exception when insufficient_privilege then null;
+      end;
+    end $verify$;
+    rollback;
+
+    begin;
+    insert into public.users (id, display_name, division_id, role_id, active)
+    overriding system value
+    select 91103, 'Admin C', 91001, id, true from public.roles where code='ADMIN';
+    select * from public.assign_system_admin(91103, 'attributed grant', 91101);
+    do $verify$ begin
+      if not exists (select 1 from public.audit_logs where action='SYSTEM_ADMIN_GRANTED'
+        and object_id=(select id::text from public.system_authority_assignments where user_id=91103 and revoked_at is null)
+        and actor_type='USER' and actor_user_id=91101 and source='admin_session_api') then
+        raise exception 'real actor attribution missing';
+      end if;
+    end $verify$;
+    rollback;
+  `);
+
+  const concurrent = await Promise.allSettled([
+    run(psql, ["-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-d", url, "-c",
+      "select id from public.revoke_system_admin(91102,'concurrent mutual revoke',91101);"]),
+    run(psql, ["-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-d", url, "-c",
+      "select id from public.revoke_system_admin(91101,'concurrent mutual revoke',91102);"]),
+  ]);
+  if (concurrent.filter((result) => result.status === "fulfilled").length !== 1) {
+    throw new Error("Concurrent mutual revoke did not permit exactly one operation");
+  }
+  const [effectiveCount] = await query(psql, url, `
+    select count(*) from public.system_authority_assignments assignments
+    join public.users users on users.id=assignments.user_id
+    join public.divisions divisions on divisions.id=users.division_id
+    where assignments.revoked_at is null and users.active and divisions.active and divisions.grants_system_authority;
+  `);
+  if (effectiveCount !== "1") throw new Error("Concurrent mutual revoke did not retain exactly one effective administrator");
+  const [attributedAuditCount] = await query(psql, url, `
+    select count(*) from public.audit_logs where action='SYSTEM_ADMIN_REVOKED'
+      and actor_type='USER' and actor_user_id is not null and source='admin_session_api';
+  `);
+  if (attributedAuditCount !== "1") throw new Error("Concurrent authority audit lacks the real actor attribution");
+
+  const [remainingActor] = await query(psql, url, `
+    select users.id from public.system_authority_assignments assignments
+    join public.users users on users.id=assignments.user_id
+    join public.divisions divisions on divisions.id=users.division_id
+    where assignments.revoked_at is null and users.active and divisions.active and divisions.grants_system_authority
+    order by users.id limit 1;
+  `);
+  const secondActor = remainingActor === "91101" ? "91102" : "91101";
+  await query(psql, url, `select id from public.assign_system_admin(${secondActor},'mixed concurrency fixture',${remainingActor});`);
+  const mixedConcurrent = await Promise.allSettled([
+    run(psql, ["-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-d", url, "-c",
+      `select id from public.revoke_system_admin(${secondActor},'mixed concurrent revoke',${remainingActor});`]),
+    run(psql, ["-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-d", url, "-c",
+      `select id from public.update_managed_user_access(${remainingActor},91001,
+        (select id from public.roles where code='ADMIN'),false,${secondActor},'p2_invariant_test',false,null);`]),
+  ]);
+  if (mixedConcurrent.filter((result) => result.status === "fulfilled").length !== 1) {
+    throw new Error("Concurrent revoke/deactivation did not permit exactly one operation");
+  }
+  const [mixedEffectiveCount] = await query(psql, url, `select public.count_effective_system_admins();`);
+  if (mixedEffectiveCount !== "1") throw new Error("Concurrent revoke/deactivation did not retain one effective administrator");
+}
+
+async function verifyAdminUserManagement(psql: string, url: string): Promise<void> {
+  await query(psql, url, `
+    do $verify$
+    declare
+      actor_id bigint;
+      created_id bigint;
+      operational_id bigint;
+      before_users bigint;
+      before_credentials bigint;
+      admin_role_id bigint;
+    begin
+      select users.id into actor_id
+      from public.system_authority_assignments assignments
+      join public.users users on users.id=assignments.user_id
+      join public.divisions divisions on divisions.id=users.division_id
+      where assignments.revoked_at is null and users.active and divisions.active and divisions.grants_system_authority
+      order by users.id limit 1;
+      select id into admin_role_id from public.roles where code='ADMIN';
+      if actor_id is null or admin_role_id is null then raise exception 'P2-09 fixture actor missing'; end if;
+
+      select user_id into created_id from public.create_administrator_account(
+        'P2-09 Created Admin', 'p209-created@example.test', 91001, admin_role_id, true,
+        'P2-09 clean verification', 'scrypt', repeat('h', 64), actor_id);
+      if not exists (select 1 from public.admin_credentials where user_id=created_id
+          and email='p209-created@example.test' and password_change_required) then
+        raise exception 'P2-09 administrator credential state missing';
+      end if;
+      if not public.is_effective_system_admin(created_id) then raise exception 'P2-09 optional authority grant missing'; end if;
+      if not exists (select 1 from public.audit_logs where action='ADMIN_USER_CREATED'
+          and object_id=created_id::text and actor_type='USER' and actor_user_id=actor_id) then
+        raise exception 'P2-09 administrator audit attribution missing';
+      end if;
+      if exists (select 1 from public.user_channels where user_id=created_id) then
+        raise exception 'P2-09 administrator creation invented channel identity';
+      end if;
+
+      select count(*), (select count(*) from public.admin_credentials) into before_users, before_credentials
+      from public.users;
+      begin
+        perform public.create_administrator_account(
+          'Atomic Failure', 'p209-atomic@example.test', 91002, admin_role_id, true,
+          'must roll back', 'scrypt', repeat('x', 64), actor_id);
+        raise exception using errcode='P9999', message='expected ineligible authority failure';
+      exception when sqlstate 'P0001' then null;
+      end;
+      if (select count(*) from public.users) <> before_users
+          or (select count(*) from public.admin_credentials) <> before_credentials then
+        raise exception 'P2-09 failed creation left partial state';
+      end if;
+
+      insert into public.users (display_name, division_id, role_id, active)
+      values ('P2-09 Operational', 91002, admin_role_id, true) returning id into operational_id;
+      perform public.grant_admin_login(operational_id, 'p209-operational@example.test',
+        'P2-09 login grant', 'scrypt', repeat('g', 64), actor_id);
+      if exists (select 1 from public.user_channels where user_id=operational_id) then
+        raise exception 'P2-09 login grant invented channel identity';
+      end if;
+      insert into public.admin_sessions (user_id, token_hash, csrf_token_hash, expires_at)
+      values (operational_id, repeat('a', 64), repeat('b', 64), now() + interval '1 hour');
+      perform public.update_managed_user_access(operational_id, 91002, admin_role_id, false,
+        actor_id, 'admin_user_management_api', false, null);
+      if exists (select 1 from public.admin_sessions where user_id=operational_id and revoked_at is null) then
+        raise exception 'P2-09 deactivation did not revoke sessions atomically';
+      end if;
+
+      perform public.change_admin_password(created_id, 'scrypt', repeat('n', 64), created_id, null);
+      if (select password_change_required from public.admin_credentials where user_id=created_id) then
+        raise exception 'P2-09 password change did not clear restriction';
+      end if;
+      if (select count(*) from public.list_managed_admin_users(actor_id, 'p209-created@example.test',
+          'active', 91001, true, true, 2, null, null)) <> 1 then
+        raise exception 'P2-09 composed list filter mismatch';
+      end if;
+    end $verify$;
+  `);
 }
 
 export async function runCleanMigrationCheck(stdout: (line: string) => void = console.log): Promise<void> {
@@ -327,7 +638,12 @@ export async function runCleanMigrationCheck(stdout: (line: string) => void = co
     `]);
 
     for (const runNumber of [1, 2]) {
-      await applyCleanDatabase(tools, port, `sotoayam_p109_clean_${runNumber}`, migrationsDirectory, manifest);
+      const url = await applyCleanDatabase(tools, port, `sotoayam_p109_clean_${runNumber}`, migrationsDirectory, manifest);
+      await verifyBootstrapCompatibility(tools.psql, url);
+      if (runNumber === 1) {
+        await verifySystemAdminInvariant(tools.psql, url);
+        await verifyAdminUserManagement(tools.psql, url);
+      }
       stdout(`RUN_${runNumber}_MIGRATIONS = ${manifest.migrations.length}/${EXPECTED_MIGRATION_COUNT} PASS`);
       stdout(`RUN_${runNumber}_SCHEMA_SECURITY = PASS`);
     }
@@ -338,6 +654,9 @@ export async function runCleanMigrationCheck(stdout: (line: string) => void = co
     stdout("RLS = PASS");
     stdout("NO_PUBLIC_POLICIES = PASS");
     stdout("READINESS_RPC = PASS");
+    stdout("FIRST_ADMIN_BOOTSTRAP = PASS");
+    stdout("SYSTEM_ADMIN_INVARIANT = PASS");
+    stdout("ADMIN_USER_MANAGEMENT = PASS");
     stdout("RESULT = PASS");
   } finally {
     if (started) {

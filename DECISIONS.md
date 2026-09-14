@@ -158,3 +158,19 @@ Decision: operational tracing reuses Fastify request IDs and existing notificati
 Status: Implemented for P1-08.
 
 Structured logs use `request_id`, caller/generated `event_id`, internal `notification_event_id`, intent `notification_id`, and `delivery_id` when each becomes available. Immediate HTTP work carries the Fastify request ID in-process; background retry reconstructs durable event correlation through the existing `notification_deliveries -> notifications -> notification_events` relationship. No correlation value changes idempotency, delivery retries, Telegram offset/dedupe, or public response contracts, and secrets/message bodies are excluded from correlation logs.
+
+## D-024 — Effective SYSTEM_ADMIN invariant
+
+Decision: every authority-reducing mutation must preserve at least one effective SYSTEM_ADMIN, and SYSTEM_ADMIN grant/revoke operations require a real session-authenticated effective SYSTEM_ADMIN actor.
+Status: Implemented for P2-00.
+
+An effective SYSTEM_ADMIN has an unrevoked assignment, is active, and belongs to an active division whose `grants_system_authority` capability is enabled. Authority revoke, user deactivation or movement, and division deactivation or capability removal serialize with the compatibility advisory lock `gwens_system_admin_invariant` and count this effective state inside the same transaction. The shared `ADMIN_API_KEY` fallback cannot mutate SYSTEM_ADMIN authority. New privileged audit rows identify the real user actor; historical audit rows remain unchanged.
+
+## D-025 — Administrator and user management foundation
+
+Decision: production user management is milestone P2-09 and follows `docs/adr/P2-09-admin-user-management.md`.
+Status: Implemented for P2-09.
+
+Only a session-authenticated effective SYSTEM_ADMIN may use this surface; the shared administrator key is excluded. The design reuses normalized users, P1-01 credentials/sessions/password policy, P1-03 route policies, and the P2-00 effective-administrator invariant. Temporary passwords are returned once and must be changed before normal admin use. P2-01 remains unchanged as the runtime-settings and OWNER-actor-redesign milestone.
+
+Migration #20 adds the compatibility-safe `password_change_required` credential state and service-only transactional user-management RPCs. Administrator creation does not pre-create Telegram identity, deactivation revokes target sessions atomically, and every privileged mutation records the resolved human actor.

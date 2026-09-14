@@ -14,7 +14,14 @@ export interface AdminAuthRoutesOptions {
 
 function sessionData(principal: SessionPrincipal) {
   return { user_id: principal.adminUserId, email: principal.email,
-    display_name: principal.displayName, expires_at: principal.expiresAt };
+    display_name: principal.displayName, expires_at: principal.expiresAt,
+    password_change_required: principal.passwordChangeRequired };
+}
+
+function requireUnrestricted(principal: SessionPrincipal): void {
+  if (principal.passwordChangeRequired) {
+    throw new AppError(403, "PASSWORD_CHANGE_REQUIRED", "Password change is required before accessing administrator routes");
+  }
 }
 
 async function authenticate(request: FastifyRequest, reply: import("fastify").FastifyReply,
@@ -76,6 +83,7 @@ export const adminAuthRoutes = async (app: FastifyInstance, options: AdminAuthRo
 
   app.get("/sessions", { config: { rateLimit: "auth-session" } }, async (request, reply) => {
     const principal = await authenticate(request, reply, options);
+    requireUnrestricted(principal);
     const sessions = await options.service.listSessions(principal);
     return { success: true, data: sessions.map((session) => ({ ...session,
       current: session.sessionId === principal.sessionId })) };
@@ -83,6 +91,7 @@ export const adminAuthRoutes = async (app: FastifyInstance, options: AdminAuthRo
 
   app.delete<{ Params: { id: string } }>("/sessions/:id", { config: { rateLimit: "auth-mutate" } }, async (request, reply) => {
     const principal = await authenticate(request, reply, options);
+    requireUnrestricted(principal);
     requireCsrf(request, options, principal);
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request.params.id)) {
       throw new AppError(400, "INVALID_SESSION_ID", "Session id is invalid");

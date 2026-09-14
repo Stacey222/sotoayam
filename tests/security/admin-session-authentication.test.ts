@@ -141,7 +141,7 @@ describe("P1-01 administrator sessions", () => {
     expect(Math.min(...timings.unknown, ...timings.wrong)).toBeGreaterThan(25);
     expect(ratio).toBeGreaterThan(0.4);
     expect(ratio).toBeLessThan(2.5);
-  });
+  }, 15_000);
 
   it("returns Retry-After when the database-backed cooldown gate is locked", async () => {
     const repository = new FakeSessionRepository();

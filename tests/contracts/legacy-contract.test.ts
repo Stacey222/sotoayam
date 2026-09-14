@@ -252,15 +252,17 @@ describe("LEGACY COMPATIBILITY CONTRACT — Admin API", () => {
     await app.close();
   });
 
-  it("updates allowed admin fields and rejects Telegram identity changes", async () => {
+  it("keeps legacy metadata updates while requiring session authority for access changes", async () => {
     const { app } = await buildApp({ config, repository, telegramSender: sender, logger: false });
     const headers = { "x-admin-api-key": config.adminApiKey ?? "" };
     const accepted = await app.inject({
       method: "PATCH",
       url: "/api/users/1",
       headers,
-      payload: { name: "Updated", division: "Gudang", role: "Admin", active: true, stock_alert: true },
+      payload: { name: "Updated", stock_alert: true },
     });
+    const accessRejected = await app.inject({ method: "PATCH", url: "/api/users/1", headers,
+      payload: { division: "Gudang", role: "Admin", active: true } });
     const rejected = await app.inject({
       method: "PATCH",
       url: "/api/users/1",
@@ -271,11 +273,9 @@ describe("LEGACY COMPATIBILITY CONTRACT — Admin API", () => {
     expect(accepted.json().data).toMatchObject({
       telegram_chat_id: 1001,
       name: "Updated",
-      division: "Gudang",
-      role: "Admin",
-      active: true,
       stock_alert: true,
     });
+    expect(accessRejected.statusCode).toBe(401);
     expect(rejected.statusCode).toBe(400);
     expect(repository.users[0]?.telegram_chat_id).toBe(1001);
     await app.close();

@@ -139,17 +139,32 @@ Notification intake now emits a structured chain from Fastify `request_id` to ex
 
 The Fastify-served vanilla browser UI is now a responsive Tabler Free-based Sotoayam operational dashboard rather than the earlier user-only screen. Only compiled Tabler CSS and the locally used SVG icons are vendored under `public/vendor`; there is no CDN or frontend framework/toolchain in the application. It logs in through P1-01 sessions, sends the CSRF cookie on mutations, handles logout and expired sessions, and never reads or stores shared, service-role, or integration secrets. Dashboard, task, integration, credential-metadata, notification-activity, system-health, and available alert views consume existing APIs only; unavailable metrics render a neutral state. Eight focused UI tests and the 779-test repository suite pass, with 52 opt-in database tests skipped. This is a demo milestone, not completion of the broader Phase 2 settings work or Phase 3 operational UI backlog.
 
+## P2-00 SYSTEM_ADMIN Invariant State
+
+SYSTEM_ADMIN grant/revoke routes now accept only session principals that resolve to a currently effective SYSTEM_ADMIN; the shared administrator key cannot perform these mutations. Audit attribution passes the real actor user into the database RPC. Effective authority means an unrevoked assignment held by an active user in an active authority-capable division.
+
+Migration `202609130001_harden_effective_system_admin_invariant.sql` brings the repository total to 19 without changing the previous 18 migrations. It reuses `gwens_system_admin_invariant`, locks and counts effective administrators in the mutation transaction, and protects authority revoke, user deactivate/move, division deactivate, and authority-capability disable. The legacy user access route now uses the same session actor and guarded service instead of falling back to a direct update. Clean disposable PostgreSQL applied 19/19 migrations twice and passed first-admin bootstrap plus serialized invariant scenarios.
+
+## P2-09 Admin & User Management Design State
+
+P2-09 is implemented from `docs/adr/P2-09-admin-user-management.md`. The session-only effective-SYSTEM_ADMIN surface now provides bounded user search/detail, atomic administrator and login-credential creation, profile/access/authority operations, exact safe DTOs, keyset pagination, one-time temporary passwords, and a server-enforced `password_change_required` gate. The Indonesian `Pengguna` dashboard lives in its own ES module and uses only local Tabler assets.
+
+Migration `202609140001_create_admin_user_management.sql` brings the repository total to 20 while the prior 19 hashes remain unchanged. Clean disposable PostgreSQL applied 20/20 migrations twice and passed schema/RLS/RPC, bootstrap, P2-00 sequential/concurrent invariant, session revocation, credential, audit-attribution, and P2-09 atomicity checks. U-01 through U-19 pass; the full suite passes 846 tests with 52 environment-gated database tests skipped.
+
+This milestone ID is deliberately non-conflicting. P2-01 remains runtime settings and OWNER actor redesign exactly as previously recorded.
+
 ## Next Agent
-Recommended: Claude Code definition followed by Codex implementation for P1-07.
+Recommended: follow the current Phase 2 roadmap ownership for P2-01.
 
 Next task:
-Implement P1-09 migration tests against clean throwaway PostgreSQL.
+Define P2-01 runtime settings scope before implementation.
 
 Reason:
-P1-01 through P1-08 are complete; P1-09 is the next ordered Phase 1 reliability item.
+P2-00 closed the effective-administrator and actor-attribution blockers. User-management implementation can now safely build on the guarded service boundary, while P2-01 remains the next ordered roadmap task.
 
 ## Pending Higher-Level Work
-- Continue Phase 1 with P1-09 clean throwaway PostgreSQL migration tests; preserve the P1-01 through P1-08 security and reliability boundaries.
+- Continue with the ordered Phase 2 scope while preserving the P1 security/reliability boundaries and the P2-00 effective-administrator invariant.
+- P2-09 is implementation-complete and awaits adversarial review; do not fold P2-01 runtime settings or OWNER redesign into follow-up corrections.
 - Preserve remaining launch gates: Phase 4 clean-room install, upgrade/rollback, restore drill, and final security review are still separate pre-customer requirements.
 
 ## Agent Handoff Format

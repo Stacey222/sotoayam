@@ -274,7 +274,11 @@ export class TelegramItConsoleService implements TelegramItConsole {
       }, "telegram_it_console", actor.userId);
       return this.userDetailResponse(updated, this.category(updated), 0, `User berhasil ${active ? "diaktifkan" : "dinonaktifkan"}.`);
     } catch (error) {
-      if (error instanceof AppError && error.code === "GOVERNANCE_INVARIANT") {
+      if (error instanceof AppError && error.code === "SELF_DEACTIVATION_FORBIDDEN") {
+        return { text: "Akun administrator yang sedang digunakan tidak dapat menonaktifkan dirinya sendiri.",
+          inlineKeyboard: [[button("Back", "ac:u")]] };
+      }
+      if (error instanceof AppError && ["GOVERNANCE_INVARIANT", "LAST_SYSTEM_ADMIN"].includes(error.code)) {
         return { text: "User ini tidak dapat dinonaktifkan karena merupakan SYSTEM_ADMIN aktif terakhir.", inlineKeyboard: [[button("Back", "ac:u")]] };
       }
       throw error;

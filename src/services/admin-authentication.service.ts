@@ -58,7 +58,7 @@ export class AdminAuthenticationService {
     });
     return { sessionToken, csrfToken, principal: { kind: "session", adminUserId: credential.userId,
       sessionId: created.sessionId, email: credential.email, displayName: credential.displayName,
-      expiresAt: created.expiresAt } };
+      expiresAt: created.expiresAt, passwordChangeRequired: credential.passwordChangeRequired } };
   }
 
   async logout(principal: SessionPrincipal): Promise<void> {

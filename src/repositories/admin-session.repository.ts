@@ -11,6 +11,7 @@ export interface AdminCredentialRecord {
   active: boolean;
   passwordAlgorithm: "scrypt";
   passwordHash: string;
+  passwordChangeRequired?: boolean;
 }
 
 export interface AdminSessionRecord {
@@ -20,6 +21,7 @@ export interface AdminSessionRecord {
   displayName: string;
   expiresAt: string;
   csrfTokenHash: string;
+  passwordChangeRequired?: boolean;
 }
 
 export interface AdminSessionSummary {
@@ -53,6 +55,7 @@ interface CredentialRow {
   email: string;
   password_algorithm: "scrypt";
   password_hash: string;
+  password_change_required: boolean;
   users: { display_name: string; active: boolean } | Array<{ display_name: string; active: boolean }> | null;
 }
 
@@ -70,7 +73,7 @@ export class SupabaseAdminSessionRepository implements AdminSessionRepository {
 
   private async credential(field: "email" | "user_id", value: string | number): Promise<AdminCredentialRecord | null> {
     const { data, error } = await this.client.from("admin_credentials")
-      .select("user_id,email,password_algorithm,password_hash,users!inner(display_name,active)")
+      .select("user_id,email,password_algorithm,password_hash,password_change_required,users!inner(display_name,active)")
       .eq(field, value)
       .limit(1).maybeSingle();
     if (error) throw governanceDatabaseError("Unable to load administrator credential", error);
@@ -79,7 +82,8 @@ export class SupabaseAdminSessionRepository implements AdminSessionRepository {
     const user = relatedUser(row);
     if (!user) return null;
     return { userId: Number(row.user_id), email: row.email, displayName: user.display_name,
-      active: user.active, passwordAlgorithm: row.password_algorithm, passwordHash: row.password_hash };
+      active: user.active, passwordAlgorithm: row.password_algorithm, passwordHash: row.password_hash,
+      passwordChangeRequired: row.password_change_required === true };
   }
 
   findCredentialByEmail(email: string): Promise<AdminCredentialRecord | null> {
@@ -121,9 +125,10 @@ export class SupabaseAdminSessionRepository implements AdminSessionRepository {
     });
     if (error) throw governanceDatabaseError("Unable to validate administrator session", error);
     const row = firstRow<{ session_id: string; user_id: number; email: string; display_name: string;
-      expires_at: string; csrf_token_hash: string }>(data);
+      expires_at: string; csrf_token_hash: string; password_change_required: boolean }>(data);
     return row ? { sessionId: row.session_id, userId: Number(row.user_id), email: row.email,
-      displayName: row.display_name, expiresAt: row.expires_at, csrfTokenHash: row.csrf_token_hash } : null;
+      displayName: row.display_name, expiresAt: row.expires_at, csrfTokenHash: row.csrf_token_hash,
+      passwordChangeRequired: row.password_change_required === true } : null;
   }
 
   async revokeSession(sessionId: string, reason: "LOGOUT" | "REVOKED_BY_ADMIN", actorUserId: number): Promise<boolean> {

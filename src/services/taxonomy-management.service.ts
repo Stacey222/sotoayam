@@ -69,6 +69,7 @@ export class TaxonomyManagementService {
     if (message.includes("DIVISION_DUPLICATE_CODE")) return new AppError(409, "DIVISION_DUPLICATE_CODE", "Division code already exists");
     if (message.includes("DIVISION_IN_USE")) return new AppError(409, "DIVISION_IN_USE", "Division is still referenced");
     if (message.includes("DIVISION_AUTHORITY_REQUIRED")) return new AppError(409, "DIVISION_AUTHORITY_REQUIRED", "At least one active authority-capable division is required");
+    if (message.includes("LAST_SYSTEM_ADMIN")) return new AppError(409, "LAST_SYSTEM_ADMIN", "At least one effective SYSTEM_ADMIN must remain");
     if (message.includes("DIVISION_NOT_FOUND")) return new AppError(404, "DIVISION_NOT_FOUND", "Division not found");
     if (message.includes("ROLE_NOT_FOUND")) return new AppError(404, "ROLE_NOT_FOUND", "Reserved role not found");
     return error;

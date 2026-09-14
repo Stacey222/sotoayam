@@ -8,7 +8,7 @@ interface TaskUserRow {
   display_name: string | null;
   active: boolean;
   division_id: number | null;
-  divisions: { code: string; grants_system_authority: boolean } | null;
+  divisions: { code: string; active: boolean; grants_system_authority: boolean } | null;
   role_id: number | null;
   roles: { code: string } | null;
 }
@@ -31,20 +31,20 @@ export class SupabaseTaskUsersRepository implements TaskUsersRepository, TaskDir
 
   async findById(id: number): Promise<TaskUser | null> {
     const { data, error } = await this.client
-      .from("users").select("id,display_name,active,division_id,role_id,divisions(code,grants_system_authority),roles(code)").eq("id", id).maybeSingle();
+      .from("users").select("id,display_name,active,division_id,role_id,divisions(code,active,grants_system_authority),roles(code)").eq("id", id).maybeSingle();
     if (error) throw governanceDatabaseError("Unable to load normalized task user", error);
     if (!data) return null;
     const row = data as unknown as TaskUserRow;
     return { id: row.id, displayName: row.display_name, active: row.active, divisionId: row.division_id,
       divisionCode: row.divisions?.code ?? null,
-      divisionGrantsSystemAuthority: row.divisions?.grants_system_authority === true,
+      divisionGrantsSystemAuthority: row.divisions?.active === true && row.divisions.grants_system_authority === true,
       roleId: row.role_id, roleCode: row.roles?.code ?? null };
   }
 
   async findActiveByDivision(divisionId: number): Promise<TaskUser[]> {
     const { data, error } = await this.client
       .from("users")
-      .select("id,display_name,active,division_id,role_id,divisions(code,grants_system_authority),roles(code)")
+      .select("id,display_name,active,division_id,role_id,divisions(code,active,grants_system_authority),roles(code)")
       .eq("active", true)
       .eq("division_id", divisionId)
       .not("role_id", "is", null)
@@ -56,7 +56,7 @@ export class SupabaseTaskUsersRepository implements TaskUsersRepository, TaskDir
       active: row.active,
       divisionId: row.division_id,
       divisionCode: row.divisions?.code ?? null,
-      divisionGrantsSystemAuthority: row.divisions?.grants_system_authority === true,
+      divisionGrantsSystemAuthority: row.divisions?.active === true && row.divisions.grants_system_authority === true,
       roleId: row.role_id,
       roleCode: row.roles?.code ?? null,
     }));
@@ -65,7 +65,7 @@ export class SupabaseTaskUsersRepository implements TaskUsersRepository, TaskDir
   async findByBusinessUserCode(code: string): Promise<TaskUser | null> {
     const { data, error } = await this.client
       .from("users")
-      .select("id,display_name,active,division_id,role_id,divisions(code,grants_system_authority),roles(code)")
+      .select("id,display_name,active,division_id,role_id,divisions(code,active,grants_system_authority),roles(code)")
       .eq("business_user_code", code)
       .limit(2);
     if (error) throw governanceDatabaseError("Unable to resolve business user code", error);
@@ -74,7 +74,7 @@ export class SupabaseTaskUsersRepository implements TaskUsersRepository, TaskDir
     const row = rows[0];
     return row ? { id: row.id, displayName: row.display_name, active: row.active, divisionId: row.division_id,
       divisionCode: row.divisions?.code ?? null,
-      divisionGrantsSystemAuthority: row.divisions?.grants_system_authority === true,
+      divisionGrantsSystemAuthority: row.divisions?.active === true && row.divisions.grants_system_authority === true,
       roleId: row.role_id, roleCode: row.roles?.code ?? null } : null;
   }
 
@@ -99,7 +99,7 @@ export class SupabaseTaskUsersRepository implements TaskUsersRepository, TaskDir
 
   async findTrustedOwnerActorUser(): Promise<TaskUser> {
     const { data, error } = await this.client.from("users")
-      .select("id,display_name,active,division_id,role_id,divisions(code,grants_system_authority),roles!inner(code)")
+      .select("id,display_name,active,division_id,role_id,divisions(code,active,grants_system_authority),roles!inner(code)")
       .eq("active", true).eq("roles.code", "OWNER").not("division_id", "is", null);
     if (error) throw governanceDatabaseError("Unable to resolve trusted Owner actor", error);
     const rows = (data ?? []) as unknown as TaskUserRow[];
@@ -107,7 +107,7 @@ export class SupabaseTaskUsersRepository implements TaskUsersRepository, TaskDir
     const row = rows[0]!;
     return { id: row.id, displayName: row.display_name, active: row.active, divisionId: row.division_id,
       divisionCode: row.divisions?.code ?? null,
-      divisionGrantsSystemAuthority: row.divisions?.grants_system_authority === true,
+      divisionGrantsSystemAuthority: row.divisions?.active === true && row.divisions.grants_system_authority === true,
       roleId: row.role_id, roleCode: row.roles?.code ?? null };
   }
 }

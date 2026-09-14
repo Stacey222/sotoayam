@@ -1,14 +1,16 @@
 import { createApiClient, loadResources, loginErrorMessage, taskSummary } from "./ui-core.js";
+import { setupUsersView } from "./users.js";
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const state = { authenticated: false, principal: null, tasks: [], integrations: [] };
 const titles = { dashboard: "Dashboard", tasks: "Tugas", integrations: "Integrasi",
-  notifications: "Notifikasi / Aktivitas", system: "Sistem" };
+  notifications: "Notifikasi / Aktivitas", users: "Pengguna", system: "Sistem" };
 
 const api = createApiClient({ onUnauthorized: () => {
   if (state.authenticated) showLogin("Sesi Anda telah berakhir. Silakan masuk kembali.");
 } });
+let usersView;
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -65,6 +67,7 @@ function showLogin(message = "", info = false) {
   state.authenticated = false;
   state.principal = null;
   $("#app-shell").hidden = true;
+  $("#password-change-view").hidden = true;
   $("#login-view").hidden = false;
   const notice = $("#login-notice");
   notice.textContent = message;
@@ -78,6 +81,13 @@ function enterApplication(principal) {
   state.authenticated = true;
   state.principal = principal;
   $("#login-view").hidden = true;
+  if (principal.password_change_required) {
+    $("#app-shell").hidden = true;
+    $("#password-change-view").hidden = false;
+    $("#current-password").focus();
+    return;
+  }
+  $("#password-change-view").hidden = true;
   $("#app-shell").hidden = false;
   $("#account-name").textContent = principal.display_name || "Administrator";
   $("#account-email").textContent = principal.email || "";
@@ -106,6 +116,7 @@ async function navigate(view) {
   if (selected === "tasks") await loadTasks();
   if (selected === "integrations") await loadIntegrations();
   if (selected === "notifications") await loadNotifications();
+  if (selected === "users") await usersView.load();
   if (selected === "system") await loadSystem();
 }
 
@@ -378,7 +389,7 @@ $("#login-form").addEventListener("submit", async (event) => {
   }
 });
 
-$("#logout").addEventListener("click", async () => {
+async function logout() {
   try {
     await api("/api/admin/auth/logout", { method: "POST", handleUnauthorized: false });
     showLogin("Anda telah keluar dari Sotoayam.", true);
@@ -386,7 +397,24 @@ $("#logout").addEventListener("click", async () => {
     if (error.status === 401) showLogin("Sesi Anda telah berakhir. Silakan masuk kembali.");
     else showGlobal("Logout belum berhasil. Periksa koneksi lalu coba lagi.");
   }
+}
+
+$("#logout").addEventListener("click", () => void logout());
+$("#restricted-logout").addEventListener("click", () => void logout());
+$("#required-password-form").addEventListener("submit", async (event) => {
+  event.preventDefault(); const notice = $("#password-change-notice"); notice.hidden = true;
+  try {
+    await api("/api/admin/auth/password", { method: "POST", body: JSON.stringify({
+      current_password: $("#current-password").value, new_password: $("#new-password").value,
+    }) });
+    $("#current-password").value = ""; $("#new-password").value = "";
+    enterApplication({ ...state.principal, password_change_required: false });
+  } catch (error) {
+    notice.textContent = error.message || "Kata sandi belum dapat diubah."; notice.hidden = false;
+  }
 });
+
+usersView = setupUsersView({ api, badge, formatDate, showGlobal });
 
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => void navigate(button.dataset.view)));
 $$('[data-go]').forEach((button) => button.addEventListener("click", () => void navigate(button.dataset.go)));

@@ -23,6 +23,7 @@ interface RouteCase {
   payload?: string;
   unauthorizedMessage?: string;
   assertSecondaryGuardOrdering?: boolean;
+  sessionOnly?: boolean;
   register: (
     app: FastifyInstance,
     adminApiKey: string | undefined,
@@ -72,9 +73,12 @@ const routeCases: RouteCase[] = [
   {
     routeGroup: "admin-user-management",
     endpoint: "/",
-    register: async (app, adminApiKey, downstream, _secondaryAuthorization, authorization) => {
+    sessionOnly: true,
+    register: async (app, adminApiKey, downstream, secondaryAuthorization, authorization) => {
+      downstream.mockResolvedValue({ data: [], nextCursor: null });
       await app.register(adminUserManagementRoutes, {
-        service: { list: downstream } as never,
+        service: { listPage: downstream } as never,
+        actorResolver: { resolveTrustedActor: secondaryAuthorization, resolveActor: secondaryAuthorization },
         ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });
@@ -216,6 +220,7 @@ describe.each(routeCases)("$routeGroup admin authorization", ({
   payload,
   unauthorizedMessage = "Invalid or missing admin API key",
   assertSecondaryGuardOrdering = false,
+  sessionOnly = false,
   register,
 }) => {
   it.each(authCases)("$condition", async ({ adminApiKey, requestKey, expectedStatus, session }) => {
@@ -240,9 +245,12 @@ describe.each(routeCases)("$routeGroup admin authorization", ({
         ...(payload === undefined ? {} : { payload }),
       });
 
-      expect(response.statusCode).toBe(expectedStatus);
-      if (expectedStatus === 401) {
-        expect(response.json()).toMatchObject({ code: "UNAUTHORIZED", message: unauthorizedMessage });
+      const routeExpectedStatus = sessionOnly && !session && expectedStatus === 200 ? 401 : expectedStatus;
+      expect(response.statusCode).toBe(routeExpectedStatus);
+      if (routeExpectedStatus === 401) {
+        expect(response.json()).toMatchObject(sessionOnly && requestKey === adminApiKey && adminApiKey !== undefined
+          ? { code: "SESSION_REQUIRED" }
+          : { code: "UNAUTHORIZED", message: unauthorizedMessage });
         expect(downstream).not.toHaveBeenCalled();
         if (assertSecondaryGuardOrdering) expect(secondaryAuthorization).not.toHaveBeenCalled();
       } else {

@@ -46,9 +46,11 @@ export interface TaskUser {
   active: boolean;
   divisionId: number | null;
   divisionCode?: string | null;
+  divisionActive?: boolean;
   divisionGrantsSystemAuthority?: boolean;
   roleId: number | null;
   roleCode: string | null;
+  roleActive?: boolean;
 }
 
 export interface TaskActor extends TaskUser { permissions: ReadonlySet<string> }

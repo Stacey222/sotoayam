@@ -6,7 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { discoverMigrations } from "./migrate.js";
 
-const EXPECTED_MIGRATION_COUNT = 20;
+const EXPECTED_MIGRATION_COUNT = 21;
 const REQUIRED_READINESS_RPC = "load_telegram_polling_state()";
 
 export interface MigrationManifest {
@@ -144,8 +144,9 @@ function matches(sql: string, expression: RegExp): string[] {
   return [...sql.matchAll(expression)].map((match) => match[1]!.toLowerCase());
 }
 
-export async function buildMigrationManifest(migrationsDirectory: string): Promise<MigrationManifest> {
-  const migrations = await discoverMigrations(migrationsDirectory);
+export async function buildMigrationManifest(migrationsDirectory: string, migrationCount?: number): Promise<MigrationManifest> {
+  const discovered = await discoverMigrations(migrationsDirectory);
+  const migrations = migrationCount === undefined ? discovered : discovered.slice(0, migrationCount);
   const tables = new Set<string>();
   const functions = new Set<string>();
   const requiredExtensions = new Set<string>();
@@ -292,12 +293,13 @@ export interface DisposablePostgresDatabase {
 
 /** Starts a migration-complete PostgreSQL cluster owned by a newly-created temporary directory.
  * The identity probe deliberately fails closed before exposing the handle to a test. */
-export async function startDisposablePostgresDatabase(prefix = "sotoayam-integration-"): Promise<DisposablePostgresDatabase> {
+export async function startDisposablePostgresDatabase(prefix = "sotoayam-integration-", migrationCount = EXPECTED_MIGRATION_COUNT): Promise<DisposablePostgresDatabase> {
   const migrationsDirectory = path.resolve("supabase/migrations");
-  const manifest = await buildMigrationManifest(migrationsDirectory);
-  if (manifest.migrations.length !== EXPECTED_MIGRATION_COUNT) {
-    throw new Error(`Expected ${EXPECTED_MIGRATION_COUNT} migrations, found ${manifest.migrations.length}`);
+  const discovered = await discoverMigrations(migrationsDirectory);
+  if (discovered.length !== EXPECTED_MIGRATION_COUNT || migrationCount < 1 || migrationCount > EXPECTED_MIGRATION_COUNT) {
+    throw new Error(`Expected ${EXPECTED_MIGRATION_COUNT} repository migrations and a valid requested prefix, found ${discovered.length}/${migrationCount}`);
   }
+  const manifest = await buildMigrationManifest(migrationsDirectory, migrationCount);
   const tools = await resolvePostgresTools();
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), prefix));
   const dataDirectory = path.join(temporaryRoot, "postgres-data");

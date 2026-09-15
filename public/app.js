@@ -1,5 +1,6 @@
 import { createApiClient, loadResources, loginErrorMessage, taskSummary } from "./ui-core.js";
 import { setupUsersView } from "./users.js";
+import { setupSettingsView } from "./settings.js";
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -11,6 +12,7 @@ const api = createApiClient({ onUnauthorized: () => {
   if (state.authenticated) showLogin("Sesi Anda telah berakhir. Silakan masuk kembali.");
 } });
 let usersView;
+let settingsView;
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -372,6 +374,7 @@ async function loadSystem() {
     grid.append(systemCard("Scheduler notifikasi", scheduler.enabled ? scheduler.last_status : "DEGRADED",
       scheduler.enabled ? `Terakhir selesai ${formatDate(scheduler.last_completed_at, true)}` : "Scheduler dinonaktifkan."));
   }
+  await settingsView.load();
 }
 
 $("#login-form").addEventListener("submit", async (event) => {
@@ -415,6 +418,7 @@ $("#required-password-form").addEventListener("submit", async (event) => {
 });
 
 usersView = setupUsersView({ api, badge, formatDate, showGlobal });
+settingsView = setupSettingsView({ api, showGlobal });
 
 $$('[data-view]').forEach((button) => button.addEventListener("click", () => void navigate(button.dataset.view)));
 $$('[data-go]').forEach((button) => button.addEventListener("click", () => void navigate(button.dataset.go)));

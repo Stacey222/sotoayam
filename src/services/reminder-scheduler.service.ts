@@ -9,11 +9,12 @@ export class ReminderSchedulerService {
   constructor(
     private readonly evaluator: ReminderEvaluatorService,
     readonly enabled: boolean,
-    readonly intervalMs: number,
+    private interval: number,
     private readonly logger: Pick<FastifyBaseLogger, "info" | "warn">,
     private readonly criticalAlerts?: CriticalAlertEvaluatorService,
     private readonly criticalAlertsEnabled = false,
   ) {}
+  get intervalMs(): number { return this.interval; }
   get active(): boolean { return this.timer !== null; }
   start(): void {
     if (!this.enabled || this.timer) return;
@@ -22,6 +23,15 @@ export class ReminderSchedulerService {
     this.initialTimer = setTimeout(() => { this.initialTimer = null; this.trigger(); }, 1_000);
     this.initialTimer.unref();
     this.logger.info({ intervalSeconds: this.intervalMs / 1000 }, "Reminder scheduler started");
+  }
+  updateIntervalMs(intervalMs: number): void {
+    if (intervalMs === this.interval) return;
+    this.interval = intervalMs;
+    if (!this.timer) return;
+    clearInterval(this.timer);
+    this.timer = setInterval(() => this.trigger(), this.interval);
+    this.timer.unref();
+    this.logger.info({ intervalSeconds: this.interval / 1000 }, "Reminder scheduler interval updated");
   }
   async stop(): Promise<void> {
     if (this.timer) clearInterval(this.timer);

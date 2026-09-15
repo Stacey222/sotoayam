@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { CriticalAlertPolicy } from "../alerts/policy.js";
+import type { RuntimeSettingsReader } from "../runtime/runtime-settings.js";
 import { durationSeverity } from "../alerts/policy.js";
 import { ALERT_TYPES, type AlertDimension, type AlertEvaluationResult, type AlertSeverity, type CriticalAlertCandidate, type FailedDeliverySignal, type SchedulerSignal } from "../alerts/types.js";
 import type { CriticalAlertSignalsRepository, CriticalAlertsRepository } from "../repositories/critical-alerts.repository.js";
@@ -15,7 +16,7 @@ export class CriticalAlertEvaluatorService {
   constructor(
     private readonly signals: CriticalAlertSignalsRepository,
     private readonly alerts: CriticalAlertsRepository,
-    private readonly policy: CriticalAlertPolicy,
+    private readonly policySetting: CriticalAlertPolicy | RuntimeSettingsReader,
     private readonly reminderSchedulerExpected: boolean,
     private readonly now: () => Date = () => new Date(),
   ) {}
@@ -52,12 +53,12 @@ export class CriticalAlertEvaluatorService {
     for (const task of tasks) {
       if (task.deadline && new Date(task.deadline) < now) {
         const hours = (now.getTime() - new Date(task.deadline).getTime()) / HOUR;
-        result.push(this.taskCandidate("TASK_OVERDUE", task, task.deadline, hours, durationSeverity(hours, this.policy.overdue, task.priority), "deadline"));
+        result.push(this.taskCandidate("TASK_OVERDUE", task, task.deadline, hours, durationSeverity(hours, this.policy().overdue, task.priority), "deadline"));
       }
       const since = blockedSince.get(task.id);
       if (task.status === "BLOCKED" && since) {
         const hours = Math.max(0, (now.getTime() - new Date(since).getTime()) / HOUR);
-        result.push(this.taskCandidate("TASK_BLOCKED_TOO_LONG", task, since, hours, durationSeverity(hours, this.policy.blocked, task.priority), "blocked_since"));
+        result.push(this.taskCandidate("TASK_BLOCKED_TOO_LONG", task, since, hours, durationSeverity(hours, this.policy().blocked, task.priority), "blocked_since"));
       }
     }
     return result;
@@ -100,6 +101,8 @@ export class CriticalAlertEvaluatorService {
     const last = state.last_completed_at ?? state.last_started_at;
     if (!last) return "WARNING";
     const stale = (this.now().getTime() - new Date(last).getTime()) / 60_000;
-    return stale >= this.policy.scheduler.criticalMinutes ? "CRITICAL" : stale >= this.policy.scheduler.staleMinutes ? "HIGH" : "NORMAL";
+    const policy = this.policy();
+    return stale >= policy.scheduler.criticalMinutes ? "CRITICAL" : stale >= policy.scheduler.staleMinutes ? "HIGH" : "NORMAL";
   }
+  private policy(): CriticalAlertPolicy { return "current" in this.policySetting ? this.policySetting.current().criticalAlertPolicy : this.policySetting; }
 }

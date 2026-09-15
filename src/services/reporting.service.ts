@@ -3,6 +3,7 @@ import type { ReportingRepository } from "../repositories/reporting.repository.j
 import { reportTimeRange } from "../reporting/time-window.js";
 import type { AffiliateTaskStatusReport, ReportDrillDown, ReportDrillDownResult, ReportTaskItem, ReportWindow, TaskStatusReport, TaskStatusReportFilters } from "../reporting/types.js";
 import type { Task, TaskActor } from "../tasks/types.js";
+import type { RuntimeSettingsReader } from "../runtime/runtime-settings.js";
 
 const ACTIVE_STATUSES = new Set(["OPEN", "IN_PROGRESS", "BLOCKED"]);
 const PAGE_SIZE = 5;
@@ -10,20 +11,21 @@ const PAGE_SIZE = 5;
 export class ReportingService {
   constructor(
     private readonly repository: ReportingRepository,
-    private readonly timeZone: string,
+    private readonly timeZoneSetting: string | RuntimeSettingsReader,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
   async affiliateTaskStatus(actor: TaskActor, window: ReportWindow): Promise<AffiliateTaskStatusReport> {
     this.assertReportAccess(actor, { division: "CONTENT_CREATOR", taskCategory: "AFFILIATE" });
     const now = this.now();
-    const range = reportTimeRange(window, now, this.timeZone);
+    const timeZone = this.timeZone();
+    const range = reportTimeRange(window, now, timeZone);
     const tasks = await this.query({ division: "CONTENT_CREATOR", taskCategory: "AFFILIATE" }, range.start.toISOString(), range.end.toISOString());
     const included = tasks.filter((task) => task.status !== "CANCELLED" && task.status !== "DRAFT");
     const completed = included.filter((task) => task.status === "COMPLETED").length;
     return {
       definition: "AFFILIATE_TASK_STATUS", division: "CONTENT_CREATOR", taskCategory: "AFFILIATE",
-      window, timeZone: this.timeZone, startAt: range.start.toISOString(), endAt: range.end.toISOString(),
+      window, timeZone, startAt: range.start.toISOString(), endAt: range.end.toISOString(),
       total: included.length,
       open: included.filter((task) => task.status === "OPEN").length,
       inProgress: included.filter((task) => task.status === "IN_PROGRESS").length,
@@ -40,13 +42,14 @@ export class ReportingService {
   async taskStatus(actor: TaskActor, filters: TaskStatusReportFilters, window: ReportWindow): Promise<TaskStatusReport> {
     this.assertReportAccess(actor, filters);
     const now = this.now();
-    const range = reportTimeRange(window, now, this.timeZone);
+    const timeZone = this.timeZone();
+    const range = reportTimeRange(window, now, timeZone);
     const tasks = await this.query(filters, range.start.toISOString(), range.end.toISOString());
     const included = tasks.filter((task) => task.status !== "CANCELLED" && task.status !== "DRAFT");
     const completed = included.filter((task) => task.status === "COMPLETED").length;
     return {
       definition: "TASK_STATUS", division: filters.division ?? null, taskCategory: filters.taskCategory ?? null,
-      statuses: filters.statuses ?? null, window, timeZone: this.timeZone,
+      statuses: filters.statuses ?? null, window, timeZone,
       startAt: range.start.toISOString(), endAt: range.end.toISOString(), total: included.length,
       open: included.filter((task) => task.status === "OPEN").length,
       inProgress: included.filter((task) => task.status === "IN_PROGRESS").length,
@@ -62,7 +65,7 @@ export class ReportingService {
   async drillDown(actor: TaskActor, window: ReportWindow, kind: ReportDrillDown, requestedPage: number): Promise<ReportDrillDownResult> {
     this.assertReportAccess(actor, { division: "CONTENT_CREATOR", taskCategory: "AFFILIATE" });
     const now = this.now();
-    const range = reportTimeRange(window, now, this.timeZone);
+    const range = reportTimeRange(window, now, this.timeZone());
     const tasks = await this.query({ division: "CONTENT_CREATOR", taskCategory: "AFFILIATE" }, range.start.toISOString(), range.end.toISOString());
     const selected = tasks.filter((task) => kind === "BLOCKED" ? task.status === "BLOCKED"
       : kind === "OVERDUE" ? this.overdue(task, now) : this.upcoming(task, now));
@@ -75,7 +78,7 @@ export class ReportingService {
   async taskStatusDrillDown(actor: TaskActor, filters: TaskStatusReportFilters, window: ReportWindow, kind: ReportDrillDown, requestedPage: number): Promise<ReportDrillDownResult> {
     this.assertReportAccess(actor, filters);
     const now = this.now();
-    const range = reportTimeRange(window, now, this.timeZone);
+    const range = reportTimeRange(window, now, this.timeZone());
     const tasks = await this.query(filters, range.start.toISOString(), range.end.toISOString());
     const selected = tasks.filter((task) => kind === "BLOCKED" ? task.status === "BLOCKED"
       : kind === "OVERDUE" ? this.overdue(task, now) : this.upcoming(task, now));
@@ -118,4 +121,5 @@ export class ReportingService {
   private item(task: Task): ReportTaskItem {
     return { id: task.id, title: task.title, status: task.status, priority: task.priority, deadline: task.deadline };
   }
+  private timeZone(): string { return typeof this.timeZoneSetting === "string" ? this.timeZoneSetting : this.timeZoneSetting.current().businessTimeZone; }
 }

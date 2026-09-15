@@ -68,6 +68,7 @@ describe("Slice 1 governance catalog", () => {
     expect(ROLE_PERMISSION_SEEDS.OWNER).toEqual([
       "report.view_cross_division", "alert.view_critical", "alert.acknowledge", "approval.view", "approval.decide",
       "automation_status.view_business",
+      "threshold.manage",
     ]);
   });
 

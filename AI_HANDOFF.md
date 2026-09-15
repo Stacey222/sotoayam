@@ -26,9 +26,9 @@ Baseline at audit:
 ## Admin Authorization State
 P1-01 is implemented. All 12 admin route groups use the centralized fail-closed scope in `src/auth/admin-authorization.ts`, which resolves an opaque database-backed administrator session first and then the temporary Stage A `ADMIN_API_KEY` compatibility fallback. Session tokens and CSRF tokens are 256-bit random values stored only as SHA-256 hashes. Sessions have 12-hour absolute and 1-hour idle defaults, immediate revocation, a ten-session cap, CSRF enforcement on mutations, account/IP cooldown gates, and audited lifecycle events.
 
-The browser uses same-origin `HttpOnly`, `Secure`, `SameSite=Strict` session cookies and no longer receives or stores the shared key. `SESSION_COOKIE_SECURE=false` is allowed only on loopback with `TRUST_PROXY=false`. Session principals resolve the exact authenticated administrator and recheck active `SYSTEM_ADMIN` authority/capability on actor-protected routes, so two active system administrators no longer trigger the singleton failure. OWNER actor semantics remain intentionally unchanged for P2-01.
+The browser uses same-origin `HttpOnly`, `Secure`, `SameSite=Strict` session cookies and no longer receives or stores the shared key. `SESSION_COOKIE_SECURE=false` is allowed only on loopback with `TRUST_PROXY=false`. Session principals resolve the exact authenticated user. System-administration routes recheck active `SYSTEM_ADMIN` authority/capability; P2-01 OWNER/settings routes instead enforce their exact business permissions.
 
-`ADMIN_API_KEY` is now optional by default and remains accepted across all 12 groups only when `ADMIN_API_KEY_FALLBACK_ENABLED=true`; when present it retains its 32-character minimum. Explicit fallback enablement requires the key, logs a deprecation warning at every startup, and logs/audits use once per process. `npm run admin:reset-password -- --email <address>` is the server-only recovery path and revokes all sessions for that account.
+`ADMIN_API_KEY` is optional by default and is accepted only when `ADMIN_API_KEY_FALLBACK_ENABLED=true`; when present it retains its 32-character minimum. P2-01 excludes it from settings and OWNER mutations and restricts OWNER reads to the designated eligible business actor. Explicit fallback enablement requires the key, logs a deprecation warning at every startup, and logs/audits use once per process. `npm run admin:reset-password -- --email <address>` is the server-only recovery path and revokes all sessions for that account.
 
 New admin route groups must use `defineAdminRoutes` and be added to the security manifest. Admin API-key checks must not be implemented locally in route files.
 
@@ -153,18 +153,26 @@ Migration `202609140001_create_admin_user_management.sql` brings the repository 
 
 This milestone ID is deliberately non-conflicting. P2-01 remains runtime settings and OWNER actor redesign exactly as previously recorded.
 
+## P2-01 Runtime Settings and OWNER Actor State
+
+P2-01 is implemented from `docs/adr/P2-01-runtime-settings-owner-actors.md`. Only business timezone, reminder scheduler cadence, and critical-alert policy are persisted in `instance_settings`; a process-local typed provider hot-reloads reporting, alert evaluation/status, scheduler cadence, and notification scheduler status. Deployment/security/worker/Telegram/readiness/logging controls remain environment-only and absent from the API DTO.
+
+OWNER is permission-based and independent of SYSTEM_ADMIN. Report and alert HTTP requests now resolve the exact session user, while shared-key GET compatibility fails closed through the eligible `business_actor_user_id`; shared keys cannot use settings or OWNER mutations. Migration `202609150001_create_runtime_settings_owner_actors.sql` brings the repository total to 21, adds `threshold.manage` to OWNER, service-role RPCs, optimistic versioning, USER-attributed audit, deny-all RLS, and serialized designated-actor protection. Historical migrations #1-20 remain hash-identical.
+
+Focused P2-01 coverage passes 27/27 unit/integration tests plus the real upgrade backfill scenarios for zero, one, and multiple OWNER users. Clean disposable PostgreSQL applies 21/21 twice, and the complete suite passes 885 tests with 52 environment-gated legacy database tests skipped; the P2-01 disposable database suite runs unconditionally.
+
 ## Next Agent
-Recommended: follow the current Phase 2 roadmap ownership for P2-01.
+Recommended: Antigravity adversarial security/concurrency review of P2-01.
 
 Next task:
-Define P2-01 runtime settings scope before implementation.
+Review P2-01 permission separation, shared-key compatibility, hot reload, optimistic concurrency, and designated-actor lock ordering against the ADR.
 
 Reason:
-P2-00 closed the effective-administrator and actor-attribution blockers. User-management implementation can now safely build on the guarded service boundary, while P2-01 remains the next ordered roadmap task.
+Implementation and executable disposable-PostgreSQL evidence are complete; independent adversarial review is the remaining closeout step.
 
 ## Pending Higher-Level Work
 - Continue with the ordered Phase 2 scope while preserving the P1 security/reliability boundaries and the P2-00 effective-administrator invariant.
-- P2-09 is implementation-complete and awaits adversarial review; do not fold P2-01 runtime settings or OWNER redesign into follow-up corrections.
+- P2-09 and P2-01 are complete; preserve their independent SYSTEM_ADMIN and OWNER authorization contracts.
 - Preserve remaining launch gates: Phase 4 clean-room install, upgrade/rollback, restore drill, and final security review are still separate pre-customer requirements.
 
 ## Agent Handoff Format

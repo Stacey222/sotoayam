@@ -59,6 +59,11 @@ body { min-height: 100vh; }
 .user-dialog::backdrop { background: rgba(0, 0, 0, .48); }
 .user-dialog .modal-header, .user-dialog .modal-body, .user-dialog .modal-footer { padding: 1rem 1.25rem; }
 .temporary-password { display: block; padding: 1rem; overflow-wrap: anywhere; border-radius: var(--tblr-border-radius); background: var(--tblr-bg-surface-secondary); font-family: var(--tblr-font-monospace); font-size: 1.1rem; user-select: all; }
+.settings-form { display: grid; gap: 1rem; }
+.settings-form fieldset { padding: 1rem; border: var(--tblr-border-width) solid var(--tblr-border-color); border-radius: var(--tblr-border-radius); }
+.settings-form legend { width: auto; padding: 0 .35rem; font-size: .9rem; font-weight: 600; }
+.settings-thresholds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+.settings-actions { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 
 @media (min-width: 992px) {
   .sidebar-nav { display: block !important; }
@@ -81,6 +86,8 @@ body { min-height: 100vh; }
   .metric-card { min-height: auto; }
   .user-filter { grid-template-columns: 1fr; }
   .user-detail { width: 100vw; }
+  .settings-thresholds { grid-template-columns: 1fr; }
+  .settings-actions { align-items: stretch; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

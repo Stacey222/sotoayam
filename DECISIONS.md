@@ -45,9 +45,9 @@ Do not introduce Telegram webhooks solely for architectural neatness.
 
 ## D-007 — Admin authentication target
 Decision: Human administrators use their scrypt password identity with opaque random, hashed-at-rest server sessions transported by `HttpOnly`, `Secure`, `SameSite=Strict` cookies and protected by a session-bound CSRF token. This realizes the original signed-session intent while permitting immediate database-backed revocation.
-Status: Implemented by P1-01 and advanced to Stage B by P1-04. `ADMIN_API_KEY` is optional while the observable compatibility fallback defaults off; explicitly enabling that fallback requires a key of at least 32 characters and emits a startup warning. OWNER actor redesign remains P2-01.
+Status: Implemented by P1-01, advanced to Stage B by P1-04, and narrowed for OWNER routes by P2-01. `ADMIN_API_KEY` is optional while the observable compatibility fallback defaults off; explicitly enabling that fallback requires a key of at least 32 characters and emits a startup warning.
 
-Session-authenticated access to all 12 admin route groups currently requires an active `SYSTEM_ADMIN` authority assignment. This is an intentional P1-01 boundary until future role-onboarding work defines broader administrator eligibility; it does not change the separate OWNER actor redesign boundary.
+P1-01 originally required active `SYSTEM_ADMIN` authority across all administrator route groups. P2-01 is the approved narrow exception: settings and OWNER business routes authorize exact session actors by business permission, while P2-00/P2-09 and every other system-administration surface retain effective-SYSTEM_ADMIN enforcement.
 
 Enterprise IAM/SSO is out of scope.
 
@@ -174,3 +174,12 @@ Status: Implemented for P2-09.
 Only a session-authenticated effective SYSTEM_ADMIN may use this surface; the shared administrator key is excluded. The design reuses normalized users, P1-01 credentials/sessions/password policy, P1-03 route policies, and the P2-00 effective-administrator invariant. Temporary passwords are returned once and must be changed before normal admin use. P2-01 remains unchanged as the runtime-settings and OWNER-actor-redesign milestone.
 
 Migration #20 adds the compatibility-safe `password_change_required` credential state and service-only transactional user-management RPCs. Administrator creation does not pre-create Telegram identity, deactivation revokes target sessions atomically, and every privileged mutation records the resolved human actor.
+
+## D-026 - Runtime settings and OWNER actor boundary
+
+Decision: P2-01 follows `docs/adr/P2-01-runtime-settings-owner-actors.md`.
+Status: Implemented for P2-01.
+
+Only business timezone, reminder scheduler cadence, and critical-alert policy become persisted runtime settings. Secrets, trust/network configuration, session and rate-limit controls, worker ownership/enabling, Telegram durability/fan-out controls, readiness, and logging remain deployment-only. Runtime values overlay the validated environment baseline and reload within the single Fastify process.
+
+OWNER remains a permission-based business role, independent from SYSTEM_ADMIN authority. HTTP OWNER operations resolve the exact session user; SYSTEM_ADMIN does not imply OWNER and OWNER does not imply SYSTEM_ADMIN. The shared administrator key cannot mutate settings or OWNER state and may retain only designated-actor GET compatibility. `instance_settings.business_actor_user_id` replaces ambiguous singleton lookup for that compatibility path and is guarded against lockout after designation. P2-00 and P2-09 authorization semantics remain unchanged.

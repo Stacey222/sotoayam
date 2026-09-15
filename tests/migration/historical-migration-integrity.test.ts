@@ -23,12 +23,13 @@ const historical: Record<string, string> = {
   "202609110001_create_integration_credentials.sql": "d735cb8a89cf25c32abec549673257a63aa3126b92e93100c596c2cff4cb573b",
   "202609120001_create_telegram_polling_state.sql": "92106510973d58cf9c5fbb7ad77991940dcb7e9ef7abdec97005fc18a8218b70",
   "202609130001_harden_effective_system_admin_invariant.sql": "3b7113fb091685cf3dfe070b99917ae485be197369508943b8fc96c426c0498f",
+  "202609140001_create_admin_user_management.sql": "e8c6df6d18cac1a7e967ccc3799e3b3f6e1389396b8ffc9f6ec9cbf0bd7035ca",
 };
 
 const migrationPath = path.resolve("supabase/migrations/202609090002_implement_customer_taxonomy_transition.sql");
 
 describe("P0-14 migration integrity", () => {
-  it("keeps all sixteen historical migration bytes unchanged", async () => {
+  it("keeps all twenty historical migration bytes unchanged", async () => {
     for (const [name, expected] of Object.entries(historical)) {
       const bytes = await readFile(path.resolve("supabase/migrations", name));
       expect(createHash("sha256").update(bytes).digest("hex"), name).toBe(expected);
@@ -37,11 +38,12 @@ describe("P0-14 migration integrity", () => {
 
   it("keeps all nineteen historical migrations and adds exactly the P2-09 user-management migration", async () => {
     const names = (await readdir(path.resolve("supabase/migrations"))).filter((name) => name.endsWith(".sql")).sort();
-    expect(names.slice(-2)).toEqual([
+    expect(names.slice(-3)).toEqual([
       "202609130001_harden_effective_system_admin_invariant.sql",
       "202609140001_create_admin_user_management.sql",
+      "202609150001_create_runtime_settings_owner_actors.sql",
     ]);
-    expect(names).toHaveLength(20);
+    expect(names).toHaveLength(21);
   });
 
   it("does not execute destructive operational DML during migration", async () => {

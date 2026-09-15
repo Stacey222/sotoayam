@@ -11,6 +11,7 @@ import { csvImportRoutes } from "../../src/routes/task-ingestion.routes.js";
 import { tasksRoutes } from "../../src/routes/tasks.routes.js";
 import { usersRoutes } from "../../src/routes/users.routes.js";
 import { taxonomyRoutes } from "../../src/routes/taxonomy.routes.js";
+import { runtimeSettingsRoutes } from "../../src/routes/runtime-settings.routes.js";
 import type { AdminAuthorizedRouteOptions } from "../../src/auth/admin-authorization.js";
 
 const ADMIN_API_KEY = "regression-admin-key";
@@ -114,6 +115,20 @@ const routeCases: RouteCase[] = [
       await app.register(integrationAdministrationRoutes, {
         service: { list: downstream } as never,
         actorResolver: { resolveTrustedActor: secondaryAuthorization, resolveActor: secondaryAuthorization },
+        ...authorization,
+        ...(adminApiKey === undefined ? {} : { adminApiKey }),
+      });
+    },
+  },
+  {
+    routeGroup: "runtime-settings",
+    endpoint: "/",
+    sessionOnly: true,
+    register: async (app, adminApiKey, downstream, secondaryAuthorization, authorization) => {
+      await app.register(runtimeSettingsRoutes, {
+        service: { current: downstream } as never,
+        actorResolver: { resolveTrustedActor: secondaryAuthorization, resolveActor: secondaryAuthorization,
+          resolveSessionActor: secondaryAuthorization },
         ...authorization,
         ...(adminApiKey === undefined ? {} : { adminApiKey }),
       });

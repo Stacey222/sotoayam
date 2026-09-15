@@ -79,13 +79,15 @@ describe("Sotoayam runnable dashboard demo", () => {
       expect(html).toContain(label);
     }
     expect(html).toContain('id="readiness-card"');
+    expect(html).toContain('id="runtime-settings-card"');
+    expect(html).toContain("Penanggung jawab bisnis");
     expect(html).not.toContain("dijadwalkan pada P1-07");
     expect(html).toContain('id="login-form"');
     expect(html).toContain('id="logout"');
   });
 
   it("does not expose or persist shared keys, credentials, or service secrets in browser assets", async () => {
-    const browser = [await asset("index.html"), await asset("app.js"), await asset("ui-core.js")].join("\n");
+    const browser = [await asset("index.html"), await asset("app.js"), await asset("ui-core.js"), await asset("settings.js")].join("\n");
     expect(browser).not.toMatch(/ADMIN_API_KEY|INTERNAL_API_KEY|SUPABASE_SERVICE|service_role|password_hash/i);
     expect(browser).not.toMatch(/localStorage|sessionStorage/);
     expect(browser).not.toMatch(/credential_hash|secret_hash/i);

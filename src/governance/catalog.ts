@@ -57,6 +57,7 @@ export const ROLE_PERMISSION_SEEDS = {
     "approval.view",
     "approval.decide",
     "automation_status.view_business",
+    "threshold.manage",
   ],
 } as const;
 

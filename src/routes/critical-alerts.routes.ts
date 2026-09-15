@@ -8,21 +8,18 @@ import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
 
 export const criticalAlertsRoutes = defineAdminRoutes<{ service: CriticalAlertService; actorResolver: OwnerActorResolver;
   adminActorResolver?: TaskActorResolver; adminApiKey?: string }>(async (app, options) => {
-  app.addHook("preHandler", async (request) => {
-    if (request.adminPrincipal?.kind !== "session") return;
-    if (!options.adminActorResolver) throw new AppError(503, "ALERT_ADMIN_UNAVAILABLE", "Administrator actor resolution is unavailable");
-    const admin = await resolveAdminActor(options.adminActorResolver, request.adminPrincipal);
-    if (!hasSystemAdminCapability(admin)) throw new AppError(403, "ALERT_FORBIDDEN", "Active SYSTEM_ADMIN authority is required");
-  });
   app.get("/", async (request) => {
     const raw = (request.query as { severity?: unknown }).severity;
     if (raw !== undefined && !["WARNING", "HIGH", "CRITICAL"].includes(String(raw))) throw new AppError(400, "ALERT_SEVERITY_INVALID", "Alert severity filter is invalid");
-    const actor = await options.actorResolver.resolveOwnerActor();
+    const actor = await options.actorResolver.resolveOwnerActor(request.adminPrincipal ?? undefined);
     return { success: true, data: await options.service.list(actor, raw as PersistedAlertSeverity | undefined) };
   });
-  app.get("/automation-status", async () => ({ success: true, data: await options.service.automationStatus(await options.actorResolver.resolveOwnerActor()) }));
-  app.get("/:id", async (request) => ({ success: true, data: await options.service.get(await options.actorResolver.resolveOwnerActor(), positiveId((request.params as { id: string }).id)) }));
-  app.post("/:id/acknowledge", async (request) => ({ success: true, data: await options.service.acknowledge(await options.actorResolver.resolveOwnerActor(), positiveId((request.params as { id: string }).id)) }));
+  app.get("/automation-status", async (request) => ({ success: true, data: await options.service.automationStatus(await options.actorResolver.resolveOwnerActor(request.adminPrincipal ?? undefined)) }));
+  app.get("/:id", async (request) => ({ success: true, data: await options.service.get(await options.actorResolver.resolveOwnerActor(request.adminPrincipal ?? undefined), positiveId((request.params as { id: string }).id)) }));
+  app.post("/:id/acknowledge", async (request) => {
+    if (request.adminPrincipal?.kind !== "session") throw new AppError(401, "SESSION_REQUIRED", "An authenticated administrator session is required");
+    return { success: true, data: await options.service.acknowledge(await options.actorResolver.resolveOwnerActor(request.adminPrincipal), positiveId((request.params as { id: string }).id)) };
+  });
 }, { unauthorizedMessage: "Invalid or missing alert API key" });
 
 export const adminCriticalAlertRoutes = defineAdminRoutes<{ evaluator: CriticalAlertEvaluatorService; actorResolver: TaskActorResolver; adminApiKey?: string }>(async (app, options) => {

@@ -1,10 +1,9 @@
 import { defineAdminRoutes } from "../auth/admin-authorization.js";
-import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
 import { AppError } from "../errors.js";
 import { parseReportWindow } from "../reporting/time-window.js";
 import type { ReportDrillDown } from "../reporting/types.js";
 import type { TaskStatusReportFilters } from "../reporting/types.js";
-import { resolveAdminActor, type OwnerActorResolver, type TaskActorResolver } from "../services/task-actor.service.js";
+import type { OwnerActorResolver, TaskActorResolver } from "../services/task-actor.service.js";
 import type { ReportingService } from "../services/reporting.service.js";
 import { TASK_STATUSES, type TaskStatus } from "../tasks/types.js";
 
@@ -44,15 +43,9 @@ function filters(query: { division?: unknown; task_category?: unknown; statuses?
 }
 
 export const reportsRoutes = defineAdminRoutes<ReportsRoutesOptions>(async (app, options) => {
-  app.addHook("preHandler", async (request) => {
-    if (request.adminPrincipal?.kind !== "session") return;
-    if (!options.adminActorResolver) throw new AppError(503, "REPORT_ADMIN_UNAVAILABLE", "Administrator actor resolution is unavailable");
-    const admin = await resolveAdminActor(options.adminActorResolver, request.adminPrincipal);
-    if (!hasSystemAdminCapability(admin)) throw new AppError(403, "REPORT_FORBIDDEN", "Active SYSTEM_ADMIN authority is required");
-  });
   app.get("/task-status", { config: { rateLimit: "admin-expensive" } }, async (request) => {
     const query = request.query as { window?: unknown; detail?: unknown; page?: unknown; division?: unknown; task_category?: unknown; statuses?: unknown };
-    const actor = await options.actorResolver.resolveOwnerActor();
+    const actor = await options.actorResolver.resolveOwnerActor(request.adminPrincipal ?? undefined);
     const window = parseReportWindow(query.window);
     const selected = filters(query);
     const selectedDetail = detail(query);
@@ -64,7 +57,7 @@ export const reportsRoutes = defineAdminRoutes<ReportsRoutesOptions>(async (app,
   if (options.legacyAliasEnabled !== false) app.get("/content-creator/affiliate-task-status",
     { config: { rateLimit: "admin-expensive" } }, async (request) => {
     const query = request.query as { window?: unknown; detail?: unknown; page?: unknown };
-    const actor = await options.actorResolver.resolveOwnerActor();
+    const actor = await options.actorResolver.resolveOwnerActor(request.adminPrincipal ?? undefined);
     const window = parseReportWindow(query.window);
     const selectedDetail = detail(query);
     if (selectedDetail) return { success: true, data: await options.service.drillDown(actor, window, selectedDetail.kind, selectedDetail.page) };

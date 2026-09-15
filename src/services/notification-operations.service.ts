@@ -1,5 +1,6 @@
 import type { ReminderNotificationsRepository, ReminderSchedulerRepository } from "../repositories/reminders.repository.js";
 import type { ReminderEvaluatorService } from "./reminder-evaluator.service.js";
+import type { RuntimeSettingsReader } from "../runtime/runtime-settings.js";
 
 export class NotificationOperationsService {
   constructor(
@@ -7,11 +8,12 @@ export class NotificationOperationsService {
     private readonly scheduler: ReminderSchedulerRepository,
     private readonly evaluator: ReminderEvaluatorService,
     private readonly schedulerEnabled: boolean,
-    private readonly intervalSeconds: number,
+    private readonly intervalSetting: number | RuntimeSettingsReader,
   ) {}
   async status() {
     const [counts, runtime] = await Promise.all([this.notifications.status(), this.scheduler.status()]);
-    return { scheduler: { enabled: this.schedulerEnabled, interval_seconds: this.intervalSeconds,
+    const intervalSeconds = typeof this.intervalSetting === "number" ? this.intervalSetting : this.intervalSetting.current().reminderSchedulerIntervalSeconds;
+    return { scheduler: { enabled: this.schedulerEnabled, interval_seconds: intervalSeconds,
       last_started_at: runtime.last_started_at, last_completed_at: runtime.last_completed_at,
       last_status: runtime.last_status, lease_active: Boolean(runtime.lease_until && new Date(runtime.lease_until) > new Date()),
       last_tasks_evaluated: runtime.last_tasks_evaluated, last_candidates: runtime.last_candidates,

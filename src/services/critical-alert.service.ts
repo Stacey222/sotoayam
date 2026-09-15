@@ -3,12 +3,13 @@ import type { AutomationStatus, CriticalAlert, PersistedAlertSeverity } from "..
 import type { CriticalAlertSignalsRepository, CriticalAlertsRepository } from "../repositories/critical-alerts.repository.js";
 import type { TaskActor } from "../tasks/types.js";
 import type { CriticalAlertPolicy } from "../alerts/policy.js";
+import type { RuntimeSettingsReader } from "../runtime/runtime-settings.js";
 
 export class CriticalAlertService {
   constructor(
     private readonly alerts: CriticalAlertsRepository,
     private readonly signals: CriticalAlertSignalsRepository,
-    private readonly policy: CriticalAlertPolicy,
+    private readonly policySetting: CriticalAlertPolicy | RuntimeSettingsReader,
     private readonly runtime: { telegramPollingEnabled: boolean; telegramPollingActive?: () => boolean; reminderSchedulerEnabled: boolean; alertEvaluatorEnabled: boolean },
     private readonly now: () => Date = () => new Date(),
   ) {}
@@ -31,8 +32,9 @@ export class CriticalAlertService {
     const [scheduler, evaluator, failed, integrations] = await Promise.all([
       this.signals.reminderSchedulerState(), this.alerts.evaluatorState(), this.signals.failedDeliveryCount(), this.signals.activeIntegrationCount(),
     ]);
-    const reminder = !this.runtime.reminderSchedulerEnabled ? "DEGRADED" as const : this.operationalState(scheduler.last_status, scheduler.last_completed_at, this.policy.scheduler.staleMinutes);
-    const critical = !this.runtime.alertEvaluatorEnabled ? "DEGRADED" as const : this.operationalState(evaluator.last_status, evaluator.last_completed_at, this.policy.scheduler.staleMinutes);
+    const policy = this.policy();
+    const reminder = !this.runtime.reminderSchedulerEnabled ? "DEGRADED" as const : this.operationalState(scheduler.last_status, scheduler.last_completed_at, policy.scheduler.staleMinutes);
+    const critical = !this.runtime.alertEvaluatorEnabled ? "DEGRADED" as const : this.operationalState(evaluator.last_status, evaluator.last_completed_at, policy.scheduler.staleMinutes);
     const pollingHealthy = this.runtime.telegramPollingEnabled && (this.runtime.telegramPollingActive?.() ?? true);
     const values = [reminder, critical, failed > 0 ? "DEGRADED" as const : "HEALTHY" as const, pollingHealthy ? "HEALTHY" as const : "DEGRADED" as const];
     return { overall: values.includes("UNHEALTHY") ? "UNHEALTHY" : values.includes("DEGRADED") ? "DEGRADED" : "HEALTHY",
@@ -60,4 +62,5 @@ export class CriticalAlertService {
       occurrenceCount: alert.occurrence_count, acknowledgedAt: alert.acknowledged_at, resolvedAt: alert.resolved_at,
       summary: alert.summary, context: alert.safe_context };
   }
+  private policy(): CriticalAlertPolicy { return "current" in this.policySetting ? this.policySetting.current().criticalAlertPolicy : this.policySetting; }
 }

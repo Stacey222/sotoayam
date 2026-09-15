@@ -21,6 +21,7 @@ import { csvImportRoutes, internalTaskIngestionRoutes } from "../../src/routes/t
 import { tasksRoutes } from "../../src/routes/tasks.routes.js";
 import { taxonomyRoutes } from "../../src/routes/taxonomy.routes.js";
 import { usersRoutes } from "../../src/routes/users.routes.js";
+import { runtimeSettingsRoutes } from "../../src/routes/runtime-settings.routes.js";
 import { LoginThrottledError } from "../../src/services/admin-authentication.service.js";
 
 function config(overrides: Partial<AppConfig> = {}): AppConfig {
@@ -120,6 +121,7 @@ describe("P1-03 route enforcement", () => {
       [csvImportRoutes as never, "/api/tasks/import"], [adminNotificationsRoutes as never, "/api/admin/notifications"],
       [reportsRoutes as never, "/api/reports"], [criticalAlertsRoutes as never, "/api/alerts"],
       [adminCriticalAlertRoutes as never, "/api/admin/alerts"], [taxonomyRoutes as never, "/api/admin"],
+      [runtimeSettingsRoutes as never, "/api/admin/settings"],
     ];
     for (const [plugin, prefix] of registrations) await app.register(plugin, { prefix, ...auth } as never);
     await app.register(adminAuthRoutes, { prefix: "/api/admin/auth", service: {} as never, authenticator: {} as never,

@@ -27,14 +27,12 @@ const duration = (value: unknown, defaults: { warningHours: number; highHours: n
   return result;
 };
 
-export function parseCriticalAlertPolicy(raw: string | undefined): CriticalAlertPolicy {
-  if (!raw?.trim()) return DEFAULT_CRITICAL_ALERT_POLICY;
-  let parsed: unknown;
-  try { parsed = JSON.parse(raw); } catch { throw new Error("Invalid environment variable: CRITICAL_ALERT_POLICY_JSON"); }
+export function validateCriticalAlertPolicy(parsed: unknown, allowDefaults = false): CriticalAlertPolicy {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid environment variable: CRITICAL_ALERT_POLICY_JSON");
   const item = parsed as Record<string, unknown>;
   const unknown = Object.keys(item).filter((key) => !["overdue", "blocked", "scheduler"].includes(key));
   if (unknown.length) throw new Error("Invalid critical alert policy key");
+  if (!allowDefaults && !["overdue", "blocked", "scheduler"].every((key) => key in item)) throw new Error("Invalid critical alert policy: missing key");
   let scheduler = DEFAULT_CRITICAL_ALERT_POLICY.scheduler;
   if (item.scheduler !== undefined) {
     if (!item.scheduler || typeof item.scheduler !== "object" || Array.isArray(item.scheduler)) throw new Error("Invalid critical alert policy: scheduler");
@@ -44,6 +42,13 @@ export function parseCriticalAlertPolicy(raw: string | undefined): CriticalAlert
     if (scheduler.staleMinutes >= scheduler.criticalMinutes) throw new Error("Invalid critical alert policy ordering: scheduler");
   }
   return { overdue: duration(item.overdue, DEFAULT_CRITICAL_ALERT_POLICY.overdue, "overdue"), blocked: duration(item.blocked, DEFAULT_CRITICAL_ALERT_POLICY.blocked, "blocked"), scheduler };
+}
+
+export function parseCriticalAlertPolicy(raw: string | undefined): CriticalAlertPolicy {
+  if (!raw?.trim()) return DEFAULT_CRITICAL_ALERT_POLICY;
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new Error("Invalid environment variable: CRITICAL_ALERT_POLICY_JSON"); }
+  return validateCriticalAlertPolicy(parsed, true);
 }
 
 const ORDER: AlertSeverity[] = ["NORMAL", "WARNING", "HIGH", "CRITICAL"];

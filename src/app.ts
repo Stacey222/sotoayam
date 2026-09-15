@@ -90,6 +90,10 @@ import { InternalApiKeyFallbackObserver } from "./auth/internal-integration-auth
 import { SupabaseTelegramPollingRepository, type TelegramPollingRepository } from "./repositories/telegram-polling.repository.js";
 import { TelegramFanoutService } from "./services/telegram-fanout.service.js";
 import { ReadinessService, SupabaseReadinessProbe, UnavailableReadinessProbe } from "./readiness/readiness.service.js";
+import { RuntimeSettingsProvider } from "./runtime/runtime-settings.js";
+import { SupabaseRuntimeSettingsRepository } from "./repositories/runtime-settings.repository.js";
+import { RuntimeSettingsService } from "./services/runtime-settings.service.js";
+import { runtimeSettingsRoutes } from "./routes/runtime-settings.routes.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -116,6 +120,12 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   await registerRateLimit(app, { config: options.config });
   const runtimeHealth = new RuntimeHealthState();
   const client = options.repository ? null : createSupabaseClient(options.config);
+  const runtimeSettingsProvider = new RuntimeSettingsProvider({ businessTimeZone: options.config.businessTimeZone,
+    reminderSchedulerIntervalSeconds: options.config.reminderSchedulerIntervalSeconds,
+    criticalAlertPolicy: options.config.criticalAlertPolicy });
+  const runtimeSettingsService = client ? new RuntimeSettingsService(new SupabaseRuntimeSettingsRepository(client),
+    runtimeSettingsProvider, runtimeSettingsProvider.current()) : undefined;
+  if (runtimeSettingsService) await runtimeSettingsService.load();
   const repository = options.repository ?? new SupabaseTelegramUsersRepository(client!);
   const registrationWriter = options.registrationWriter
     ?? (options.repository ? options.repository : new SupabaseNormalizedRegistrationRepository(client!));
@@ -203,14 +213,14 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   const taskIngestionService = client && taskService && divisionsRepository ? new TaskIngestionService(
     taskService, divisionsRepository, new SupabaseImportBatchRepository(client), new SupabaseAuditRepository(client), taskUsers!,
   ) : undefined;
-  const reportingService = client ? new ReportingService(new SupabaseReportingRepository(client), options.config.businessTimeZone) : undefined;
+  const reportingService = client ? new ReportingService(new SupabaseReportingRepository(client), runtimeSettingsProvider) : undefined;
   const criticalAlertSignals = client ? new SupabaseCriticalAlertSignalsRepository(client) : undefined;
   const criticalAlertsRepository = client ? new SupabaseCriticalAlertsRepository(client) : undefined;
   const criticalAlertEvaluator = criticalAlertSignals && criticalAlertsRepository ? new CriticalAlertEvaluatorService(
-    criticalAlertSignals, criticalAlertsRepository, options.config.criticalAlertPolicy, options.config.reminderSchedulerEnabled,
+    criticalAlertSignals, criticalAlertsRepository, runtimeSettingsProvider, options.config.reminderSchedulerEnabled,
   ) : undefined;
   const criticalAlertService = criticalAlertSignals && criticalAlertsRepository ? new CriticalAlertService(
-    criticalAlertsRepository, criticalAlertSignals, options.config.criticalAlertPolicy,
+    criticalAlertsRepository, criticalAlertSignals, runtimeSettingsProvider,
     { telegramPollingEnabled: options.config.telegramPollingEnabled, telegramPollingActive: () => runtimeHealth.telegramPollingActive,
       reminderSchedulerEnabled: options.config.reminderSchedulerEnabled,
       alertEvaluatorEnabled: options.config.criticalAlertEvaluatorEnabled },
@@ -224,12 +234,13 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     reminderSchedulerRepository,
   ) : undefined;
   const reminderScheduler = reminderEvaluator ? new ReminderSchedulerService(reminderEvaluator,
-    options.config.reminderSchedulerEnabled, options.config.reminderSchedulerIntervalSeconds * 1000, app.log,
+    options.config.reminderSchedulerEnabled, runtimeSettingsProvider.current().reminderSchedulerIntervalSeconds * 1000, app.log,
     criticalAlertEvaluator, options.config.criticalAlertEvaluatorEnabled) : undefined;
   const notificationOperations = reminderEvaluator && reminderNotifications && reminderSchedulerRepository
     ? new NotificationOperationsService(reminderNotifications, reminderSchedulerRepository, reminderEvaluator,
-        options.config.reminderSchedulerEnabled, options.config.reminderSchedulerIntervalSeconds)
+        options.config.reminderSchedulerEnabled, runtimeSettingsProvider)
     : undefined;
+  if (runtimeSettingsService && reminderScheduler) runtimeSettingsService.setIntervalUpdater((seconds) => reminderScheduler.updateIntervalMs(seconds * 1000));
   const collaborationManagementService = client && userManagementService && taskUsers && collaborationRepository
     ? new CollaborationRuleManagementService(
         collaborationRepository,
@@ -365,6 +376,9 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     ...adminAuthorization,
     actorResolver: adminActorResolver,
   });
+  if (runtimeSettingsService && adminActorResolver) await app.register(runtimeSettingsRoutes, {
+    prefix: "/api/admin/settings", service: runtimeSettingsService, actorResolver: adminActorResolver, ...adminAuthorization,
+  });
   if (taxonomyManagementService && taskCategoryService && taskUsers && permissionsRepository) await app.register(taxonomyRoutes, {
     prefix: "/api/admin", service: taxonomyManagementService, categories: taskCategoryService,
     actorResolver: adminActorResolver!, ...adminAuthorization,
@@ -406,13 +420,13 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   }
   if (reportingService && taskUsers) {
     await app.register(reportsRoutes, { prefix: "/api/reports", service: reportingService,
-      actorResolver: new TrustedOwnerActorService(taskUsers, permissionsRepository!), adminActorResolver,
+      actorResolver: new TrustedOwnerActorService(taskUsers, permissionsRepository!),
       ...adminAuthorization,
       legacyAliasEnabled: installationLineage !== "FRESH" });
   }
   if (criticalAlertService && taskUsers) {
     await app.register(criticalAlertsRoutes, { prefix: "/api/alerts", service: criticalAlertService,
-      actorResolver: new TrustedOwnerActorService(taskUsers, permissionsRepository!), adminActorResolver,
+      actorResolver: new TrustedOwnerActorService(taskUsers, permissionsRepository!),
       ...adminAuthorization });
   }
   if (criticalAlertEvaluator && taskUsers && permissionsRepository) {

@@ -95,8 +95,9 @@ Legend:
 - [x] P2-00 Harden effective SYSTEM_ADMIN invariant and actor attribution.
   Owner: Codex
   Note: authority mutations now require a session-authenticated effective SYSTEM_ADMIN and attribute the real user. One forward migration serializes every path that can remove the last effective administrator under the compatibility advisory lock.
-- [ ] P2-01 Define and implement runtime settings surface for legitimate customer settings.
+- [x] P2-01 Define and implement runtime settings surface for legitimate customer settings.
   Owner: Claude Code scope -> Codex implement
+  Note: implemented from `docs/adr/P2-01-runtime-settings-owner-actors.md` with migration #21, a three-setting runtime allowlist, hot reload, exact session OWNER actors, designated shared-key GET compatibility, and guarded OWNER/SYSTEM_ADMIN separation.
 - [ ] P2-02 Extract maintainable Sotoayam message/string catalog.
   Owner: Z.AI inventory -> Codex
   Note: full white-label branding is not required for v1.0.

@@ -1,3 +1,5 @@
+import { uiFormatters, uiMessages } from "./messages.js";
+
 const $ = (selector) => document.querySelector(selector);
 
 function node(tag, className, text) {
@@ -8,9 +10,9 @@ function node(tag, className, text) {
 }
 
 function errorMessage(error) {
-  if (error?.status === 403) return "Sesi ini tidak memiliki kewenangan SYSTEM_ADMIN yang aktif.";
-  if (error?.status === 409) return error.message || "Perubahan ditolak untuk menjaga administrator terakhir.";
-  return error?.message || "Permintaan tidak dapat diproses.";
+  if (error?.status === 403) return uiMessages.users.systemAdminRequired;
+  if (error?.status === 409) return error.message || uiMessages.users.lastAdminRejected;
+  return error?.message || uiMessages.api.requestFailed;
 }
 
 export function setupUsersView({ api, badge, formatDate, showGlobal, onSessionRequired }) {
@@ -18,8 +20,8 @@ export function setupUsersView({ api, badge, formatDate, showGlobal, onSessionRe
 
   function accessBadges(user) {
     const box = node("div", "user-badges");
-    for (const [show, label, tone] of [[user.system_admin, "SYSTEM_ADMIN", "ACTIVE"], [user.has_login, "Login", "ACTIVE"],
-      [user.telegram_connected, "Telegram", "ACTIVE"], [user.is_current_user, "Anda", "PENDING"]]) {
+    for (const [show, label, tone] of [[user.system_admin, "SYSTEM_ADMIN", "ACTIVE"], [user.has_login, uiMessages.users.badges.login, "ACTIVE"],
+      [user.telegram_connected, uiMessages.users.badges.telegram, "ACTIVE"], [user.is_current_user, uiMessages.users.badges.self, "PENDING"]]) {
       if (show) { const value = badge(tone); value.textContent = label; box.append(value); }
     }
     if (!box.childNodes.length) box.append(node("span", "text-secondary", "—"));
@@ -32,18 +34,18 @@ export function setupUsersView({ api, badge, formatDate, showGlobal, onSessionRe
     for (const user of state.users) {
       if (append && body.querySelector(`[data-user-row="${user.id}"]`)) continue;
       const row = document.createElement("tr"); row.dataset.userRow = String(user.id);
-      const identity = node("td"); identity.append(node("strong", "d-block", user.display_name || "Tanpa nama"),
-        node("small", "text-secondary", user.email || user.business_user_code || `Pengguna #${user.id}`));
-      const assignment = node("td"); assignment.append(node("span", "d-block", user.division?.name || "Belum ada divisi"),
-        node("small", "text-secondary", user.role?.name || "Belum ada peran"));
+      const identity = node("td"); identity.append(node("strong", "d-block", user.display_name || uiMessages.users.unnamed),
+        node("small", "text-secondary", user.email || user.business_user_code || uiFormatters.userNumber(user.id)));
+      const assignment = node("td"); assignment.append(node("span", "d-block", user.division?.name || uiMessages.users.noDivision),
+        node("small", "text-secondary", user.role?.name || uiMessages.users.noRole));
       const status = node("td"); status.append(badge(user.active ? "ACTIVE" : "INACTIVE"));
       const badges = node("td"); badges.append(accessBadges(user));
-      const action = node("td"); const button = node("button", "btn btn-sm btn-outline-secondary", "Detail");
+      const action = node("td"); const button = node("button", "btn btn-sm btn-outline-secondary", uiMessages.users.detail);
       button.type = "button"; button.dataset.userId = String(user.id); action.append(button);
       row.append(identity, assignment, status, badges, action); body.append(row);
     }
     $("#users-state").hidden = state.users.length > 0;
-    if (!state.users.length) $("#users-state").textContent = "Belum ada pengguna untuk filter ini.";
+    if (!state.users.length) $("#users-state").textContent = uiMessages.users.empty;
     $("#users-more").hidden = !state.nextCursor;
   }
 
@@ -59,7 +61,7 @@ export function setupUsersView({ api, badge, formatDate, showGlobal, onSessionRe
 
   async function loadUsers({ append = false } = {}) {
     if (!append) { state.users = []; state.nextCursor = null; $("#user-rows").replaceChildren(); }
-    $("#users-state").hidden = false; $("#users-state").textContent = "Memuat pengguna…";
+    $("#users-state").hidden = false; $("#users-state").textContent = uiMessages.users.loading;
     try {
       const payload = await api(`/api/admin/users?${query(append ? state.nextCursor : null)}`);
       const incoming = Array.isArray(payload.data) ? payload.data : [];
@@ -75,7 +77,7 @@ export function setupUsersView({ api, badge, formatDate, showGlobal, onSessionRe
     try {
       const [catalogs, summary] = await Promise.all([api("/api/admin/users/catalogs"), api("/api/admin/users/authority-summary")]);
       state.catalogs = catalogs.data; state.summary = summary.data;
-      $("#users-summary").textContent = `SYSTEM_ADMIN efektif: ${summary.data.effective_system_admins}. ${summary.data.you_are_last ? "Anda adalah administrator efektif terakhir; lakukan serah-terima sebelum demosi." : "Serah-terima kewenangan tersedia."}`;
+      $("#users-summary").textContent = uiFormatters.authoritySummary(summary.data.effective_system_admins, summary.data.you_are_last);
       const divisionOptions = state.catalogs.divisions.map((item) => new Option(item.name, item.id));
       $("#users-division").append(...divisionOptions.map((item) => item.cloneNode(true)));
       const form = $("#create-user-form");
@@ -92,7 +94,7 @@ export function setupUsersView({ api, badge, formatDate, showGlobal, onSessionRe
   function select(label, name, values, current) {
     const holder = node("label", "form-label", label); const field = document.createElement("select");
     field.name = name; field.className = "form-select";
-    field.append(new Option("Belum ditetapkan", ""), ...values.map((item) => new Option(item.name, item.id, false, Number(item.id) === Number(current))));
+    field.append(new Option(uiMessages.users.unset, ""), ...values.map((item) => new Option(item.name, item.id, false, Number(item.id) === Number(current))));
     holder.append(field); return holder;
   }
 
@@ -108,40 +110,40 @@ export function setupUsersView({ api, badge, formatDate, showGlobal, onSessionRe
   }
 
   async function openDetail(id) {
-    const panel = $("#user-detail"); const body = $("#user-detail-body"); panel.hidden = false; body.textContent = "Memuat detail…";
+    const panel = $("#user-detail"); const body = $("#user-detail-body"); panel.hidden = false; body.textContent = uiMessages.users.detailLoading;
     try {
       const payload = await api(`/api/admin/users/${id}`); const user = payload.data; state.selected = user;
-      $("#user-detail-title").textContent = user.display_name || `Pengguna #${user.id}`; body.replaceChildren();
-      const facts = node("div", "user-detail-facts"); facts.append(node("p", "", user.email || "Login belum diberikan"),
-        node("p", "text-secondary", `Dibuat ${formatDate(user.created_at, true)}`), accessBadges(user)); body.append(facts);
+      $("#user-detail-title").textContent = user.display_name || uiFormatters.userNumber(user.id); body.replaceChildren();
+      const facts = node("div", "user-detail-facts"); facts.append(node("p", "", user.email || uiMessages.users.loginUnavailable),
+        node("p", "text-secondary", uiFormatters.userCreated(formatDate(user.created_at, true))), accessBadges(user)); body.append(facts);
 
-      const profile = node("form", "user-action"); profile.append(node("h4", "", "Profil"), input("Nama tampilan", "display_name", user.display_name), node("button", "btn btn-outline-secondary", "Simpan profil"));
+      const profile = node("form", "user-action"); profile.append(node("h4", "", uiMessages.users.profile), input(uiMessages.users.displayName, "display_name", user.display_name), node("button", "btn btn-outline-secondary", uiMessages.users.saveProfile));
       profile.addEventListener("submit", async (event) => { event.preventDefault(); await mutation(`/api/admin/users/${id}/profile`, "PATCH", { display_name: profile.elements.display_name.value }); await openDetail(id); await loadUsers(); });
       body.append(profile);
 
-      const access = node("form", "user-action"); access.append(node("h4", "", "Akses"), select("Divisi", "division_id", state.catalogs.divisions, user.division?.id),
-        select("Peran", "role_id", state.catalogs.roles, user.role?.id));
-      const active = node("label", "form-check"); const activeBox = document.createElement("input"); activeBox.type = "checkbox"; activeBox.name = "active"; activeBox.checked = user.active; activeBox.disabled = user.is_current_user; activeBox.className = "form-check-input"; active.append(activeBox, node("span", "form-check-label", user.is_current_user ? "Aktif (akun sendiri tidak dapat dinonaktifkan)" : "Aktif"));
-      access.append(active, input("Alasan konfirmasi demosi diri (bila perlu)", "reason", ""), node("button", "btn btn-outline-secondary", "Simpan akses"));
+      const access = node("form", "user-action"); access.append(node("h4", "", uiMessages.users.access), select(uiMessages.users.division, "division_id", state.catalogs.divisions, user.division?.id),
+        select(uiMessages.users.role, "role_id", state.catalogs.roles, user.role?.id));
+      const active = node("label", "form-check"); const activeBox = document.createElement("input"); activeBox.type = "checkbox"; activeBox.name = "active"; activeBox.checked = user.active; activeBox.disabled = user.is_current_user; activeBox.className = "form-check-input"; active.append(activeBox, node("span", "form-check-label", user.is_current_user ? uiMessages.users.ownActive : uiMessages.users.active));
+      access.append(active, input(uiMessages.users.selfDemotionReason, "reason", ""), node("button", "btn btn-outline-secondary", uiMessages.users.saveAccess));
       access.addEventListener("submit", async (event) => { event.preventDefault();
         const selectedDivision = state.catalogs.divisions.find((item) => Number(item.id) === Number(access.elements.division_id.value));
         const demotion = user.is_current_user && user.effective_system_admin
           && (!selectedDivision?.active || selectedDivision.grants_system_authority !== true);
-        if (!confirm("Simpan perubahan akses pengguna ini?")) return;
+        if (!confirm(uiMessages.users.confirmAccess)) return;
         await mutation(`/api/admin/users/${id}/access`, "PATCH", { division_id: Number(access.elements.division_id.value) || null,
           role_id: Number(access.elements.role_id.value) || null, active: access.elements.active.checked, confirm: demotion,
           reason: demotion ? access.elements.reason.value : null }); await openDetail(id); await Promise.all([loadUsers(), loadSummary()]); });
       body.append(access);
 
       if (!user.has_login && user.active) {
-        const login = node("form", "user-action"); login.append(node("h4", "", "Berikan login"), input("Email", "email", "", "email"), input("Alasan", "reason", ""), node("button", "btn btn-outline-secondary", "Buat login"));
-        login.addEventListener("submit", async (event) => { event.preventDefault(); if (!confirm("Buat kredensial login sementara?")) return;
+        const login = node("form", "user-action"); login.append(node("h4", "", uiMessages.users.grantLogin), input(uiMessages.users.email, "email", "", "email"), input(uiMessages.users.reason, "reason", ""), node("button", "btn btn-outline-secondary", uiMessages.users.createLogin));
+        login.addEventListener("submit", async (event) => { event.preventDefault(); if (!confirm(uiMessages.users.confirmLogin)) return;
           const result = await mutation(`/api/admin/users/${id}/login`, "POST", { email: login.elements.email.value, reason: login.elements.reason.value });
           await showTemporary(result.data.temporary_password); await openDetail(id); await loadUsers(); }); body.append(login);
       }
 
-      const authority = node("form", "user-action"); authority.append(node("h4", "", "Kewenangan SYSTEM_ADMIN"), input("Alasan", "reason", ""), node("button", user.system_admin ? "btn btn-outline-danger" : "btn btn-outline-secondary", user.system_admin ? "Cabut SYSTEM_ADMIN" : "Berikan SYSTEM_ADMIN"));
-      authority.addEventListener("submit", async (event) => { event.preventDefault(); if (!confirm(`${user.system_admin ? "Cabut" : "Berikan"} SYSTEM_ADMIN untuk pengguna ini?`)) return;
+      const authority = node("form", "user-action"); authority.append(node("h4", "", uiMessages.users.authority), input(uiMessages.users.reason, "reason", ""), node("button", user.system_admin ? "btn btn-outline-danger" : "btn btn-outline-secondary", user.system_admin ? uiMessages.users.revokeAuthority : uiMessages.users.grantAuthority));
+      authority.addEventListener("submit", async (event) => { event.preventDefault(); if (!confirm(uiFormatters.authorityConfirmation(user.system_admin))) return;
         await mutation(`/api/admin/users/${id}/system-admin`, user.system_admin ? "DELETE" : "POST", { reason: authority.elements.reason.value, ...(user.system_admin ? { confirm: true } : {}) });
         await openDetail(id); await Promise.all([loadUsers(), loadSummary()]); }); body.append(authority);
     } catch (error) { body.textContent = errorMessage(error); }
@@ -149,7 +151,7 @@ export function setupUsersView({ api, badge, formatDate, showGlobal, onSessionRe
 
   async function loadSummary() {
     const payload = await api("/api/admin/users/authority-summary"); state.summary = payload.data;
-    $("#users-summary").textContent = `SYSTEM_ADMIN efektif: ${payload.data.effective_system_admins}. ${payload.data.you_are_last ? "Anda adalah administrator efektif terakhir; lakukan serah-terima sebelum demosi." : "Serah-terima kewenangan tersedia."}`;
+    $("#users-summary").textContent = uiFormatters.authoritySummary(payload.data.effective_system_admins, payload.data.you_are_last);
   }
 
   $("#users-filter").addEventListener("submit", (event) => { event.preventDefault(); void loadUsers(); });

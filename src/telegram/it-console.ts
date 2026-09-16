@@ -7,6 +7,10 @@ import type { ManagedUser, UserManagementStatus } from "../user-management/types
 import type { CollaborationRuleReader } from "../services/collaboration-rule-management.service.js";
 import { normalizeBusinessUserCode } from "../identity/business-user-code.js";
 import { hasSystemAdminCapability } from "../auth/system-admin-capability.js";
+import { commonMessages, formatActivePreview, formatAssignmentPreview, formatAssignmentUpdated, formatBusinessCodeConfirmation,
+  formatBusinessCodePrompt, formatCatalogPrompt, formatCollaborationRules, formatUserActiveNotice,
+  formatUserDetail, formatUserDetailResponse, formatUserList, formatUserSummary, safeUserName,
+  telegramButtons, telegramItMessages } from "../messages/catalog.js";
 
 export interface TelegramConsoleResponse {
   text: string;
@@ -30,7 +34,7 @@ interface BusinessCodeState {
   expiresAt: number;
 }
 
-const unavailable = (): TelegramConsoleResponse => ({ text: "Perintah tidak tersedia." });
+const unavailable = (): TelegramConsoleResponse => ({ text: commonMessages.commandUnavailable });
 const button = (text: string, callback_data: string): TelegramInlineButton => ({ text, callback_data });
 const PAGE_SIZE = 5;
 
@@ -89,16 +93,16 @@ export class TelegramItConsoleService implements TelegramItConsole {
     const value = rawText.trim();
     if (/^\/cancel$/i.test(value)) {
       this.businessCodeStates.delete(externalTelegramId);
-      return { text: "Perubahan business user code dibatalkan.", inlineKeyboard: [[button("Back", `ac:d:${state.targetUserId}:a:0`)]] };
+      return { text: telegramItMessages.businessCodeCancelled, inlineKeyboard: [[button(telegramButtons.back, `ac:d:${state.targetUserId}:a:0`)]] };
     }
     try {
       state.proposedCode = /^NONE$/i.test(value) ? null : normalizeBusinessUserCode(value);
       state.expiresAt = Date.now() + 5 * 60_000;
-      return { text: `Konfirmasi Business User Code\n\nNilai baru: ${state.proposedCode ?? "Belum ditetapkan"}\n\nPerubahan kode yang sudah ada dapat memengaruhi integrasi.`,
-        inlineKeyboard: [[button("Confirm", `ac:kc:${state.targetUserId}`), button("Cancel", `ac:d:${state.targetUserId}:a:0`)]] };
+      return { text: formatBusinessCodeConfirmation(state.proposedCode),
+        inlineKeyboard: [[button(telegramButtons.confirm, `ac:kc:${state.targetUserId}`), button(telegramButtons.cancel, `ac:d:${state.targetUserId}:a:0`)]] };
     } catch (error) {
       if (error instanceof AppError && error.code === "BUSINESS_USER_CODE_INVALID") {
-        return { text: `${error.message}\n\nKirim kode yang valid, NONE untuk menghapus, atau /cancel.` };
+        return { text: `${error.message}\n\n${telegramItMessages.businessCodeInputHelp}` };
       }
       throw error;
     }
@@ -120,37 +124,37 @@ export class TelegramItConsoleService implements TelegramItConsole {
   }
 
   private mainMenu(): TelegramConsoleResponse {
-    return { text: "Sotoayam IT Console", inlineKeyboard: [
-      [button("User Management", "ac:u"), button("System Status", "ac:s")],
-      [button("Collaboration Rules", "ac:g")],
+    return { text: telegramItMessages.title, inlineKeyboard: [
+      [button(telegramItMessages.menu.userManagement, "ac:u"), button(telegramItMessages.menu.systemStatus, "ac:s")],
+      [button(telegramItMessages.menu.collaborationRules, "ac:g")],
     ] };
   }
 
   private userMenu(): TelegramConsoleResponse {
     return {
-      text: "User Management",
+      text: telegramItMessages.menu.userManagement,
       inlineKeyboard: [
-        [button("Pending Users", "ac:l:p:0")],
-        [button("Active Users", "ac:l:a:0"), button("Inactive Users", "ac:l:i:0")],
-        [button("Back", "ac:m")],
+        [button(telegramItMessages.buttons.pendingUsers, "ac:l:p:0")],
+        [button(telegramItMessages.buttons.activeUsers, "ac:l:a:0"), button(telegramItMessages.buttons.inactiveUsers, "ac:l:i:0")],
+        [button(telegramButtons.back, "ac:m")],
       ],
     };
   }
 
   private systemStatus(): TelegramConsoleResponse {
-    return { text: "System Status\n\nRuntime: Aktif\nUser Management: Tersedia", inlineKeyboard: [[button("Back", "ac:m")]] };
+    return { text: telegramItMessages.systemStatus, inlineKeyboard: [[button(telegramButtons.back, "ac:m")]] };
   }
 
   private collaborationMenu(): TelegramConsoleResponse {
-    return { text: "Collaboration Rules", inlineKeyboard: [[button("View Rules", "ac:gv")], [button("Back", "ac:m")]] };
+    return { text: telegramItMessages.menu.collaborationRules, inlineKeyboard: [[button(telegramItMessages.buttons.viewRules, "ac:gv")], [button(telegramButtons.back, "ac:m")]] };
   }
 
   private async collaborationList(): Promise<TelegramConsoleResponse> {
     if (!this.collaborationRules) return unavailable();
     const rules = await this.collaborationRules.list();
-    const text = rules.length === 0 ? "Collaboration Rules\n\nTidak ada rule."
-      : `Collaboration Rules\n\n${rules.map((rule) => `${rule.source_division.code} → ${rule.target_division.code}\nAllowed: ${rule.allowed ? "Yes" : "No"}\nApproval: ${rule.requires_approval ? "Required" : "No"}\nStatus: ${rule.active ? "Active" : "Inactive"}`).join("\n\n")}`;
-    return { text, inlineKeyboard: [[button("Back", "ac:g")]] };
+    const text = formatCollaborationRules(rules.map((rule) => ({ source: rule.source_division.code,
+      target: rule.target_division.code, allowed: rule.allowed, requiresApproval: rule.requires_approval, active: rule.active })));
+    return { text, inlineKeyboard: [[button(telegramButtons.back, "ac:g")]] };
   }
 
   private async userList(status: UserManagementStatus, requestedPage: number): Promise<TelegramConsoleResponse> {
@@ -158,17 +162,14 @@ export class TelegramItConsoleService implements TelegramItConsole {
     const pages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
     const page = Math.min(requestedPage, pages - 1);
     const visible = users.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-    const title = status === "pending" ? "Pending Users" : status === "active" ? "Active Users" : "Inactive Users";
-    const text = visible.length === 0
-      ? `${title}\n\nTidak ada user.`
-      : `${title}\n\n${visible.map((user, index) => this.userSummary(user, page * PAGE_SIZE + index + 1)).join("\n\n")}\n\nHalaman ${page + 1}/${pages}`;
+    const text = formatUserList(status, visible.map((user, index) => formatUserSummary(user, page * PAGE_SIZE + index + 1)), page, pages);
     const code = this.statusCode(status);
     const keyboard: TelegramInlineButton[][] = visible.map((user) => [button(this.safeName(user), `ac:d:${user.id}:${code}:${page}`)]);
     const navigation: TelegramInlineButton[] = [];
-    if (page > 0) navigation.push(button("Previous", `ac:l:${code}:${page - 1}`));
-    if (page + 1 < pages) navigation.push(button("Next", `ac:l:${code}:${page + 1}`));
+    if (page > 0) navigation.push(button(telegramButtons.previous, `ac:l:${code}:${page - 1}`));
+    if (page + 1 < pages) navigation.push(button(telegramButtons.next, `ac:l:${code}:${page + 1}`));
     if (navigation.length) keyboard.push(navigation);
-    keyboard.push([button("Back", "ac:u")]);
+    keyboard.push([button(telegramButtons.back, "ac:u")]);
     return { text, inlineKeyboard: keyboard };
   }
 
@@ -181,19 +182,19 @@ export class TelegramItConsoleService implements TelegramItConsole {
   private userDetailResponse(user: ManagedUser, status: UserManagementStatus, page: number, notice?: string): TelegramConsoleResponse {
     const id = user.id;
     const actions: TelegramInlineButton[][] = [
-      [button("Assign Division", `ac:x:d:${id}`), button("Assign Role", `ac:x:r:${id}`)],
-      [button("Business User Code", `ac:kb:${id}`)],
-      [user.active ? button("Deactivate", `ac:v:z:${id}`) : button("Activate", `ac:v:a:${id}`)],
-      [button("Back", `ac:l:${this.statusCode(status)}:${page}`)],
+      [button(telegramItMessages.buttons.assignDivision, `ac:x:d:${id}`), button(telegramItMessages.buttons.assignRole, `ac:x:r:${id}`)],
+      [button(telegramItMessages.buttons.businessUserCode, `ac:kb:${id}`)],
+      [user.active ? button(telegramItMessages.buttons.deactivate, `ac:v:z:${id}`) : button(telegramItMessages.buttons.activate, `ac:v:a:${id}`)],
+      [button(telegramButtons.back, `ac:l:${this.statusCode(status)}:${page}`)],
     ];
-    return { text: `${notice ? `${notice}\n\n` : ""}User Detail\n\n${this.userDetailText(user)}`, inlineKeyboard: actions };
+    return { text: formatUserDetailResponse(formatUserDetail(user), notice), inlineKeyboard: actions };
   }
 
   private async beginBusinessCode(externalTelegramId: number, actor: AuthorizedActor, id: number): Promise<TelegramConsoleResponse> {
     const user = await this.safeUser(id);
     if (!user) return unavailable();
     this.businessCodeStates.set(externalTelegramId, { actorUserId: actor.userId, targetUserId: id, proposedCode: undefined, expiresAt: Date.now() + 5 * 60_000 });
-    return { text: `Business User Code\n\nUser: ${this.safeName(user)}\nCurrent: ${user.business_user_code ?? "Belum ditetapkan"}\n\nKirim kode baru (3-40 karakter, huruf/angka/hyphen, diawali huruf). Kirim NONE untuk menghapus atau /cancel.` };
+    return { text: formatBusinessCodePrompt(user) };
   }
 
   private async confirmBusinessCode(externalTelegramId: number, actor: AuthorizedActor, id: number): Promise<TelegramConsoleResponse> {
@@ -204,7 +205,7 @@ export class TelegramItConsoleService implements TelegramItConsole {
     }
     const updated = await this.users.updateBusinessUserCode(id, { business_user_code: state.proposedCode, confirm_change: true }, "telegram_it_console", actor.userId);
     this.businessCodeStates.delete(externalTelegramId);
-    return this.userDetailResponse(updated, this.category(updated), 0, "Business user code berhasil diperbarui.");
+    return this.userDetailResponse(updated, this.category(updated), 0, telegramItMessages.businessCodeUpdated);
   }
 
   private async catalog(kind: string, id: number): Promise<TelegramConsoleResponse> {
@@ -213,10 +214,10 @@ export class TelegramItConsoleService implements TelegramItConsole {
     const catalogs = await this.users.catalogs();
     const entries = kind === "d" ? catalogs.divisions : catalogs.roles;
     return {
-      text: `${kind === "d" ? "Assign Division" : "Assign Role"}\n\nUser: ${this.safeName(user)}\nPilih dari katalog aktif:`,
+      text: formatCatalogPrompt(kind, safeUserName(user)),
       inlineKeyboard: [
         ...entries.map((entry) => [button(entry.name, `ac:v:${kind}:${id}:${entry.id}`)]),
-        [button("Cancel", `ac:d:${id}:${this.statusCode(this.category(user))}:0`)],
+        [button(telegramButtons.cancel, `ac:d:${id}:${this.statusCode(this.category(user))}:0`)],
       ],
     };
   }
@@ -226,10 +227,9 @@ export class TelegramItConsoleService implements TelegramItConsole {
     if (!user) return unavailable();
     const entry = (kind === "d" ? catalogs.divisions : catalogs.roles).find((item) => item.id === catalogId);
     if (!entry) return unavailable();
-    const label = kind === "d" ? "New Division" : "New Role";
     return {
-      text: `Konfirmasi Perubahan\n\nUser: ${this.safeName(user)}\n${label}: ${entry.code}`,
-      inlineKeyboard: [[button("Confirm", `ac:c:${kind}:${id}:${catalogId}`), button("Cancel", `ac:d:${id}:${this.statusCode(this.category(user))}:0`)]],
+      text: formatAssignmentPreview(kind, safeUserName(user), entry.code),
+      inlineKeyboard: [[button(telegramButtons.confirm, `ac:c:${kind}:${id}:${catalogId}`), button(telegramButtons.cancel, `ac:d:${id}:${this.statusCode(this.category(user))}:0`)]],
     };
   }
 
@@ -243,19 +243,19 @@ export class TelegramItConsoleService implements TelegramItConsole {
       role_id: kind === "r" ? catalogId : user.role?.id ?? null,
       active: user.active,
     }, "telegram_it_console", actor.userId);
-    return this.userDetailResponse(updated, this.category(updated), 0, `${kind === "d" ? "Division" : "Role"} berhasil diperbarui.`);
+    return this.userDetailResponse(updated, this.category(updated), 0, formatAssignmentUpdated(kind));
   }
 
   private async activePreview(kind: string, id: number): Promise<TelegramConsoleResponse> {
     const user = await this.safeUser(id);
     if (!user) return unavailable();
     if (kind === "a" && (!user.division || !user.role)) {
-      return { text: "User belum dapat diaktifkan. Tetapkan Divisi dan Role terlebih dahulu.", inlineKeyboard: [[button("Back", `ac:d:${id}:${this.statusCode(this.category(user))}:0`)]] };
+      return { text: telegramItMessages.activationUnavailable, inlineKeyboard: [[button(telegramButtons.back, `ac:d:${id}:${this.statusCode(this.category(user))}:0`)]] };
     }
-    const verb = kind === "a" ? "Activate" : "Deactivate";
+    const verb = kind === "a" ? telegramItMessages.buttons.activate : telegramItMessages.buttons.deactivate;
     return {
-      text: `${verb} user?\n\nUser: ${this.safeName(user)}\nDivision: ${user.division?.code ?? "Belum ditetapkan"}\nRole: ${user.role?.code ?? "Belum ditetapkan"}`,
-      inlineKeyboard: [[button(verb, `ac:c:${kind}:${id}`), button("Cancel", `ac:d:${id}:${this.statusCode(this.category(user))}:0`)]],
+      text: formatActivePreview(kind === "a", user),
+      inlineKeyboard: [[button(verb, `ac:c:${kind}:${id}`), button(telegramButtons.cancel, `ac:d:${id}:${this.statusCode(this.category(user))}:0`)]],
     };
   }
 
@@ -264,7 +264,7 @@ export class TelegramItConsoleService implements TelegramItConsole {
     if (!user) return unavailable();
     const active = kind === "a";
     if (active && (!user.division || !user.role)) {
-      return { text: "User belum dapat diaktifkan. Tetapkan Divisi dan Role terlebih dahulu." };
+      return { text: telegramItMessages.activationUnavailable };
     }
     try {
       const updated = await this.users.updateAccess(id, {
@@ -272,14 +272,14 @@ export class TelegramItConsoleService implements TelegramItConsole {
         role_id: user.role?.id ?? null,
         active,
       }, "telegram_it_console", actor.userId);
-      return this.userDetailResponse(updated, this.category(updated), 0, `User berhasil ${active ? "diaktifkan" : "dinonaktifkan"}.`);
+      return this.userDetailResponse(updated, this.category(updated), 0, formatUserActiveNotice(active));
     } catch (error) {
       if (error instanceof AppError && error.code === "SELF_DEACTIVATION_FORBIDDEN") {
-        return { text: "Akun administrator yang sedang digunakan tidak dapat menonaktifkan dirinya sendiri.",
-          inlineKeyboard: [[button("Back", "ac:u")]] };
+        return { text: telegramItMessages.selfDeactivationForbidden,
+          inlineKeyboard: [[button(telegramButtons.back, "ac:u")]] };
       }
       if (error instanceof AppError && ["GOVERNANCE_INVARIANT", "LAST_SYSTEM_ADMIN"].includes(error.code)) {
-        return { text: "User ini tidak dapat dinonaktifkan karena merupakan SYSTEM_ADMIN aktif terakhir.", inlineKeyboard: [[button("Back", "ac:u")]] };
+        return { text: telegramItMessages.lastSystemAdmin, inlineKeyboard: [[button(telegramButtons.back, "ac:u")]] };
       }
       throw error;
     }
@@ -293,16 +293,8 @@ export class TelegramItConsoleService implements TelegramItConsole {
     });
   }
 
-  private userSummary(user: ManagedUser, index: number): string {
-    return `${index}. ${this.safeName(user)}\nDivision: ${user.division?.code ?? "Belum ditetapkan"}\nRole: ${user.role?.code ?? "Belum ditetapkan"}\nStatus: ${user.active ? "Aktif" : "Tidak aktif"}\nTelegram Connected: ${user.telegram_connected ? "Yes" : "No"}`;
-  }
-
-  private userDetailText(user: ManagedUser): string {
-    return `Name: ${this.safeName(user)}\nBusiness User Code: ${user.business_user_code ?? "Belum ditetapkan"}\nTelegram Connected: ${user.telegram_connected ? "Yes" : "No"}\nDivision: ${user.division?.code ?? "Belum ditetapkan"}\nRole: ${user.role?.code ?? "Belum ditetapkan"}\nStatus: ${user.active ? "Aktif" : "Tidak aktif"}`;
-  }
-
   private safeName(user: ManagedUser): string {
-    return user.display_name?.trim() || "User tanpa nama";
+    return safeUserName(user);
   }
 
   private category(user: ManagedUser): UserManagementStatus {

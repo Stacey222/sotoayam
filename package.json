@@ -30,6 +30,7 @@
     "check:go-live-stage2-schema": "tsx scripts/check-go-live-stage2-schema.ts",
     "check:first-admin-bootstrap": "tsx scripts/check-first-admin-bootstrap.ts",
     "check:secrets": "tsx scripts/check-secrets.ts",
+    "check:message-catalog": "tsx scripts/check-message-catalog.ts",
     "check:reconciliation": "tsx scripts/reconcile-legacy.ts",
     "check:migration-baseline": "tsx scripts/check-migration-baseline.ts",
     "check:clean-migrations": "tsx scripts/check-clean-migrations.ts",

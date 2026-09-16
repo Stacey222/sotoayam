@@ -1,15 +1,15 @@
 import { createApiClient, loadResources, loginErrorMessage, taskSummary } from "./ui-core.js";
 import { setupUsersView } from "./users.js";
 import { setupSettingsView } from "./settings.js";
+import { statusLabels, uiFormatters, uiMessages } from "./messages.js";
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const state = { authenticated: false, principal: null, tasks: [], integrations: [] };
-const titles = { dashboard: "Dashboard", tasks: "Tugas", integrations: "Integrasi",
-  notifications: "Notifikasi / Aktivitas", users: "Pengguna", system: "Sistem" };
+const titles = uiMessages.navigation;
 
 const api = createApiClient({ onUnauthorized: () => {
-  if (state.authenticated) showLogin("Sesi Anda telah berakhir. Silakan masuk kembali.");
+  if (state.authenticated) showLogin(uiMessages.auth.sessionExpired);
 } });
 let usersView;
 let settingsView;
@@ -23,11 +23,6 @@ function element(tag, className, text) {
 
 function badge(value) {
   const normalized = String(value || "UNKNOWN").toLowerCase();
-  const labels = { in_progress: "Dikerjakan", open: "Terbuka", blocked: "Terhambat", completed: "Selesai",
-    cancelled: "Dibatalkan", draft: "Draf", active: "Aktif", inactive: "Nonaktif", pending: "Tertunda",
-    processing: "Diproses", delivered: "Terkirim", failed: "Gagal", unrouted: "Belum dirutekan",
-    healthy: "Sehat", degraded: "Perlu perhatian", unhealthy: "Bermasalah", warning: "Peringatan",
-    high: "Tinggi", critical: "Kritis", acknowledged: "Diakui", expired: "Kedaluwarsa", revoked: "Dicabut" };
   const tones = { open: "bg-blue-lt", in_progress: "bg-azure-lt", blocked: "bg-red-lt", completed: "bg-green-lt",
     cancelled: "bg-secondary-lt", draft: "bg-secondary-lt", active: "bg-green-lt", inactive: "bg-secondary-lt",
     pending: "bg-yellow-lt", processing: "bg-blue-lt", delivered: "bg-green-lt", failed: "bg-red-lt",
@@ -35,7 +30,7 @@ function badge(value) {
     warning: "bg-yellow-lt", high: "bg-orange-lt", critical: "bg-red-lt", acknowledged: "bg-blue-lt",
     expired: "bg-secondary-lt", revoked: "bg-red-lt" };
   return element("span", `badge ${tones[normalized] || "bg-secondary-lt"}`,
-    labels[normalized] || String(value || "Belum tersedia"));
+    statusLabels[normalized] || String(value || uiMessages.common.unavailable));
 }
 
 function formatDate(value, includeTime = false) {
@@ -45,16 +40,16 @@ function formatDate(value, includeTime = false) {
     : { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
 }
 
-function unavailable(container, detail = "Data belum tersedia dari layanan saat ini.") {
+function unavailable(container, detail = uiMessages.common.unavailableDetail) {
   const box = element("div", "alert alert-secondary mb-0 unavailable");
-  box.append(element("strong", "", "Belum tersedia"), element("span", "", detail));
+  box.append(element("strong", "", uiMessages.common.unavailable), element("span", "", detail));
   container.replaceChildren(box);
   container.classList.remove("loading");
 }
 
 function emptyState(container, detail) {
   const box = element("div", "empty py-4");
-  box.append(element("p", "empty-title", "Belum ada data"), element("p", "empty-subtitle text-secondary", detail));
+  box.append(element("p", "empty-title", uiMessages.common.emptyTitle), element("p", "empty-subtitle text-secondary", detail));
   container.replaceChildren(box);
   container.classList.remove("loading");
 }
@@ -91,7 +86,7 @@ function enterApplication(principal) {
   }
   $("#password-change-view").hidden = true;
   $("#app-shell").hidden = false;
-  $("#account-name").textContent = principal.display_name || "Administrator";
+  $("#account-name").textContent = principal.display_name || uiMessages.common.administrator;
   $("#account-email").textContent = principal.email || "";
   $("#account-avatar").textContent = (principal.display_name || principal.email || "A").trim().charAt(0).toUpperCase();
   navigate(location.hash.slice(1) || "dashboard");
@@ -126,13 +121,13 @@ function renderDashboardTasks(tasks) {
   const container = $("#dashboard-tasks");
   const active = tasks.filter((task) => !["COMPLETED", "CANCELLED"].includes(task.status))
     .sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at)).slice(0, 6);
-  if (active.length === 0) return emptyState(container, "Tidak ada tugas aktif yang dapat ditampilkan.");
+  if (active.length === 0) return emptyState(container, uiMessages.dashboard.noActiveTasks);
   const list = element("div", "task-list");
   for (const task of active) {
     const row = element("div", "task-row");
     const copy = element("div");
     copy.append(element("p", "item-title", task.title), element("p", "item-meta",
-      `Tugas #${task.id} · Diperbarui ${formatDate(task.updated_at, true)}`));
+      uiFormatters.taskUpdated(task.id, formatDate(task.updated_at, true))));
     row.append(copy, badge(task.status), badge(task.priority));
     list.append(row);
   }
@@ -142,15 +137,15 @@ function renderDashboardTasks(tasks) {
 
 function renderDashboardAlerts(resource) {
   const container = $("#dashboard-alerts");
-  if (!resource.available) return unavailable(container, "Endpoint peringatan belum dapat diakses oleh sesi ini.");
+  if (!resource.available) return unavailable(container, uiMessages.dashboard.alertsForbidden);
   const alerts = Array.isArray(resource.data) ? resource.data.slice(0, 5) : [];
-  if (alerts.length === 0) return emptyState(container, "Tidak ada peringatan operasional aktif.");
+  if (alerts.length === 0) return emptyState(container, uiMessages.dashboard.noAlerts);
   const list = element("div", "alert-list");
   for (const alert of alerts) {
     const row = element("div", "alert-row");
     const copy = element("div");
     copy.append(element("p", "item-title", alert.summary || alert.type),
-      element("p", "item-meta", `${alert.affectedReference || "Operasional"} · ${formatDate(alert.lastDetectedAt, true)}`));
+      element("p", "item-meta", uiFormatters.alertMeta(alert.affectedReference, formatDate(alert.lastDetectedAt, true))));
     row.append(badge(alert.severity), copy);
     list.append(row);
   }
@@ -159,8 +154,8 @@ function renderDashboardAlerts(resource) {
 }
 
 async function loadDashboard() {
-  setLoading($("#dashboard-tasks"), "Memuat tugas…");
-  setLoading($("#dashboard-alerts"), "Memuat peringatan…");
+  setLoading($("#dashboard-tasks"), uiMessages.dashboard.loadingTasks);
+  setLoading($("#dashboard-alerts"), uiMessages.dashboard.loadingAlerts);
   const resources = await loadResources(api, [
     { key: "tasks", path: "/api/tasks" },
     { key: "integrations", path: "/api/admin/integrations" },
@@ -174,37 +169,37 @@ async function loadDashboard() {
     state.tasks = Array.isArray(resources.tasks.data) ? resources.tasks.data : [];
     const summary = taskSummary(state.tasks);
     $("#metric-task-total").textContent = String(summary.total);
-    $("#metric-task-detail").textContent = `${summary.active} aktif · ${summary.overdue} terlambat · ${summary.completed} selesai`;
+    $("#metric-task-detail").textContent = uiFormatters.taskMetrics(summary);
     renderDashboardTasks(state.tasks);
   } else {
-    $("#metric-task-total").textContent = "—";
-    $("#metric-task-detail").textContent = "Belum tersedia";
+    $("#metric-task-total").textContent = uiMessages.common.dash;
+    $("#metric-task-detail").textContent = uiMessages.common.unavailable;
     unavailable($("#dashboard-tasks"));
   }
   if (resources.integrations.available) {
     state.integrations = Array.isArray(resources.integrations.data) ? resources.integrations.data : [];
     const active = state.integrations.filter((item) => item.active).length;
     $("#metric-integration-active").textContent = String(active);
-    $("#metric-integration-detail").textContent = `${state.integrations.length} integrasi terdaftar`;
+    $("#metric-integration-detail").textContent = uiFormatters.integrationMetrics(state.integrations.length);
   } else {
-    $("#metric-integration-active").textContent = "—";
-    $("#metric-integration-detail").textContent = "Belum tersedia";
+    $("#metric-integration-active").textContent = uiMessages.common.dash;
+    $("#metric-integration-detail").textContent = uiMessages.common.unavailable;
   }
   if (resources.notifications.available) {
     const data = resources.notifications.data;
     $("#metric-notification-pending").textContent = String(Number(data.pending || 0) + Number(data.processing || 0));
-    $("#metric-notification-detail").textContent = `${Number(data.failed || 0)} gagal · ${Number(data.delivered || 0)} terkirim`;
+    $("#metric-notification-detail").textContent = uiFormatters.notificationMetrics(Number(data.failed || 0), Number(data.delivered || 0));
   } else {
-    $("#metric-notification-pending").textContent = "—";
-    $("#metric-notification-detail").textContent = "Belum tersedia";
+    $("#metric-notification-pending").textContent = uiMessages.common.dash;
+    $("#metric-notification-detail").textContent = uiMessages.common.unavailable;
   }
   if (resources.health.available) {
-    $("#metric-health").textContent = resources.health.data.status === "ok" ? "Sehat" : "Perlu perhatian";
+    $("#metric-health").textContent = resources.health.data.status === "ok" ? uiMessages.dashboard.healthy : uiMessages.dashboard.attention;
     $("#metric-health-detail").textContent = resources.automation.available
-      ? `Otomasi: ${resources.automation.data.overall || "belum tersedia"}` : "Runtime aktif · detail otomasi belum tersedia";
+      ? `Otomasi: ${resources.automation.data.overall || "belum tersedia"}` : uiMessages.dashboard.automationUnavailable;
   } else {
-    $("#metric-health").textContent = "—";
-    $("#metric-health-detail").textContent = "Belum tersedia";
+    $("#metric-health").textContent = uiMessages.common.dash;
+    $("#metric-health-detail").textContent = uiMessages.common.unavailable;
   }
   renderDashboardAlerts(resources.alerts);
 }
@@ -217,23 +212,23 @@ function taskRow(task) {
   const status = element("td"); status.append(badge(task.status));
   const priority = element("td"); priority.append(badge(task.priority));
   row.append(title, status, priority, element("td", "", `Divisi #${task.owner_division_id}`),
-    element("td", "", task.deadline ? formatDate(task.deadline, true) : "Tanpa tenggat"));
+    element("td", "", task.deadline ? formatDate(task.deadline, true) : uiMessages.tasks.noDeadline));
   return row;
 }
 
 async function loadTasks() {
   const holder = $("#tasks-state");
   const body = $("#task-rows");
-  body.replaceChildren(); setLoading(holder, "Memuat tugas…");
+  body.replaceChildren(); setLoading(holder, uiMessages.tasks.loading);
   const status = $("#task-status").value;
   try {
     const payload = await api(`/api/tasks${status ? `?status=${encodeURIComponent(status)}` : ""}`);
     state.tasks = Array.isArray(payload.data) ? payload.data : [];
-    if (state.tasks.length === 0) return emptyState(holder, "Tidak ada tugas untuk filter ini.");
+    if (state.tasks.length === 0) return emptyState(holder, uiMessages.tasks.empty);
     body.replaceChildren(...state.tasks.map(taskRow));
     holder.hidden = true;
   } catch (error) {
-    if (error.status !== 401) unavailable(holder, "Daftar tugas tidak dapat dimuat saat ini.");
+    if (error.status !== 401) unavailable(holder, uiMessages.tasks.loadFailed);
   }
 }
 
@@ -241,45 +236,45 @@ async function loadCredentials(integration) {
   const panel = $("#credential-panel");
   const list = $("#credential-list");
   panel.hidden = false;
-  $("#credential-title").textContent = `Metadata kredensial · ${integration.name}`;
-  setLoading(list, "Memuat metadata kredensial…");
+  $("#credential-title").textContent = uiFormatters.credentialTitle(integration.name);
+  setLoading(list, uiMessages.integrations.credentialLoading);
   try {
     const payload = await api(`/api/admin/integrations/${integration.id}/credentials`);
     const credentials = Array.isArray(payload.data) ? payload.data : [];
-    if (credentials.length === 0) return emptyState(list, "Belum ada metadata kredensial untuk integrasi ini.");
+    if (credentials.length === 0) return emptyState(list, uiMessages.integrations.credentialEmpty);
     const wrapper = element("div", "credential-list");
     for (const credential of credentials) {
       const row = element("div", "credential-row");
       const copy = element("div");
       copy.append(element("p", "item-title", credential.label), element("p", "item-meta",
-        `Selector ${credential.selector} · Terakhir dipakai ${formatDate(credential.last_used_at, true)}`));
+        uiFormatters.credentialMeta(credential.selector, formatDate(credential.last_used_at, true))));
       row.append(copy, badge(credential.status)); wrapper.append(row);
     }
     list.className = "card-body"; list.replaceChildren(wrapper);
   } catch (error) {
-    if (error.status !== 401) unavailable(list, "Metadata kredensial tidak dapat diakses.");
+    if (error.status !== 401) unavailable(list, uiMessages.integrations.credentialForbidden);
   }
 }
 
 async function loadIntegrations() {
   const holder = $("#integrations-state"); const body = $("#integration-rows");
-  body.replaceChildren(); $("#credential-panel").hidden = true; setLoading(holder, "Memuat integrasi…");
+  body.replaceChildren(); $("#credential-panel").hidden = true; setLoading(holder, uiMessages.integrations.loading);
   try {
     const payload = await api("/api/admin/integrations");
     state.integrations = Array.isArray(payload.data) ? payload.data : [];
-    if (state.integrations.length === 0) return emptyState(holder, "Belum ada integrasi yang terdaftar.");
+    if (state.integrations.length === 0) return emptyState(holder, uiMessages.integrations.empty);
     for (const integration of state.integrations) {
       const row = document.createElement("tr");
       const name = element("td"); name.append(element("span", "cell-title", integration.name), element("span", "cell-subtitle", integration.code));
       const status = element("td"); status.append(badge(integration.active ? "ACTIVE" : "INACTIVE"));
-      const action = element("td"); const button = element("button", "table-action", "Lihat metadata");
+      const action = element("td"); const button = element("button", "table-action", uiMessages.integrations.viewMetadata);
       button.type = "button"; button.dataset.integrationId = String(integration.id); action.append(button);
       row.append(name, element("td", "", integration.source), element("td", "", `Divisi #${integration.requesting_division_id}`), status, action);
       body.append(row);
     }
     holder.hidden = true;
   } catch (error) {
-    if (error.status !== 401) unavailable(holder, "Daftar integrasi tidak dapat dimuat saat ini.");
+    if (error.status !== 401) unavailable(holder, uiMessages.integrations.loadFailed);
   }
 }
 
@@ -297,7 +292,7 @@ function metricCard(label, value, detail, tone) {
 
 async function loadNotifications() {
   const metrics = $("#notification-metrics"); const body = $("#notification-rows"); const holder = $("#notifications-state");
-  metrics.replaceChildren(); body.replaceChildren(); setLoading(holder, "Memuat aktivitas…");
+  metrics.replaceChildren(); body.replaceChildren(); setLoading(holder, uiMessages.notifications.loading);
   const resources = await loadResources(api, [
     { key: "status", path: "/api/admin/notifications/status" },
     { key: "recent", path: "/api/admin/notifications/recent?limit=25" },
@@ -305,16 +300,16 @@ async function loadNotifications() {
   if (!state.authenticated) return;
   if (resources.status.available) {
     const data = resources.status.data;
-    metrics.append(metricCard("Tertunda", Number(data.pending || 0), `${Number(data.processing || 0)} sedang diproses`, "amber"),
-      metricCard("Terkirim", Number(data.delivered || 0), "Delivery selesai", "green"),
-      metricCard("Gagal", Number(data.failed || 0), "Memerlukan perhatian", "violet"),
-      metricCard("Belum dirutekan", Number(data.unrouted_escalations || 0), "Eskalasi tanpa tujuan", "blue"));
+    metrics.append(metricCard(uiMessages.notifications.pending, Number(data.pending || 0), uiFormatters.processingCount(Number(data.processing || 0)), "amber"),
+      metricCard(uiMessages.notifications.sent, Number(data.delivered || 0), uiMessages.notifications.deliveryFinished, "green"),
+      metricCard(uiMessages.notifications.failed, Number(data.failed || 0), uiMessages.notifications.attention, "violet"),
+      metricCard(uiMessages.notifications.unrouted, Number(data.unrouted_escalations || 0), uiMessages.notifications.noDestination, "blue"));
   } else {
-    metrics.append(metricCard("Status notifikasi", "—", "Belum tersedia", "amber"));
+    metrics.append(metricCard(uiMessages.notifications.status, uiMessages.common.dash, uiMessages.common.unavailable, "amber"));
   }
-  if (!resources.recent.available) return unavailable(holder, "Aktivitas notifikasi belum dapat diakses.");
+  if (!resources.recent.available) return unavailable(holder, uiMessages.notifications.forbidden);
   const recent = Array.isArray(resources.recent.data) ? resources.recent.data : [];
-  if (recent.length === 0) return emptyState(holder, "Belum ada aktivitas notifikasi.");
+  if (recent.length === 0) return emptyState(holder, uiMessages.notifications.empty);
   for (const item of recent) {
     const row = document.createElement("tr"); const routing = element("td"); routing.append(badge(item.routing_status));
     const delivery = element("td"); delivery.append(badge(item.state));
@@ -333,7 +328,7 @@ function systemCard(title, status, detail) {
 }
 
 async function loadSystem() {
-  const grid = $("#system-grid"); grid.replaceChildren(systemCard("Aplikasi", "PROCESSING", "Memeriksa kesehatan…"));
+  const grid = $("#system-grid"); grid.replaceChildren(systemCard(uiMessages.system.application, "PROCESSING", uiMessages.system.checking));
   const resources = await loadResources(api, [
     { key: "health", path: "/health" },
     { key: "readiness", path: "/ready", options: { acceptStatuses: [503] } },
@@ -342,37 +337,36 @@ async function loadSystem() {
   ]);
   if (!state.authenticated) return;
   grid.replaceChildren();
-  grid.append(systemCard("Aplikasi", resources.health.available && resources.health.data.status === "ok" ? "HEALTHY" : "UNHEALTHY",
-    resources.health.available ? "Endpoint /health merespons." : "Health tidak dapat diakses."));
+  grid.append(systemCard(uiMessages.system.application, resources.health.available && resources.health.data.status === "ok" ? "HEALTHY" : "UNHEALTHY",
+    resources.health.available ? uiMessages.system.healthResponding : uiMessages.system.healthUnavailable));
   const readinessCard = $("#readiness-card");
   if (resources.readiness.available) {
     const readiness = resources.readiness.data;
     const checks = readiness.checks || {};
-    const warningText = Array.isArray(readiness.warnings) && readiness.warnings.length > 0
-      ? `Peringatan: ${readiness.warnings.join(", ")}` : "Tidak ada peringatan runtime.";
+    const warningText = uiFormatters.readinessWarnings(Array.isArray(readiness.warnings) ? readiness.warnings : []);
     readinessCard.replaceChildren(
       badge(readiness.status),
-      element("p", "mt-3 mb-1", `Database ${checks.database || "SKIPPED"} · Schema ${checks.schema || "SKIPPED"} · Rute inti ${checks.core_routes || "SKIPPED"}`),
+      element("p", "mt-3 mb-1", uiFormatters.readinessChecks(checks)),
       element("small", "text-secondary", warningText),
     );
   } else {
-    readinessCard.replaceChildren(element("div", "alert alert-danger mb-0", "Kesiapan layanan tidak dapat diperiksa."));
+    readinessCard.replaceChildren(element("div", "alert alert-danger mb-0", uiMessages.system.readinessUnavailable));
   }
   if (resources.automation.available) {
     const data = resources.automation.data;
-    grid.append(systemCard("Telegram polling", data.telegramPolling, "Status runtime polling yang tersedia."),
-      systemCard("Scheduler pengingat", data.reminderScheduler, "Kondisi otomasi pengingat."),
-      systemCard("Evaluator peringatan", data.criticalAlertEvaluator, "Kondisi evaluasi alert."),
-      systemCard("Delivery notifikasi", data.notificationDelivery, "Kondisi delivery tersimpan."),
-      systemCard("Integrasi aktif", data.activeIntegrations, "Jumlah dari status otomasi."));
+    grid.append(systemCard(uiMessages.system.telegramPolling, data.telegramPolling, uiMessages.system.pollingDetail),
+      systemCard(uiMessages.system.reminderScheduler, data.reminderScheduler, uiMessages.system.reminderDetail),
+      systemCard(uiMessages.system.alertEvaluator, data.criticalAlertEvaluator, uiMessages.system.alertDetail),
+      systemCard(uiMessages.system.notificationDelivery, data.notificationDelivery, uiMessages.system.deliveryDetail),
+      systemCard(uiMessages.system.activeIntegrations, data.activeIntegrations, uiMessages.system.integrationCountDetail));
   } else {
-    grid.append(systemCard("Telegram polling", "Belum tersedia", "Endpoint status otomasi tidak dapat diakses."),
-      systemCard("Runtime integrasi", "Belum tersedia", "Detail runtime belum tersedia untuk sesi ini."));
+    grid.append(systemCard(uiMessages.system.telegramPolling, uiMessages.common.unavailable, uiMessages.system.automationUnavailable),
+      systemCard(uiMessages.system.integrationRuntime, uiMessages.common.unavailable, uiMessages.system.runtimeUnavailable));
   }
   if (resources.notifications.available) {
     const scheduler = resources.notifications.data.scheduler || {};
-    grid.append(systemCard("Scheduler notifikasi", scheduler.enabled ? scheduler.last_status : "DEGRADED",
-      scheduler.enabled ? `Terakhir selesai ${formatDate(scheduler.last_completed_at, true)}` : "Scheduler dinonaktifkan."));
+    grid.append(systemCard(uiMessages.system.notificationScheduler, scheduler.enabled ? scheduler.last_status : "DEGRADED",
+      scheduler.enabled ? uiFormatters.schedulerCompleted(formatDate(scheduler.last_completed_at, true)) : uiMessages.system.schedulerDisabled));
   }
   await settingsView.load();
 }
@@ -380,7 +374,7 @@ async function loadSystem() {
 $("#login-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const submit = $("#login-submit"); const notice = $("#login-notice");
-  notice.hidden = true; submit.disabled = true; submit.textContent = "Memeriksa…";
+  notice.hidden = true; submit.disabled = true; submit.textContent = uiMessages.auth.checking;
   try {
     const payload = await api("/api/admin/auth/login", { method: "POST", handleUnauthorized: false,
       body: JSON.stringify({ email: $("#login-email").value.trim(), password: $("#login-password").value }) });
@@ -388,17 +382,17 @@ $("#login-form").addEventListener("submit", async (event) => {
   } catch (error) {
     notice.classList.remove("info"); notice.textContent = loginErrorMessage(error); notice.hidden = false;
   } finally {
-    submit.disabled = false; submit.textContent = "Masuk ke Sotoayam";
+    submit.disabled = false; submit.textContent = uiMessages.auth.login;
   }
 });
 
 async function logout() {
   try {
     await api("/api/admin/auth/logout", { method: "POST", handleUnauthorized: false });
-    showLogin("Anda telah keluar dari Sotoayam.", true);
+    showLogin(uiMessages.auth.loggedOut, true);
   } catch (error) {
-    if (error.status === 401) showLogin("Sesi Anda telah berakhir. Silakan masuk kembali.");
-    else showGlobal("Logout belum berhasil. Periksa koneksi lalu coba lagi.");
+    if (error.status === 401) showLogin(uiMessages.auth.sessionExpired);
+    else showGlobal(uiMessages.auth.logoutFailed);
   }
 }
 
@@ -413,7 +407,7 @@ $("#required-password-form").addEventListener("submit", async (event) => {
     $("#current-password").value = ""; $("#new-password").value = "";
     enterApplication({ ...state.principal, password_change_required: false });
   } catch (error) {
-    notice.textContent = error.message || "Kata sandi belum dapat diubah."; notice.hidden = false;
+    notice.textContent = error.message || uiMessages.auth.passwordChangeFailed; notice.hidden = false;
   }
 });
 

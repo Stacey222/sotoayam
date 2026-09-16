@@ -1,6 +1,6 @@
 # SOTOAYAM ROADMAP
 Version: 1.0-draft  
-Current phase: Phase 1 — Security & Reliability
+Current phase: Phase 2 — Productization
 
 Legend:
 - `[ ]` Not started
@@ -85,10 +85,12 @@ Legend:
 - [x] P1-08 End-to-end request/event/intent correlation IDs.
   Owner: Codex
   Note: notification intake uses the Fastify request ID and existing external event, notification-event, notification-intent, and delivery identifiers in structured logs through Telegram outcomes. Background retries recover event correlation through the existing database relationship; no schema or idempotency change was required.
-- [ ] P1-09 Migration tests against clean throwaway Postgres.
+- [x] P1-09 Migration tests against clean throwaway Postgres.
   Owner: Codex
-- [ ] P1-10 Adversarial review of auth/intake/integration rewrite.
+  Note: the isolated loopback PostgreSQL harness applies the complete migration chain twice and verifies schema, RLS, grants, RPCs, bootstrap, and current hard invariants without contacting linked development Supabase.
+- [x] P1-10 Adversarial review of auth/intake/integration rewrite.
   Owner: Antigravity
+  Note: closed by `docs/reviews/Phase-1-release-readiness.md`; the confirmed Telegram failure-classification defect was corrected, readiness negative caching was accepted as bounded staleness, and unstable tests were hardened without weakening production behavior.
 
 ## Phase 2 — Productization
 
@@ -98,9 +100,9 @@ Legend:
 - [x] P2-01 Define and implement runtime settings surface for legitimate customer settings.
   Owner: Claude Code scope -> Codex implement
   Note: implemented from `docs/adr/P2-01-runtime-settings-owner-actors.md` with migration #21, a three-setting runtime allowlist, hot reload, exact session OWNER actors, designated shared-key GET compatibility, and guarded OWNER/SYSTEM_ADMIN separation.
-- [ ] P2-02 Extract maintainable Sotoayam message/string catalog.
+- [x] P2-02 Extract maintainable Sotoayam message/string catalog.
   Owner: Z.AI inventory -> Codex
-  Note: full white-label branding is not required for v1.0.
+  Note: implemented from `docs/adr/P2-02-message-string-catalog.md` with typed server domain catalogs, a vanilla-browser catalog, pure output formatters, exact-output regression coverage, and a bounded duplicate-literal check. Runtime customization, localization infrastructure, and full white-label branding remain out of scope for v1.0.
 - [ ] P2-03 Normalize notification preferences where necessary.
   Owner: Claude Code design -> Codex migrate
 - [ ] P2-04 API reference for all route groups.

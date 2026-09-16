@@ -4,6 +4,7 @@ import type { ReminderCandidate, ReminderEvaluationResult } from "../reminders/t
 import { TaskReminderPolicy } from "../reminders/reminder-policy.js";
 import type { NotificationDeliveryService } from "./notification-delivery.service.js";
 import type { ReminderRoutingService } from "./reminder-routing.service.js";
+import { formatReminderMessage } from "../messages/catalog.js";
 
 const emptyResult = (dryRun: boolean): ReminderEvaluationResult => ({ dry_run: dryRun, tasks_evaluated: 0,
   reminder_candidates: 0, escalation_candidates: 0, notifications_created: 0, unrouted: 0,
@@ -48,7 +49,8 @@ export class ReminderEvaluatorService {
         const created = await this.notifications.createIntent({ taskId: candidate.task.id, eventType: candidate.eventType,
           recipientUserId: recipient.userId, dedupeKey: this.dedupe(candidate, recipient.userId),
           routingFailureCode: recipient.reason ?? null,
-          message: this.message(candidate), occurrenceAt: candidate.occurrenceAt.toISOString(),
+          message: formatReminderMessage({ eventType: candidate.eventType, title: candidate.task.title,
+            status: candidate.task.status, priority: candidate.task.priority, deadline: candidate.task.deadline }), occurrenceAt: candidate.occurrenceAt.toISOString(),
           nextEligibleAt: candidate.nextEligibleAt.toISOString() });
         if (created.created) result.notifications_created += 1;
       }
@@ -70,10 +72,5 @@ export class ReminderEvaluatorService {
 
   private dedupe(candidate: ReminderCandidate, recipientUserId: number | null): string {
     return createHash("sha256").update([candidate.task.id, candidate.eventType, recipientUserId ?? "UNROUTED", candidate.occurrenceAt.toISOString()].join(":"), "utf8").digest("hex");
-  }
-  private message(candidate: ReminderCandidate): string {
-    const heading = candidate.eventType === "TASK_ESCALATION" ? "Eskalasi tugas" : "Pengingat tugas";
-    const deadline = candidate.task.deadline ? `\nDeadline: ${candidate.task.deadline.slice(0, 10)}` : "";
-    return `${heading}\n\n${candidate.task.title}\nStatus: ${candidate.task.status}\nPrioritas: ${candidate.task.priority}${deadline}`;
   }
 }

@@ -7,6 +7,9 @@ import type { PersistedAlertSeverity } from "../alerts/types.js";
 import type { TelegramTaskActorResolver } from "../services/task-actor.service.js";
 import type { TelegramInlineButton } from "../services/telegram.service.js";
 import type { TelegramConsoleResponse } from "./it-console.js";
+import { commonMessages, compactMessageText, formatAffiliateReport, formatAlertDetail, formatAlertList,
+  formatAutomationStatus, formatReportDrillDown, reportWindowLabel, telegramButtons,
+  telegramOwnerMessages } from "../messages/catalog.js";
 
 export interface TelegramOwnerConsole {
   open(externalTelegramId: number): Promise<TelegramConsoleResponse>;
@@ -14,7 +17,7 @@ export interface TelegramOwnerConsole {
 }
 
 const button = (text: string, callback_data: string): TelegramInlineButton => ({ text, callback_data });
-const unavailable = (): TelegramConsoleResponse => ({ text: "Perintah tidak tersedia." });
+const unavailable = (): TelegramConsoleResponse => ({ text: commonMessages.commandUnavailable });
 
 export class TelegramOwnerConsoleService implements TelegramOwnerConsole {
   constructor(
@@ -67,50 +70,48 @@ export class TelegramOwnerConsoleService implements TelegramOwnerConsole {
 
   private mainMenu(): TelegramConsoleResponse {
     const inlineKeyboard: TelegramInlineButton[][] = [];
-    if (this.legacyAffiliateReportEnabled) inlineKeyboard.push([button("Business Report", "oc:r")]);
+    if (this.legacyAffiliateReportEnabled) inlineKeyboard.push([button(telegramOwnerMessages.buttons.businessReport, "oc:r")]);
     inlineKeyboard.push(
-      [button("Critical Alerts", "oc:c"), button("Approval", "oc:a")],
-      [button("Automation Status", "oc:s")],
+      [button(telegramOwnerMessages.buttons.criticalAlerts, "oc:c"), button(telegramOwnerMessages.buttons.approval, "oc:a")],
+      [button(telegramOwnerMessages.buttons.automationStatus, "oc:s")],
     );
-    return { text: "Sotoayam Owner Console", inlineKeyboard };
+    return { text: telegramOwnerMessages.title, inlineKeyboard };
   }
   private divisionMenu(): TelegramConsoleResponse {
-    return { text: "Business Report\n\nPilih Divisi:", inlineKeyboard: [[button("CONTENT_CREATOR", "oc:d")], [button("Back", "oc:m")]] };
+    return { text: telegramOwnerMessages.divisionPrompt, inlineKeyboard: [[button(telegramOwnerMessages.contentCreator, "oc:d")], [button(telegramButtons.back, "oc:m")]] };
   }
   private reportMenu(): TelegramConsoleResponse {
-    return { text: "CONTENT CREATOR\n\nPilih report:", inlineKeyboard: [[button("Affiliate Task Status", "oc:w")], [button("Back", "oc:r")]] };
+    return { text: telegramOwnerMessages.reportPrompt, inlineKeyboard: [[button(telegramOwnerMessages.affiliateTaskStatus, "oc:w")], [button(telegramButtons.back, "oc:r")]] };
   }
   private windowMenu(): TelegramConsoleResponse {
-    return { text: "Affiliate Task Status\n\nPilih periode:", inlineKeyboard: [
-      [button("Today", "oc:v:t")], [button("Last 7 Days", "oc:v:7")], [button("Last 30 Days", "oc:v:30")], [button("Back", "oc:d")],
+    return { text: telegramOwnerMessages.windowPrompt, inlineKeyboard: [
+      [button(reportWindowLabel("TODAY"), "oc:v:t")], [button(reportWindowLabel("LAST_7_DAYS"), "oc:v:7")], [button(reportWindowLabel("LAST_30_DAYS"), "oc:v:30")], [button(telegramButtons.back, "oc:d")],
     ] };
   }
   private placeholder(): TelegramConsoleResponse {
-    return { text: "Fitur belum tersedia.", inlineKeyboard: [[button("Back", "oc:m")]] };
+    return { text: commonMessages.featureUnavailable, inlineKeyboard: [[button(telegramButtons.back, "oc:m")]] };
   }
 
   private alertMenu(): TelegramConsoleResponse {
-    return { text: "Critical Alerts\n\nPilih severity:", inlineKeyboard: [
+    return { text: telegramOwnerMessages.alertPrompt, inlineKeyboard: [
       [button("CRITICAL", "oc:cf:c"), button("HIGH", "oc:cf:h")],
-      [button("WARNING", "oc:cf:w"), button("ALL ACTIVE", "oc:cf:a")], [button("Back", "oc:m")],
+      [button("WARNING", "oc:cf:w"), button("ALL ACTIVE", "oc:cf:a")], [button(telegramButtons.back, "oc:m")],
     ] };
   }
   private async alertList(actor: Awaited<ReturnType<TelegramTaskActorResolver["resolveTelegramActor"]>>, code: string): Promise<TelegramConsoleResponse> {
     if (!this.alerts) return this.unavailableFeature();
     const severity = code === "c" ? "CRITICAL" : code === "h" ? "HIGH" : code === "w" ? "WARNING" : undefined;
     const rows = await this.alerts.list(actor, severity as PersistedAlertSeverity | undefined);
-    if (!rows.length) return { text: `Critical Alerts — ${severity ?? "ALL ACTIVE"}\n\nTidak ada alert aktif.`, inlineKeyboard: [[button("Back", "oc:c")]] };
-    const keyboard = rows.slice(0, 8).map((item) => [button(`${item.severity} · ${this.compact(item.summary, 35)}`, `oc:cd:${item.id}`)]);
-    keyboard.push([button("Refresh", `oc:cf:${code}`), button("Back", "oc:c")]);
-    return { text: `Critical Alerts — ${severity ?? "ALL ACTIVE"}\n\n${rows.length} alert aktif.`, inlineKeyboard: keyboard };
+    if (!rows.length) return { text: formatAlertList(severity ?? "ALL ACTIVE", 0), inlineKeyboard: [[button(telegramButtons.back, "oc:c")]] };
+    const keyboard = rows.slice(0, 8).map((item) => [button(`${item.severity} · ${compactMessageText(item.summary, 35)}`, `oc:cd:${item.id}`)]);
+    keyboard.push([button(telegramButtons.refresh, `oc:cf:${code}`), button(telegramButtons.back, "oc:c")]);
+    return { text: formatAlertList(severity ?? "ALL ACTIVE", rows.length), inlineKeyboard: keyboard };
   }
   private async alertDetail(actor: Awaited<ReturnType<TelegramTaskActorResolver["resolveTelegramActor"]>>, id: number): Promise<TelegramConsoleResponse> {
     if (!this.alerts) return this.unavailableFeature();
     const item = await this.alerts.get(actor, id);
-    const keyboard = item.status === "OPEN" ? [[button("Acknowledge", `oc:ca:${id}`)], [button("Back", "oc:cf:a")]] : [[button("Back", "oc:cf:a")]];
-    return { text: ["Critical Alert", "", `Type: ${item.type}`, `Severity: ${item.severity}`, `Status: ${item.status}`,
-      `Affected: ${item.affectedReference}`, `First detected: ${item.firstDetectedAt}`, `Last detected: ${item.lastDetectedAt}`,
-      `Occurrences: ${item.occurrenceCount}`, "", this.compact(item.summary, 500)].join("\n"), inlineKeyboard: keyboard };
+    const keyboard = item.status === "OPEN" ? [[button(telegramOwnerMessages.buttons.acknowledge, `oc:ca:${id}`)], [button(telegramButtons.back, "oc:cf:a")]] : [[button(telegramButtons.back, "oc:cf:a")]];
+    return { text: formatAlertDetail(item), inlineKeyboard: keyboard };
   }
   private async acknowledge(actor: Awaited<ReturnType<TelegramTaskActorResolver["resolveTelegramActor"]>>, id: number): Promise<TelegramConsoleResponse> {
     if (!this.alerts) return this.unavailableFeature();
@@ -120,46 +121,32 @@ export class TelegramOwnerConsoleService implements TelegramOwnerConsole {
   private async automationStatus(actor: Awaited<ReturnType<TelegramTaskActorResolver["resolveTelegramActor"]>>): Promise<TelegramConsoleResponse> {
     if (!this.alerts) return this.unavailableFeature();
     const status = await this.alerts.automationStatus(actor);
-    return { text: ["Automation Status", "", `Overall: ${status.overall}`, `Sotoayam runtime: ${status.runtime}`,
-      `Telegram polling: ${status.telegramPolling}`, `Reminder scheduler: ${status.reminderScheduler}`,
-      `Critical Alert evaluator: ${status.criticalAlertEvaluator}`, `Notification delivery: ${status.notificationDelivery}`,
-      `Active integrations: ${status.activeIntegrations}`].join("\n"), inlineKeyboard: [[button("Refresh", "oc:s"), button("Back", "oc:m")]] };
+    return { text: formatAutomationStatus(status), inlineKeyboard: [[button(telegramButtons.refresh, "oc:s"), button(telegramButtons.back, "oc:m")]] };
   }
-  private unavailableFeature(): TelegramConsoleResponse { return { text: "Fitur belum tersedia.", inlineKeyboard: [[button("Back", "oc:m")]] }; }
+  private unavailableFeature(): TelegramConsoleResponse { return { text: commonMessages.featureUnavailable, inlineKeyboard: [[button(telegramButtons.back, "oc:m")]] }; }
 
   private result(report: AffiliateTaskStatusReport): TelegramConsoleResponse {
-    const rate = report.completionRate === null ? "Tidak tersedia" : `${report.completionRate.toFixed(1)}%`;
-    const text = ["CONTENT CREATOR", "Affiliate Task Status", this.windowLabel(report.window), "",
-      `Total: ${report.total}`, `Open: ${report.open}`, `In Progress: ${report.inProgress}`,
-      `Blocked: ${report.blocked}`, `Completed: ${report.completed}`, `Overdue: ${report.overdue}`, "",
-      `Completion Rate: ${rate}`, `Upcoming Deadlines: ${report.upcomingDeadlines}`,
-      report.total === 0 ? "\nNo tasks found for this period." : "",
-    ].filter(Boolean).join("\n").slice(0, 3500);
+    const text = formatAffiliateReport(report);
     const code = this.windowCode(report.window);
     return { text, inlineKeyboard: [
-      [button("Blocked Tasks", `oc:l:b:${code}:0`), button("Overdue Tasks", `oc:l:o:${code}:0`)],
-      [button("Upcoming Deadlines", `oc:l:u:${code}:0`)],
-      [button("Refresh", `oc:v:${code}`), button("Back", "oc:w")],
+      [button(telegramOwnerMessages.buttons.blockedTasks, `oc:l:b:${code}:0`), button(telegramOwnerMessages.buttons.overdueTasks, `oc:l:o:${code}:0`)],
+      [button(telegramOwnerMessages.buttons.upcomingDeadlines, `oc:l:u:${code}:0`)],
+      [button(telegramButtons.refresh, `oc:v:${code}`), button(telegramButtons.back, "oc:w")],
     ] };
   }
 
   private list(result: ReportDrillDownResult): TelegramConsoleResponse {
-    const label = result.kind === "BLOCKED" ? "Blocked Tasks" : result.kind === "OVERDUE" ? "Overdue Tasks" : "Upcoming Deadlines";
-    const rows = result.items.length === 0 ? "Tidak ada task." : result.items.map((item) =>
-      `#${item.id} ${item.priority} · ${this.compact(item.title, 48)}\nStatus: ${item.status}${item.deadline ? ` · ${item.deadline.slice(0, 10)}` : ""}`).join("\n\n");
     const code = this.windowCode(result.window);
     const kind = result.kind === "BLOCKED" ? "b" : result.kind === "OVERDUE" ? "o" : "u";
     const navigation: TelegramInlineButton[] = [];
-    if (result.page > 0) navigation.push(button("Previous", `oc:l:${kind}:${code}:${result.page - 1}`));
-    if (result.page + 1 < result.pages) navigation.push(button("Next", `oc:l:${kind}:${code}:${result.page + 1}`));
+    if (result.page > 0) navigation.push(button(telegramButtons.previous, `oc:l:${kind}:${code}:${result.page - 1}`));
+    if (result.page + 1 < result.pages) navigation.push(button(telegramButtons.next, `oc:l:${kind}:${code}:${result.page + 1}`));
     const keyboard: TelegramInlineButton[][] = navigation.length ? [navigation] : [];
-    keyboard.push([button("Back", `oc:v:${code}`)]);
-    return { text: `${label}\n${this.windowLabel(result.window)}\n\n${rows}\n\nHalaman ${result.page + 1}/${result.pages}`.slice(0, 3500), inlineKeyboard: keyboard };
+    keyboard.push([button(telegramButtons.back, `oc:v:${code}`)]);
+    return { text: formatReportDrillDown(result), inlineKeyboard: keyboard };
   }
 
   private window(code: string): ReportWindow { return parseReportWindow(code === "t" ? "TODAY" : code === "7" ? "LAST_7_DAYS" : "LAST_30_DAYS"); }
   private windowCode(window: ReportWindow): "t" | "7" | "30" { return window === "TODAY" ? "t" : window === "LAST_7_DAYS" ? "7" : "30"; }
-  private windowLabel(window: ReportWindow): string { return window === "TODAY" ? "Today" : window === "LAST_7_DAYS" ? "Last 7 Days" : "Last 30 Days"; }
   private kind(code: string): ReportDrillDown { return code === "b" ? "BLOCKED" : code === "o" ? "OVERDUE" : "UPCOMING"; }
-  private compact(value: string, limit: number): string { const clean = value.replace(/[\r\n\t]+/g, " ").trim(); return clean.length <= limit ? clean : `${clean.slice(0, limit - 1)}…`; }
 }

@@ -9,6 +9,7 @@ import type { TelegramTaskConsole } from "./task-console.js";
 import type { TelegramOwnerConsole } from "./owner-console.js";
 import type { RuntimeHealthState } from "../runtime/health-state.js";
 import type { TelegramPollingRepository, TelegramUpdateType } from "../repositories/telegram-polling.repository.js";
+import { commonMessages, formatActiveTelegramAccount, telegramBotMessages } from "../messages/catalog.js";
 
 export interface TelegramUpdate {
   update_id: number;
@@ -88,7 +89,7 @@ export class TelegramBot {
     if (/^\/tasks(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) {
       this.logger.info({ updateId: update.update_id }, "Telegram /tasks received");
       if (message.from?.id === undefined || !this.isPrivateChat(message.chat, message.from.id)) {
-        await this.sender.sendMessage(message.chat.id, "Task Console hanya tersedia melalui private chat.");
+        await this.sender.sendMessage(message.chat.id, telegramBotMessages.privateChatOnly.task);
         return;
       }
       await this.sendConsoleResponse(message.chat.id, await this.openTaskConsole(message.from?.id));
@@ -97,7 +98,7 @@ export class TelegramBot {
     if (/^\/admin(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) {
       this.logger.info({ updateId: update.update_id }, "Telegram /admin received");
       if (message.from?.id === undefined || !this.isPrivateChat(message.chat, message.from.id)) {
-        await this.sender.sendMessage(message.chat.id, "IT Console hanya tersedia melalui private chat.");
+        await this.sender.sendMessage(message.chat.id, telegramBotMessages.privateChatOnly.it);
         return;
       }
       await this.sendConsoleResponse(message.chat.id, await this.openConsole(message.from?.id));
@@ -106,7 +107,7 @@ export class TelegramBot {
     if (/^\/owner(?:@\w+)?(?:\s|$)/i.test(message.text ?? "")) {
       this.logger.info({ updateId: update.update_id }, "Telegram /owner received");
       if (message.from?.id === undefined || !this.isPrivateChat(message.chat, message.from.id)) {
-        await this.sender.sendMessage(message.chat.id, "Owner Console hanya tersedia melalui private chat.");
+        await this.sender.sendMessage(message.chat.id, telegramBotMessages.privateChatOnly.owner);
         return;
       }
       await this.sendConsoleResponse(message.chat.id, await this.openOwnerConsole(message.from.id));
@@ -120,7 +121,7 @@ export class TelegramBot {
           if (response) { await this.sendConsoleResponse(message.chat.id, response); return; }
         } catch (error) {
           this.logger.error({ errorType: error instanceof Error ? error.name : "UnknownError", updateId: update.update_id }, "Telegram IT console text failed");
-          await this.sender.sendMessage(message.chat.id, "Permintaan belum dapat diproses. Silakan coba lagi.");
+          await this.sender.sendMessage(message.chat.id, commonMessages.requestFailed);
           return;
         }
       }
@@ -134,7 +135,7 @@ export class TelegramBot {
             { errorType: error instanceof Error ? error.name : "UnknownError", updateId: update.update_id },
             "Telegram task input failed",
           );
-          await this.sender.sendMessage(message.chat.id, "Permintaan belum dapat diproses. Silakan coba lagi.");
+          await this.sender.sendMessage(message.chat.id, commonMessages.requestFailed);
         }
       }
       return;
@@ -169,7 +170,7 @@ export class TelegramBot {
       try {
         await this.sender.sendMessage(
           message.chat.id,
-          "Registrasi Telegram Sotoayam belum dapat diproses. Silakan coba lagi beberapa saat atau hubungi Admin Sotoayam.",
+          telegramBotMessages.registrationFailed,
         );
       } catch (sendError) {
         this.logger.error(
@@ -190,8 +191,8 @@ export class TelegramBot {
         "Telegram final normalized access state resolved",
       );
       const response = accessState.status === "ACTIVE"
-        ? `Akun Sotoayam aktif.\n\nDivisi: ${accessState.divisionCode}\nRole: ${accessState.roleCode}\nStatus: Aktif`
-        : "Registrasi Telegram Sotoayam berhasil.\n\nStatus: Menunggu aktivasi Admin.\n\nSilakan hubungi Admin Sotoayam untuk menentukan Divisi dan Role Anda.";
+        ? formatActiveTelegramAccount(accessState.divisionCode, accessState.roleCode)
+        : telegramBotMessages.registrationPending;
       await this.sender.sendMessage(message.chat.id, response);
     } catch (error) {
       this.logger.error(
@@ -201,7 +202,7 @@ export class TelegramBot {
       try {
         await this.sender.sendMessage(
           message.chat.id,
-          "Status akun Sotoayam belum dapat dimuat. Silakan coba lagi beberapa saat atau hubungi Admin Sotoayam.",
+          telegramBotMessages.accessStateFailed,
         );
       } catch (sendError) {
         this.logger.error(
@@ -230,14 +231,14 @@ export class TelegramBot {
       const response = data.startsWith("tc:")
         ? this.isPrivateChat(message.chat, query.from.id) && this.taskConsole
           ? await this.taskConsole.handleCallback(query.from.id, data)
-          : { text: "Perintah tidak tersedia." }
+          : { text: commonMessages.commandUnavailable }
         : data.startsWith("oc:")
           ? this.isPrivateChat(message.chat, query.from.id) && this.ownerConsole
             ? await this.ownerConsole.handleCallback(query.from.id, data)
-            : { text: "Perintah tidak tersedia." }
+            : { text: commonMessages.commandUnavailable }
           : this.isPrivateChat(message.chat, query.from.id) && this.itConsole
             ? await this.itConsole.handleCallback(query.from.id, data)
-            : { text: "Perintah tidak tersedia." };
+            : { text: commonMessages.commandUnavailable };
       await this.editConsoleResponse(message.chat.id, message.message_id, response);
     } catch (error) {
       this.logger.error(
@@ -245,37 +246,37 @@ export class TelegramBot {
         "Telegram console callback failed",
       );
       const chatId = query.message?.chat.id;
-      if (chatId !== undefined) await this.sender.sendMessage(chatId, "Permintaan belum dapat diproses. Silakan coba lagi.");
+      if (chatId !== undefined) await this.sender.sendMessage(chatId, commonMessages.requestFailed);
     }
   }
 
   private async openConsole(externalTelegramId: number | undefined) {
-    if (!this.itConsole || externalTelegramId === undefined) return { text: "Perintah tidak tersedia." };
+    if (!this.itConsole || externalTelegramId === undefined) return { text: commonMessages.commandUnavailable };
     try {
       return await this.itConsole.open(externalTelegramId);
     } catch (error) {
       this.logger.error({ errorType: error instanceof Error ? error.name : "UnknownError" }, "Telegram console authorization failed");
-      return { text: "Permintaan belum dapat diproses. Silakan coba lagi." };
+      return { text: commonMessages.requestFailed };
     }
   }
 
   private async openTaskConsole(externalTelegramId: number | undefined) {
-    if (!this.taskConsole || externalTelegramId === undefined) return { text: "Perintah tidak tersedia." };
+    if (!this.taskConsole || externalTelegramId === undefined) return { text: commonMessages.commandUnavailable };
     try {
       return await this.taskConsole.open(externalTelegramId);
     } catch (error) {
       this.logger.error({ errorType: error instanceof Error ? error.name : "UnknownError" }, "Telegram task console authorization failed");
-      return { text: "Permintaan belum dapat diproses. Silakan coba lagi." };
+      return { text: commonMessages.requestFailed };
     }
   }
 
   private async openOwnerConsole(externalTelegramId: number | undefined) {
-    if (!this.ownerConsole || externalTelegramId === undefined) return { text: "Perintah tidak tersedia." };
+    if (!this.ownerConsole || externalTelegramId === undefined) return { text: commonMessages.commandUnavailable };
     try {
       return await this.ownerConsole.open(externalTelegramId);
     } catch (error) {
       this.logger.error({ errorType: error instanceof Error ? error.name : "UnknownError" }, "Telegram Owner console authorization failed");
-      return { text: "Permintaan belum dapat diproses. Silakan coba lagi." };
+      return { text: commonMessages.requestFailed };
     }
   }
 

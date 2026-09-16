@@ -1,3 +1,5 @@
+import { uiMessages } from "./messages.js";
+
 export class ApiError extends Error {
   constructor(status, code, message) {
     super(message);
@@ -37,12 +39,12 @@ export function createApiClient({ fetchImpl = globalThis.fetch, cookie = () => g
     try {
       response = await fetchImpl(path, { ...requestOptions, method, headers, credentials: "same-origin" });
     } catch {
-      throw new ApiError(0, "NETWORK_ERROR", "Tidak dapat terhubung ke Sotoayam.");
+      throw new ApiError(0, "NETWORK_ERROR", uiMessages.api.network);
     }
     const payload = response.status === 204 ? null : await response.json().catch(() => null);
     if (!response.ok && !acceptStatuses.includes(response.status)) {
       const error = new ApiError(response.status, payload?.error?.code || "REQUEST_FAILED",
-        payload?.error?.message || "Permintaan tidak dapat diproses.");
+        payload?.error?.message || uiMessages.api.requestFailed);
       if (response.status === 401 && handleUnauthorized) onUnauthorized(error);
       throw error;
     }
@@ -73,10 +75,10 @@ export function taskSummary(tasks) {
 }
 
 export function loginErrorMessage(error) {
-  if (error?.code === "INVALID_CREDENTIALS") return "Email atau kata sandi tidak valid.";
+  if (error?.code === "INVALID_CREDENTIALS") return uiMessages.auth.invalidCredentials;
   if (error?.code === "LOGIN_THROTTLED" || error?.code === "RATE_LIMITED") {
-    return "Terlalu banyak percobaan. Tunggu beberapa saat lalu coba lagi.";
+    return uiMessages.auth.throttled;
   }
-  if (error?.status === 0) return "Sotoayam tidak dapat dijangkau. Periksa layanan lokal Anda.";
-  return error?.message || "Login tidak dapat diproses.";
+  if (error?.status === 0) return uiMessages.auth.unreachable;
+  return error?.message || uiMessages.auth.loginFailed;
 }

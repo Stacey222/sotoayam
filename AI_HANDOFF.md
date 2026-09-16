@@ -159,16 +159,22 @@ P2-01 is implemented from `docs/adr/P2-01-runtime-settings-owner-actors.md`. Onl
 
 OWNER is permission-based and independent of SYSTEM_ADMIN. Report and alert HTTP requests now resolve the exact session user, while shared-key GET compatibility fails closed through the eligible `business_actor_user_id`; shared keys cannot use settings or OWNER mutations. Migration `202609150001_create_runtime_settings_owner_actors.sql` brings the repository total to 21, adds `threshold.manage` to OWNER, service-role RPCs, optimistic versioning, USER-attributed audit, deny-all RLS, and serialized designated-actor protection. Historical migrations #1-20 remain hash-identical.
 
-Focused P2-01 coverage passes 27/27 unit/integration tests plus the real upgrade backfill scenarios for zero, one, and multiple OWNER users. Clean disposable PostgreSQL applies 21/21 twice, and the complete suite passes 885 tests with 52 environment-gated legacy database tests skipped; the P2-01 disposable database suite runs unconditionally.
+Focused P2-01 coverage passes 28/28 unit/integration tests, including real `SETTINGS_UNCHANGED` rollback proof and upgrade backfill scenarios for zero, one, and multiple OWNER users. Clean disposable PostgreSQL applies 21/21 twice, and the complete suite passes 886 tests with 52 environment-gated legacy database tests skipped; the P2-01 disposable database suite runs unconditionally.
+
+## P2-02 Message/String Catalog State
+
+P2-02 is implemented from `docs/adr/P2-02-message-string-catalog.md`. Server copy is split into typed domain modules behind `src/messages/catalog.ts`; browser-owned state copy and deterministic formatters live in `public/messages.js`. Common messages, reminder output, the Task/IT/OWNER Telegram consoles, registration outcomes, and the bounded dashboard surfaces now consume those catalogs without changing their exact output or runtime contracts.
+
+`npm run check:message-catalog` enforces a deliberately bounded inventory of 12 catalog-owned literals across nine production call sites. Focused output/reliability regressions pass 245/245, the complete suite passes 896 tests with 52 environment-gated legacy database tests skipped, and clean disposable PostgreSQL applies all 21 migrations twice. P2-02 adds no migration, dependency, API, persistence, or runtime customization.
 
 ## Next Agent
-Recommended: Antigravity adversarial security/concurrency review of P2-01.
+Recommended: Claude Code design for P2-03.
 
 Next task:
-Review P2-01 permission separation, shared-key compatibility, hot reload, optimistic concurrency, and designated-actor lock ordering against the ADR.
+Define the exact notification-preference normalization required by P2-03 against the current schema, notification routing, and delivery behavior before any migration or implementation.
 
 Reason:
-Implementation and executable disposable-PostgreSQL evidence are complete; independent adversarial review is the remaining closeout step.
+P2-02 is complete and P2-03 is the next incomplete Phase 2 milestone; repository governance explicitly assigns its design to Claude Code before Codex migration work.
 
 ## Pending Higher-Level Work
 - Continue with the ordered Phase 2 scope while preserving the P1 security/reliability boundaries and the P2-00 effective-administrator invariant.

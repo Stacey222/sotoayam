@@ -81,6 +81,8 @@ Status: Final for launch scope.
 
 A maintainable message/string catalog is welcome, but full customer white-label branding is not a commercial blocker and must not delay v1.0.
 
+P2-02 implements this as two statically imported, runtime-specific catalog entry points under one convention: a typed server catalog and a vanilla-browser catalog. It preserves current wording and behavior, adds no runtime editing/API/persistence, and does not turn product copy into a localization or white-label system. See `docs/adr/P2-02-message-string-catalog.md`.
+
 ## D-013 — Legacy technical identifiers
 Decision: Do not perform blind rename of compatibility-sensitive historical identifiers.
 Status: Final.

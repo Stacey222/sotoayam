@@ -49,6 +49,7 @@ import { taxonomyRoutes } from "./routes/taxonomy.routes.js";
 import { NotificationService } from "./services/notification.service.js";
 import { NotificationIntakeService } from "./services/notification-intake.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
+import { SupabaseNotificationPreferenceShadowRepository } from "./repositories/notification-preferences.repository.js";
 import { TelegramApiClient, TelegramService, type TelegramSender } from "./services/telegram.service.js";
 import { UserManagementService } from "./services/user-management.service.js";
 import { SystemAuthorityService } from "./services/system-authority.service.js";
@@ -155,7 +156,9 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
             });
           },
         });
-  const resolver = new RecipientResolverService(repository);
+  const shadow = options.config.notificationPreferenceResolverMode !== "LEGACY" && client
+    ? new SupabaseNotificationPreferenceShadowRepository(client) : undefined;
+  const resolver = new RecipientResolverService(repository, shadow, shadow ? app.log : undefined, options.config.notificationPreferenceResolverMode);
   const reminderNotifications = options.reminderNotificationsRepository
     ?? (client ? new SupabaseReminderNotificationsRepository(client) : undefined);
   const notificationIntakeRepository = options.notificationIntakeRepository

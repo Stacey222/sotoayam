@@ -168,13 +168,13 @@ P2-02 is implemented from `docs/adr/P2-02-message-string-catalog.md`. Server cop
 `npm run check:message-catalog` enforces a deliberately bounded inventory of 12 catalog-owned literals across nine production call sites. Focused output/reliability regressions pass 245/245, the complete suite passes 896 tests with 52 environment-gated legacy database tests skipped, and clean disposable PostgreSQL applies all 21 migrations twice. P2-02 adds no migration, dependency, API, persistence, or runtime customization.
 
 ## Next Agent
-Recommended: Claude Code design for P2-03.
+Recommended: independent P2-03 Phase A parity and migration review.
 
 Next task:
-Define the exact notification-preference normalization required by P2-03 against the current schema, notification routing, and delivery behavior before any migration or implementation.
+Review migration #22's backfill/mirror transaction, the seven-type recipient parity evidence, sanitized `COMPARE` mode, and the legacy-only delivery invariant against `docs/adr/P2-03-notification-preference-normalization.md`. Do not switch live reads to normalized storage in this review.
 
 Reason:
-P2-02 is complete and P2-03 is the next incomplete Phase 2 milestone; repository governance explicitly assigns its design to Claude Code before Codex migration work.
+P2-03 Phase A is implemented without a live cutover. Migration #22 applies on clean disposable PostgreSQL 22/22 twice and upgrades a populated 21-migration disposable database with exact backfill; all seven recipient sets match. `LEGACY` is the default and `COMPARE` is shadow-only. No linked development Supabase project was contacted. The formal parity/operator-approval gate remains before `NORMALIZED` reads can be implemented or enabled.
 
 ## Pending Higher-Level Work
 - Continue with the ordered Phase 2 scope while preserving the P1 security/reliability boundaries and the P2-00 effective-administrator invariant.

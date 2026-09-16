@@ -42,6 +42,8 @@ Rate limiting aktif secara default dan berjalan dalam memori proses; counter kem
 
 Readiness memakai satu RPC read-only tanpa retry, dibatasi oleh `READY_DB_TIMEOUT_MS` (default 2000) dan cache proses `READY_CACHE_MS` (default 1000). `/health` tetap liveness yang tidak melakukan probe database; release gate memakai `/ready`.
 
+P2-03 Phase A memakai `NOTIFICATION_PREFERENCE_RESOLVER_MODE=LEGACY` secara default. `COMPARE` menghitung selisih penerima legacy dan normalized untuk tujuh tipe notifikasi, lalu hanya mencatat jumlah ter-sanitasi; pengiriman tetap memakai penerima legacy. `NORMALIZED` belum dapat dipilih sebelum review parity dan persetujuan cutover terpisah.
+
 ## Legacy Compatibility Identifiers
 
 Instalasi lama dapat memiliki nama teknis yang sudah menjadi kontrak deployment atau data persisten: path `/opt/gwens-automation`, unit `gwens-automation.service`, akun/grup sistem `gwens`, project ID Supabase lokal `gwensoto`, contract ID `GWENS_LEGACY_SCHEMA_V1`, serta advisory-lock key `gwens_*` di migration historis. Jangan mengubahnya tanpa migrasi deployment dan database yang terkoordinasi. Penyimpanan browser legacy `gwens-admin-key` telah dipensiunkan oleh migrasi sesi P1-01 dan tidak lagi dibaca. Identifier lain tersebut hanya untuk kompatibilitas; identitas produk resminya adalah Sotoayam.

@@ -44,6 +44,7 @@ export interface AppConfig extends SupabaseConfig {
   rateLimitTrustedIps: string[];
   readyDbTimeoutMs?: number;
   readyCacheMs?: number;
+  notificationPreferenceResolverMode?: "LEGACY" | "COMPARE" | "NORMALIZED";
 }
 
 function parseHost(value: string | undefined): string {
@@ -144,6 +145,10 @@ export function loadConfig(): AppConfig {
     process.env.SESSION_IDLE_TTL_SECONDS, 3_600, 300, sessionAbsoluteTtlSeconds);
   const sessionCookieSecure = parseBoolean("SESSION_COOKIE_SECURE", process.env.SESSION_COOKIE_SECURE, true);
   const trustProxy = parseBoolean("TRUST_PROXY", process.env.TRUST_PROXY, false);
+  const notificationPreferenceResolverMode = (process.env.NOTIFICATION_PREFERENCE_RESOLVER_MODE?.trim() || "LEGACY") as AppConfig["notificationPreferenceResolverMode"];
+  if (notificationPreferenceResolverMode !== "LEGACY" && notificationPreferenceResolverMode !== "COMPARE" && notificationPreferenceResolverMode !== "NORMALIZED") {
+    throw new Error("Invalid environment variable: NOTIFICATION_PREFERENCE_RESOLVER_MODE");
+  }
   const adminApiKeyFallbackEnabled = parseBoolean("ADMIN_API_KEY_FALLBACK_ENABLED",
     process.env.ADMIN_API_KEY_FALLBACK_ENABLED, false);
   const adminApiKey = optionalMinimumLengthEnv("ADMIN_API_KEY", 32);
@@ -183,6 +188,7 @@ export function loadConfig(): AppConfig {
     sessionIdleTtlSeconds,
     sessionCookieSecure,
     trustProxy,
+    notificationPreferenceResolverMode,
     adminApiKeyFallbackEnabled,
     internalApiKeyFallbackEnabled: parseBoolean("INTERNAL_API_KEY_FALLBACK_ENABLED",
       process.env.INTERNAL_API_KEY_FALLBACK_ENABLED, true),

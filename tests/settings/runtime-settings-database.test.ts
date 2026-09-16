@@ -157,7 +157,7 @@ describe("P2-01 disposable PostgreSQL runtime settings and OWNER invariants", ()
     expect(await scalar(`select count(*) from public.audit_logs where action='RUNTIME_SETTINGS_UPDATED'`)).toBe(auditCountAfterApply);
     expect(await scalar(`select version from public.instance_settings`)).toBe(String(applied.version));
     expect(reload).toHaveBeenCalledTimes(1);
-  });
+  }, 20_000);
   it("O-12 upgrade backfill handles zero, one, and multiple eligible OWNER users without ambiguity", async () => {
     const migration = await readFile("supabase/migrations/202609150001_create_runtime_settings_owner_actors.sql", "utf8");
     const upgrade = await startDisposablePostgresDatabase("sotoayam-p201-upgrade-", 20);

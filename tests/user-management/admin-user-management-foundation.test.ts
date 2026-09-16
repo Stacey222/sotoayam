@@ -191,9 +191,9 @@ describe("P2-09 Admin & User Management acceptance", () => {
     expect(js).not.toMatch(/localStorage|sessionStorage|ADMIN_API_KEY|password_hash/); expect(css).toContain("@media (max-width: 575.98px)"); expect(html).not.toMatch(/https?:\/\//);
   });
 
-  it("U-19 preserves P2-09 and accepts the additive P2-01 migration", async () => {
+  it("U-19 preserves P2-09 through subsequent additive migrations", async () => {
     const names = (await readdir(path.resolve("supabase/migrations"))).filter((name) => name.endsWith(".sql")).sort();
-    expect(names).toHaveLength(21); expect(names.at(-2)).toBe("202609140001_create_admin_user_management.sql");
+    expect(names).toHaveLength(22); expect(names.at(-3)).toBe("202609140001_create_admin_user_management.sql");
     expect(createHash("sha256").update(await readFile(historicalPath)).digest("hex")).toBe(historicalHash);
   });
 });

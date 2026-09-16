@@ -80,6 +80,7 @@ Create `${APP_ROOT}/shared/.env` from `.env.example` in the repository, then rep
 | `SESSION_COOKIE_SECURE` | Optional | Defaults to `true`. Production requires HTTPS; `false` is accepted only when `HOST` is loopback and `TRUST_PROXY=false` |
 | `TRUST_PROXY` | Optional | Defaults to `false`; set `true` only behind the trusted TLS reverse proxy so login throttling sees the client IP |
 | `ADMIN_API_KEY_FALLBACK_ENABLED` | Optional | Stage B compatibility fallback, default `false`. Enabling it is temporary and emits a startup warning |
+| `NOTIFICATION_PREFERENCE_RESOLVER_MODE` | Optional | `LEGACY` (default) or `COMPARE`; both deliver using legacy recipients. `COMPARE` logs sanitized parity counts only. `NORMALIZED` is unavailable pending a separate approved cutover. |
 | `RATE_LIMIT_ENABLED` | Optional | Defaults to `true`; emergency kill switch for the in-memory availability limiter only |
 | `RATE_LIMIT_LOGIN_PER_MINUTE` | Optional | 1–120, default 5 per client IP |
 | `RATE_LIMIT_LOGIN_GLOBAL_PER_MINUTE` | Optional | 10–6000, default 60 across the process |

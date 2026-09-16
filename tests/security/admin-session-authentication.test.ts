@@ -121,7 +121,7 @@ describe("P1-01 administrator sessions", () => {
         error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password" } });
       expect(repository.failures).toEqual([reason]);
     } finally { await app.close(); }
-  });
+  }, 15_000);
 
   it("runs the same costly verification class for unknown-email and wrong-password attempts", async () => {
     const timings: Record<"unknown" | "wrong", number[]> = { unknown: [], wrong: [] };

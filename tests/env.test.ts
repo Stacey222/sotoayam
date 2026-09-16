@@ -2,6 +2,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../src/config/env.js";
 import { createRateLimitPolicies } from "../src/http/rate-limit-policy.js";
 
+describe("P2-03 phase-B resolver mode", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it("defaults to legacy, allows compare and normalized cutover, and rejects invalid modes", () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test-only");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "test-token");
+    vi.stubEnv("INTERNAL_API_KEY", "test-internal-key");
+    vi.stubEnv("NOTIFICATION_PREFERENCE_RESOLVER_MODE", "");
+    expect(loadConfig().notificationPreferenceResolverMode).toBe("LEGACY");
+    vi.stubEnv("NOTIFICATION_PREFERENCE_RESOLVER_MODE", "COMPARE");
+    expect(loadConfig().notificationPreferenceResolverMode).toBe("COMPARE");
+    vi.stubEnv("NOTIFICATION_PREFERENCE_RESOLVER_MODE", "NORMALIZED");
+    expect(loadConfig().notificationPreferenceResolverMode).toBe("NORMALIZED");
+    vi.stubEnv("NOTIFICATION_PREFERENCE_RESOLVER_MODE", "INVALID");
+    expect(() => loadConfig()).toThrow("Invalid environment variable: NOTIFICATION_PREFERENCE_RESOLVER_MODE");
+  });
+});
+
 describe("Supabase server credential validation", () => {
   beforeEach(() => vi.stubEnv("ADMIN_API_KEY", "a".repeat(32)));
   afterEach(() => vi.unstubAllEnvs());

@@ -48,6 +48,7 @@ import { integrationAdministrationRoutes } from "./routes/integration-administra
 import { taxonomyRoutes } from "./routes/taxonomy.routes.js";
 import { NotificationService } from "./services/notification.service.js";
 import { NotificationIntakeService } from "./services/notification-intake.service.js";
+import { AdminTestNotificationService } from "./services/admin-test-notification.service.js";
 import { RecipientResolverService } from "./services/recipient-resolver.service.js";
 import { SupabaseNotificationPreferenceShadowRepository } from "./repositories/notification-preferences.repository.js";
 import { TelegramApiClient, TelegramService, type TelegramSender } from "./services/telegram.service.js";
@@ -419,7 +420,9 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   }
   if (notificationOperations && taskUsers && permissionsRepository) {
     await app.register(adminNotificationsRoutes, { prefix: "/api/admin/notifications", service: notificationOperations,
-      actorResolver: adminActorResolver!, ...adminAuthorization });
+      actorResolver: adminActorResolver!, ...adminAuthorization,
+      testService: client && notificationService instanceof NotificationIntakeService
+        ? new AdminTestNotificationService(client, resolver, notificationService, new SupabaseAuditRepository(client)) : undefined });
   }
   if (reportingService && taskUsers) {
     await app.register(reportsRoutes, { prefix: "/api/reports", service: reportingService,

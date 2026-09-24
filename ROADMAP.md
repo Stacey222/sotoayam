@@ -103,9 +103,9 @@ Legend:
 - [x] P2-02 Extract maintainable Sotoayam message/string catalog.
   Owner: Z.AI inventory -> Codex
   Note: implemented from `docs/adr/P2-02-message-string-catalog.md` with typed server domain catalogs, a vanilla-browser catalog, pure output formatters, exact-output regression coverage, and a bounded duplicate-literal check. Runtime customization, localization infrastructure, and full white-label branding remain out of scope for v1.0.
-- [~] P2-03 Normalize notification preferences where necessary.
+- [x] P2-03 Normalize notification preferences where necessary.
   Owner: Claude Code design -> Codex migrate
-  Note: Phase A implements migration #22, atomic legacy-to-normalized mirroring, disposable-DB parity proof, and sanitized shadow comparison for the seven existing optional Telegram preferences. Delivery remains legacy-only; parity review and any explicitly approved live read cutover remain open. See `docs/adr/P2-03-notification-preference-normalization.md`.
+  Note: migration #22, atomic legacy-to-normalized mirroring, disposable-DB parity proof, and sanitized shadow comparison cover the seven existing optional Telegram preferences. The independent parity review approved Phase B; normalized reads are authoritative while the mirrored legacy columns and explicit `LEGACY` resolver mode remain the rollback path. See `docs/adr/P2-03-notification-preference-normalization.md`.
 - [ ] P2-04 API reference for all route groups.
   Owner: Z.AI draft -> Claude Code review
 - [ ] P2-05 SemVer, CHANGELOG, expand/contract upgrade policy.

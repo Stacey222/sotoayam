@@ -53,7 +53,11 @@ export interface TaskUser {
   roleActive?: boolean;
 }
 
-export interface TaskActor extends TaskUser { permissions: ReadonlySet<string> }
+export interface TaskActor extends TaskUser {
+  permissions: ReadonlySet<string>;
+  /** Set only after an authenticated session's effective SYSTEM_ADMIN authority is verified. */
+  effectiveSystemAdmin?: boolean;
+}
 
 export interface CreateTaskInput {
   title: string;

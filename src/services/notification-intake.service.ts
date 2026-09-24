@@ -75,7 +75,7 @@ export class NotificationIntakeService implements NotificationSender {
   }
 
   async send(event: NotificationEvent, integrationId: number | null = null,
-    context: CorrelationContext = {}): Promise<NotificationResult> {
+    context: CorrelationContext = {}, selectedLegacyId?: number): Promise<NotificationResult> {
     const externalEventId = event.event_id ?? `gen:${randomUUID()}`;
     const identityOrigin = event.event_id === undefined ? "GENERATED" as const : "CALLER" as const;
     const identity = `${SOURCE}\u0000${externalEventId}`;
@@ -86,7 +86,7 @@ export class NotificationIntakeService implements NotificationSender {
         if (this.active.get(identity) === preceding) this.active.delete(identity);
         continue;
       }
-      const operation = this.persistAndDispatch(event, externalEventId, identityOrigin, integrationId, context);
+      const operation = this.persistAndDispatch(event, externalEventId, identityOrigin, integrationId, context, selectedLegacyId);
       this.active.set(identity, operation);
       try {
         return await operation;
@@ -102,10 +102,15 @@ export class NotificationIntakeService implements NotificationSender {
     identityOrigin: "CALLER" | "GENERATED",
     integrationId: number | null,
     context: CorrelationContext,
+    selectedLegacyId?: number,
   ): Promise<NotificationResult> {
     const requestLogger = correlationLogger(this.logger, { ...context, eventId: externalEventId });
     requestLogger.info({ source: SOURCE, type: event.type }, "Notification event processing started");
-    const recipients = await this.resolver.resolve(event.type);
+    const eligible = await this.resolver.resolve(event.type);
+    const recipients = selectedLegacyId === undefined ? eligible : eligible.filter((item) => item.id === selectedLegacyId);
+    if (selectedLegacyId !== undefined && recipients.length !== 1) {
+      throw new AppError(409, "TEST_RECIPIENT_UNAVAILABLE", "Selected notification recipient is no longer eligible");
+    }
     const recipientExpansion = recipients.map<NotificationIntakeRecipient>((recipient) => ({
       legacyId: recipient.id,
       dedupeKey: notificationRecipientDedupeKey(SOURCE, externalEventId, recipient.id),
@@ -127,6 +132,9 @@ export class NotificationIntakeService implements NotificationSender {
     }
     if (outcome.created && (outcome.recipientCount !== recipients.length || outcome.routedCount > outcome.recipientCount)) {
       throw new AppError(503, "NOTIFICATION_INTAKE_INCOMPLETE", "Notification event expansion was incomplete");
+    }
+    if (selectedLegacyId !== undefined && (outcome.recipientCount !== 1 || outcome.routedCount !== 1)) {
+      throw new AppError(503, "TEST_NOTIFICATION_INCOMPLETE", "Test notification could not create one routed delivery");
     }
 
     const classification = outcome.created ? "CREATED" : outcome.dispatched ? "REPLAY" : "RESUMED";

@@ -166,6 +166,36 @@ const event = (overrides: Partial<NotificationEvent> = {}): NotificationEvent =>
 });
 
 describe("persisted notification intake identity", () => {
+  it("sends one selected eligible recipient through exactly one intent and delivery, with idempotent replay", async () => {
+    const h = harness({ users: [user({ id: 1, telegram_chat_id: 1001 }), user({ id: 2, telegram_chat_id: 1002 })] });
+    const selected = event({ event_id: "admin-test:00000000-0000-4000-8000-000000000001",
+      metadata: { test_recipient_user_id: 102 } });
+    const first = await h.service.send(selected, null, { requestId: "req-test-1" }, 2);
+    const repeat = await h.service.send(selected, null, { requestId: "req-test-2" }, 2);
+    expect(first).toMatchObject({ recipients: 1, sent: 1, failed: 0, duplicate: false });
+    expect(repeat).toMatchObject({ recipients: 1, sent: 1, failed: 0, duplicate: true });
+    expect(h.store.events.size).toBe(1);
+    expect(h.store.rows).toHaveLength(1);
+    expect(h.store.rows[0]?.state).toBe("DELIVERED");
+    expect(h.sender.sendMessage).toHaveBeenCalledTimes(1);
+    expect(h.sender.sendMessage).toHaveBeenCalledWith(1002, selected.message, undefined, expect.anything());
+  });
+
+  it("rejects an ineligible selected recipient without creating an intent or sending", async () => {
+    const h = harness({ users: [user({ id: 1 })] });
+    await expect(h.service.send(event(), null, {}, 2)).rejects.toMatchObject({ code: "TEST_RECIPIENT_UNAVAILABLE" });
+    expect(h.store.events.size).toBe(0);
+    expect(h.sender.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("never bypasses a missing routed delivery with a direct Telegram send", async () => {
+    const h = harness(); h.store.unmapped.add(1);
+    await expect(h.service.send(event(), null, {}, 1)).rejects.toMatchObject({ code: "TEST_NOTIFICATION_INCOMPLETE" });
+    expect(h.store.events.size).toBe(1);
+    expect(h.store.rows).toHaveLength(0);
+    expect(h.sender.sendMessage).not.toHaveBeenCalled();
+  });
+
   it("keeps one request_id and event_id through intake, delivery, and Telegram send logs", async () => {
     const h = harness();
     await h.service.send(event(), null, { requestId: "req-correlation-1" });

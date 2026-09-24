@@ -57,7 +57,7 @@ export interface UserManagementRepository {
   updateProfile?(id: number, displayName: string, actorUserId: number): Promise<ManagedUser>;
 }
 
-const selection = "id,display_name,business_user_code,division_id,role_id,active,legacy_telegram_user_id,created_at,updated_at,divisions(id,code,name,active,grants_system_authority,provisioning_source,created_at,updated_at),roles(id,code,name,active,created_at,updated_at),user_channels(channel_type,active),admin_credentials(email,password_change_required),system_authority_assignments(authority_code,revoked_at)";
+const selection = "id,display_name,business_user_code,division_id,role_id,active,legacy_telegram_user_id,created_at,updated_at,divisions(id,code,name,active,grants_system_authority,provisioning_source,created_at,updated_at),roles(id,code,name,active,created_at,updated_at),user_channels(channel_type,active),admin_credentials(email,password_change_required),system_authority_assignments!system_authority_assignments_user_id_fkey(authority_code,revoked_at)";
 const legacySelection = "id,display_name,division_id,role_id,active,legacy_telegram_user_id,created_at,updated_at,divisions(id,code,name,active,grants_system_authority,provisioning_source,created_at,updated_at),roles(id,code,name,active,created_at,updated_at),user_channels(channel_type,active)";
 const missingBusinessCodeColumn = (error: DatabaseDiagnostic | null): boolean => ["PGRST204", "42703"].includes(error?.code ?? "");
 

@@ -34,7 +34,7 @@ export class TrustedTaskActorService implements TaskActorResolver {
       || !await this.users.hasActiveSystemAdminAuthority(user.id)) {
       throw new AppError(403, "ADMIN_AUTHORITY_REQUIRED", "Active SYSTEM_ADMIN authority is required");
     }
-    return this.withPermissions(user);
+    return { ...await this.withPermissions(user), effectiveSystemAdmin: true };
   }
 
   async resolveSessionActor(principal: AdminPrincipal): Promise<TaskActor> {

@@ -51,6 +51,12 @@ export const ROLE_PERMISSION_SEEDS = {
     "alert.view_division",
   ],
   OWNER: [
+    "task.view_assigned",
+    "task.create",
+    "task.update_assigned",
+    "task.complete_assigned",
+    "task.add_activity",
+    "task.view_division",
     "report.view_cross_division",
     "alert.view_critical",
     "alert.acknowledge",

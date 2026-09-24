@@ -66,6 +66,8 @@ describe("Slice 1 governance catalog", () => {
 
   it("defines the exact OWNER grant set", () => {
     expect(ROLE_PERMISSION_SEEDS.OWNER).toEqual([
+      "task.view_assigned", "task.create", "task.update_assigned", "task.complete_assigned",
+      "task.add_activity", "task.view_division",
       "report.view_cross_division", "alert.view_critical", "alert.acknowledge", "approval.view", "approval.decide",
       "automation_status.view_business",
       "threshold.manage",

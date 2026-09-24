@@ -42,7 +42,7 @@ Rate limiting aktif secara default dan berjalan dalam memori proses; counter kem
 
 Readiness memakai satu RPC read-only tanpa retry, dibatasi oleh `READY_DB_TIMEOUT_MS` (default 2000) dan cache proses `READY_CACHE_MS` (default 1000). `/health` tetap liveness yang tidak melakukan probe database; release gate memakai `/ready`.
 
-P2-03 Phase A memakai `NOTIFICATION_PREFERENCE_RESOLVER_MODE=LEGACY` secara default. `COMPARE` menghitung selisih penerima legacy dan normalized untuk tujuh tipe notifikasi, lalu hanya mencatat jumlah ter-sanitasi; pengiriman tetap memakai penerima legacy. `NORMALIZED` belum dapat dipilih sebelum review parity dan persetujuan cutover terpisah.
+P2-03 telah melewati review parity dan memakai `NOTIFICATION_PREFERENCE_RESOLVER_MODE=NORMALIZED` untuk pembacaan tujuh preferensi notifikasi. `COMPARE` menghitung selisih penerima legacy dan normalized lalu hanya mencatat jumlah ter-sanitasi, sedangkan `LEGACY` tetap tersedia sebagai rollback operasional tanpa menghapus tabel normalized atau memutar ulang delivery.
 
 ## Legacy Compatibility Identifiers
 

@@ -1,4 +1,4 @@
-import { createApiClient, loadResources, loginErrorMessage, taskSummary } from "./ui-core.js";
+import { allowedTaskStatusTransitions, bindResettableDialog, cancelTask, createApiClient, createManualTask, loadResources, loginErrorMessage, setDialogBusy, taskSummary, transitionTask, updateTask } from "./ui-core.js";
 import { setupUsersView } from "./users.js";
 import { setupSettingsView } from "./settings.js";
 import { statusLabels, uiFormatters, uiMessages } from "./messages.js";
@@ -6,9 +6,11 @@ import { statusLabels, uiFormatters, uiMessages } from "./messages.js";
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const state = { authenticated: false, principal: null, tasks: [], integrations: [] };
+let selectedTask = null;
+let pendingTestRequestId = null;
 const titles = uiMessages.navigation;
 
-const api = createApiClient({ onUnauthorized: () => {
+const api = createApiClient({ csrfCookieName: () => state.principal?.csrf_cookie_name, onUnauthorized: () => {
   if (state.authenticated) showLogin(uiMessages.auth.sessionExpired);
 } });
 let usersView;
@@ -211,9 +213,39 @@ function taskRow(task) {
     `#${task.id}${task.task_category ? ` · ${task.task_category}` : ""}`));
   const status = element("td"); status.append(badge(task.status));
   const priority = element("td"); priority.append(badge(task.priority));
+  const action = element("td"); const detail = element("button", "btn btn-sm btn-outline-secondary", uiMessages.tasks.detail);
+  detail.type = "button"; detail.dataset.taskId = String(task.id); action.append(detail);
   row.append(title, status, priority, element("td", "", `Divisi #${task.owner_division_id}`),
-    element("td", "", task.deadline ? formatDate(task.deadline, true) : uiMessages.tasks.noDeadline));
+    element("td", "", task.deadline ? formatDate(task.deadline, true) : uiMessages.tasks.noDeadline), action);
   return row;
+}
+
+async function openTaskDetail(id) {
+  const panel = $("#task-detail"); const body = $("#task-detail-body");
+  panel.hidden = false; body.textContent = uiMessages.tasks.loading;
+  $("#task-action-error").hidden = true;
+  try {
+    const payload = await api(`/api/tasks/${id}`); const task = payload.data; selectedTask = task;
+    $("#task-detail-title").textContent = `${uiMessages.tasks.detail} #${task.id}`;
+    body.replaceChildren(element("h4", "", task.title), element("p", "", task.description || uiMessages.tasks.noDescription));
+    const facts = element("div", "user-detail-facts");
+    facts.append(badge(task.status), badge(task.priority),
+      element("p", "", `${uiMessages.tasks.owner}: Divisi #${task.owner_division_id}`),
+      element("p", "", `${uiMessages.tasks.assignee}: ${task.assigned_to_user_id ? `#${task.assigned_to_user_id}` : uiMessages.tasks.unassigned}`),
+      element("p", "", `${uiMessages.tasks.deadline}: ${task.deadline ? formatDate(task.deadline, true) : uiMessages.tasks.noDeadline}`));
+    body.append(facts);
+    $("#edit-task").hidden = ["CANCELLED", "COMPLETED"].includes(task.status);
+    $("#change-task-status").hidden = allowedTaskStatusTransitions(task.status).length === 0;
+    $("#cancel-task").hidden = ["CANCELLED", "COMPLETED"].includes(task.status);
+  } catch (error) { selectedTask = null; body.textContent = error.message || uiMessages.tasks.loadFailed;
+    $("#edit-task").hidden = true; $("#change-task-status").hidden = true; $("#cancel-task").hidden = true; }
+}
+
+function datetimeLocal(value) {
+  if (!value) return "";
+  const date = new Date(value); if (!Number.isFinite(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
 }
 
 async function loadTasks() {
@@ -369,6 +401,29 @@ async function loadSystem() {
       scheduler.enabled ? uiFormatters.schedulerCompleted(formatDate(scheduler.last_completed_at, true)) : uiMessages.system.schedulerDisabled));
   }
   await settingsView.load();
+  await loadTestRecipients();
+}
+
+async function loadTestRecipients() {
+  const card = $("#test-notification-card");
+  const select = $("#test-notification-recipient");
+  card.hidden = true;
+  try {
+    const payload = await api(`/api/admin/notifications/test-recipients?type=${encodeURIComponent($("#test-notification-type").value)}`);
+    const recipients = Array.isArray(payload.data) ? payload.data : [];
+    select.replaceChildren(...recipients.map((item) => new Option(item.display_name, String(item.id))));
+    $("#test-notification-send").disabled = recipients.length === 0;
+    $("#test-notification-result").textContent = recipients.length === 0 ? uiMessages.testNotification.none : "";
+    $("#test-notification-result").hidden = recipients.length !== 0;
+    card.hidden = false;
+  } catch (error) {
+    if (error.status !== 401 && error.status !== 403) {
+      card.hidden = false;
+      $("#test-notification-send").disabled = true;
+      $("#test-notification-result").textContent = uiMessages.testNotification.unavailable;
+      $("#test-notification-result").hidden = false;
+    }
+  }
 }
 
 $("#login-form").addEventListener("submit", async (event) => {
@@ -419,6 +474,133 @@ $$('[data-go]').forEach((button) => button.addEventListener("click", () => void 
 $$('[data-refresh]').forEach((button) => button.addEventListener("click", () => void navigate(button.dataset.refresh)));
 $("#menu-toggle").addEventListener("click", () => $("#app-shell").classList.toggle("nav-open"));
 $("#task-status").addEventListener("change", () => void loadTasks());
+$("#test-notification-type").replaceChildren(...Object.entries(uiMessages.testNotification.types)
+  .map(([code, label]) => new Option(label, code)));
+$("#test-notification-type").addEventListener("change", () => { pendingTestRequestId = null; void loadTestRecipients(); });
+$("#test-notification-recipient").addEventListener("change", () => { pendingTestRequestId = null; });
+$("#test-notification-send").addEventListener("click", async () => {
+  const recipient = Number($("#test-notification-recipient").value);
+  const type = $("#test-notification-type").value;
+  if (!Number.isSafeInteger(recipient) || recipient < 1 || !window.confirm(uiMessages.testNotification.confirm)) return;
+  const button = $("#test-notification-send");
+  const result = $("#test-notification-result");
+  pendingTestRequestId ||= crypto.randomUUID();
+  button.disabled = true;
+  result.textContent = uiMessages.testNotification.sending;
+  result.hidden = false;
+  try {
+    const payload = await api("/api/admin/notifications/test", { method: "POST",
+      body: JSON.stringify({ recipient_user_id: recipient, request_id: pendingTestRequestId, type }) });
+    result.textContent = payload.data.sent === 1 && payload.data.failed === 0
+      ? uiMessages.testNotification.success : uiMessages.testNotification.failed;
+    pendingTestRequestId = null;
+    await loadNotifications().catch(() => undefined);
+  } catch (error) {
+    result.textContent = error.message || uiMessages.testNotification.failed;
+    if (error.status >= 400 && error.status < 500) pendingTestRequestId = null;
+  } finally { button.disabled = false; }
+});
+$$('[data-create-task]').forEach((button) => button.addEventListener("click", () => {
+  $("#create-task-error").hidden = true;
+  $("#create-task-dialog").showModal();
+}));
+for (const name of ["create-task", "edit-task", "status-task", "cancel-task"]) {
+  bindResettableDialog($(`#${name}-dialog`), $(`#${name}-form`), $(`#${name}-error`));
+}
+$("#task-rows").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-task-id]");
+  if (button) void openTaskDetail(button.dataset.taskId);
+});
+$("#close-task-detail").addEventListener("click", () => { $("#task-detail").hidden = true; selectedTask = null; });
+$("#edit-task").addEventListener("click", () => {
+  if (!selectedTask) return;
+  const form = $("#edit-task-form");
+  form.elements.title.value = selectedTask.title;
+  form.elements.description.value = selectedTask.description || "";
+  form.elements.priority.value = selectedTask.priority;
+  form.elements.deadline.value = datetimeLocal(selectedTask.deadline);
+  $("#edit-task-dialog").showModal();
+});
+$("#edit-task-form").addEventListener("submit", async (event) => {
+  event.preventDefault(); if (!selectedTask) return;
+  const form = event.currentTarget; const id = selectedTask.id;
+  const submit = $("#edit-task-submit"); const error = $("#edit-task-error");
+  if (submit.disabled) return;
+  submit.disabled = true; setDialogBusy($("#edit-task-dialog"), true); error.hidden = true;
+  try {
+    await updateTask(api, id, { title: form.elements.title.value, description: form.elements.description.value,
+      priority: form.elements.priority.value, deadline: form.elements.deadline.value });
+    $("#edit-task-dialog").close(); await Promise.all([loadTasks(), openTaskDetail(id)]);
+    showGlobal(uiMessages.tasks.updated);
+  } catch (caught) { error.textContent = caught.message || uiMessages.tasks.updateFailed; error.hidden = false; }
+  finally { submit.disabled = false; setDialogBusy($("#edit-task-dialog"), false); }
+});
+function syncStatusNoteField() {
+  const form = $("#status-task-form");
+  const blocked = form.elements.status.value === "BLOCKED";
+  $("#status-task-note-field").hidden = !blocked;
+  form.elements.note.required = blocked;
+}
+$("#change-task-status").addEventListener("click", () => {
+  if (!selectedTask) return;
+  const select = $("#status-task-form").elements.status;
+  select.replaceChildren(...allowedTaskStatusTransitions(selectedTask.status).map((status) => {
+    const option = element("option", "", statusLabels[status.toLowerCase()] || status); option.value = status; return option;
+  }));
+  syncStatusNoteField();
+  $("#status-task-dialog").showModal();
+});
+$("#status-task-form").elements.status.addEventListener("change", syncStatusNoteField);
+$("#status-task-form").addEventListener("submit", async (event) => {
+  event.preventDefault(); if (!selectedTask) return;
+  const id = selectedTask.id; const form = event.currentTarget;
+  const submit = $("#status-task-submit"); const error = $("#status-task-error");
+  if (submit.disabled) return;
+  submit.disabled = true; setDialogBusy($("#status-task-dialog"), true); error.hidden = true;
+  try {
+    await transitionTask(api, id, form.elements.status.value, form.elements.note.value);
+    $("#status-task-dialog").close(); await Promise.all([loadTasks(), openTaskDetail(id)]);
+    showGlobal(uiMessages.tasks.statusChanged);
+  } catch (caught) { error.textContent = caught.message || uiMessages.tasks.statusChangeFailed; error.hidden = false; }
+  finally { submit.disabled = false; setDialogBusy($("#status-task-dialog"), false); }
+});
+$("#cancel-task").addEventListener("click", () => {
+  if (selectedTask) $("#cancel-task-dialog").showModal();
+});
+$("#cancel-task-form").addEventListener("submit", async (event) => {
+  event.preventDefault(); if (!selectedTask) return;
+  const id = selectedTask.id; const form = event.currentTarget;
+  const submit = $("#cancel-task-submit"); const error = $("#cancel-task-error");
+  if (submit.disabled) return;
+  submit.disabled = true; setDialogBusy($("#cancel-task-dialog"), true); error.hidden = true;
+  try {
+    await cancelTask(api, id, form.elements.note.value);
+    $("#cancel-task-dialog").close(); await Promise.all([loadTasks(), openTaskDetail(id)]);
+    showGlobal(uiMessages.tasks.cancelled);
+  } catch (caught) { error.textContent = caught.message || uiMessages.tasks.cancelFailed; error.hidden = false; }
+  finally { submit.disabled = false; setDialogBusy($("#cancel-task-dialog"), false); }
+});
+$("#create-task-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const errorBox = $("#create-task-error");
+  const submit = $("#create-task-submit");
+  if (submit.disabled) return;
+  errorBox.hidden = true;
+  submit.disabled = true; setDialogBusy($("#create-task-dialog"), true);
+  try {
+    await createManualTask(api, { title: form.elements.title.value, description: form.elements.description.value,
+      priority: form.elements.priority.value, deadline: form.elements.deadline.value,
+      assignedToUserId: form.elements.assign_to_self.checked ? state.principal?.user_id : null });
+    $("#create-task-dialog").close();
+    if (location.hash === "#dashboard") await loadDashboard();
+    else await loadTasks();
+    showGlobal(uiMessages.tasks.created);
+  } catch (error) {
+    errorBox.textContent = error.status === 403 ? uiMessages.tasks.createForbidden : error.message || uiMessages.tasks.createFailed;
+    errorBox.hidden = false;
+  } finally { submit.disabled = false; setDialogBusy($("#create-task-dialog"), false); }
+});
 $("#integration-rows").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-integration-id]");
   const integration = button && state.integrations.find((item) => String(item.id) === button.dataset.integrationId);

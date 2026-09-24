@@ -95,7 +95,8 @@ describe("P1-01 administrator sessions", () => {
       const response = await app.inject({ method: "POST", url: "/api/admin/auth/login",
         payload: { email: EMAIL, password: PASSWORD } });
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({ success: true, data: { user_id: 7, email: EMAIL } });
+      expect(response.json()).toMatchObject({ success: true, data: { user_id: 7, email: EMAIL,
+        csrf_cookie_name: "__Host-sotoayam_csrf" } });
       const cookies = response.headers["set-cookie"] as unknown as string[];
       expect(cookies).toHaveLength(2);
       expect(cookies[0]).toMatch(/^__Host-sotoayam_session=.*; Path=\/; HttpOnly; Secure; SameSite=Strict$/);
@@ -196,6 +197,35 @@ describe("P1-01 administrator sessions", () => {
     } finally { await app.close(); }
   });
 
+  it("uses the CSRF issued by login for the current session and rejects an older token", async () => {
+    const repository = new FakeSessionRepository();
+    const { app } = await authApp(repository, false);
+    try {
+      const login = async () => {
+        const response = await app.inject({ method: "POST", url: "/api/admin/auth/login",
+          payload: { email: EMAIL, password: PASSWORD } });
+        expect(response.statusCode).toBe(200);
+        expect(response.json().data.csrf_cookie_name).toBe("sotoayam_csrf");
+        const cookies = response.headers["set-cookie"] as unknown as string[];
+        return { sessionCookie: cookies[0]!.split(";")[0]!, csrf: cookies[1]!.split(";")[0]!.split("=")[1]! };
+      };
+      const old = await login();
+      const current = await login();
+      expect(old.csrf).not.toBe(current.csrf);
+      repository.validated = { sessionId: SESSION_ID, userId: 7, email: EMAIL, displayName: "Primary Admin",
+        expiresAt: "2026-09-09T12:00:00.000Z", csrfTokenHash: repository.createInputs[1]!.csrfTokenHash };
+      const headers = { cookie: current.sessionCookie, "x-csrf-token": old.csrf };
+      const stale = await app.inject({ method: "POST", url: "/api/admin/auth/logout", headers });
+      expect(stale.statusCode).toBe(403);
+      expect(stale.json().error.code).toBe("CSRF_INVALID");
+      expect(repository.revoked).toHaveLength(0);
+      headers["x-csrf-token"] = current.csrf;
+      const fresh = await app.inject({ method: "POST", url: "/api/admin/auth/logout", headers });
+      expect(fresh.statusCode).toBe(204);
+      expect(repository.revoked).toHaveLength(1);
+    } finally { await app.close(); }
+  });
+
   it("returns the current principal, lists only non-secret session data, and revokes an own session", async () => {
     const repository = new FakeSessionRepository();
     repository.validated = { sessionId: SESSION_ID, userId: 7, email: EMAIL, displayName: "Primary Admin",
@@ -208,7 +238,7 @@ describe("P1-01 administrator sessions", () => {
     try {
       expect((await app.inject({ method: "GET", url: "/api/admin/auth/session", headers })).json())
         .toEqual({ success: true, data: { user_id: 7, email: EMAIL, display_name: "Primary Admin",
-          expires_at: "2026-09-09T12:00:00.000Z" } });
+          expires_at: "2026-09-09T12:00:00.000Z", csrf_cookie_name: "sotoayam_csrf" } });
       const listed = (await app.inject({ method: "GET", url: "/api/admin/auth/sessions", headers })).json();
       expect(listed).toMatchObject({ success: true, data: [{ sessionId: SESSION_ID, current: true }] });
       expect(JSON.stringify(listed)).not.toMatch(/token|hash/i);
@@ -274,6 +304,7 @@ describe("P1-01 administrator sessions", () => {
     { findForRoleCode: vi.fn().mockResolvedValue([{ code: "task.read", active: true }]) } as never);
     const resolved = await resolver.resolveActor({ ...principal(), adminUserId: 22 } as AdminPrincipal);
     expect(resolved.id).toBe(22);
+    expect(resolved.effectiveSystemAdmin).toBe(true);
     expect(findById).toHaveBeenCalledWith(22);
     expect(findTrustedAdminActorUser).not.toHaveBeenCalled();
   });

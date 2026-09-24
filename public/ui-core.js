@@ -9,14 +9,14 @@ export class ApiError extends Error {
   }
 }
 
-export function csrfTokenFromCookie(cookieValue) {
+export function csrfTokenFromCookie(cookieValue, expectedName) {
   const pairs = String(cookieValue || "").split(";").map((item) => item.trim()).filter(Boolean);
   for (const pair of pairs) {
     const separator = pair.indexOf("=");
     if (separator < 0) continue;
     try {
       const name = decodeURIComponent(pair.slice(0, separator));
-      if (name === "__Host-sotoayam_csrf" || name === "sotoayam_csrf") {
+      if (name === expectedName || (!expectedName && (name === "__Host-sotoayam_csrf" || name === "sotoayam_csrf"))) {
         return decodeURIComponent(pair.slice(separator + 1));
       }
     } catch { /* Ignore an unrelated malformed cookie rather than breaking session actions. */ }
@@ -24,15 +24,35 @@ export function csrfTokenFromCookie(cookieValue) {
   return "";
 }
 
+const busyDialogs = new WeakSet();
+
+export function bindResettableDialog(dialog, form, error) {
+  dialog.querySelectorAll("[data-dialog-cancel]").forEach((button) => {
+    button.addEventListener("click", () => dialog.close());
+  });
+  dialog.addEventListener("close", () => {
+    form.reset();
+    error.textContent = "";
+    error.hidden = true;
+  });
+  dialog.addEventListener("cancel", (event) => { if (busyDialogs.has(dialog)) event.preventDefault(); });
+}
+
+export function setDialogBusy(dialog, busy) {
+  if (busy) busyDialogs.add(dialog);
+  else busyDialogs.delete(dialog);
+  dialog.querySelectorAll("[data-dialog-cancel]").forEach((button) => { button.disabled = busy; });
+}
+
 export function createApiClient({ fetchImpl = globalThis.fetch, cookie = () => globalThis.document?.cookie ?? "",
-  onUnauthorized = () => undefined } = {}) {
+  csrfCookieName = () => undefined, onUnauthorized = () => undefined } = {}) {
   return async function api(path, options = {}) {
     const { handleUnauthorized = true, acceptStatuses = [], ...requestOptions } = options;
     const method = String(requestOptions.method || "GET").toUpperCase();
     const headers = { Accept: "application/json", ...(requestOptions.body ? { "Content-Type": "application/json" } : {}),
       ...(requestOptions.headers || {}) };
     if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-      const csrf = csrfTokenFromCookie(cookie());
+      const csrf = csrfTokenFromCookie(cookie(), csrfCookieName());
       if (csrf) headers["X-CSRF-Token"] = csrf;
     }
     let response;
@@ -72,6 +92,50 @@ export function taskSummary(tasks) {
     overdue: list.filter((task) => task.is_overdue === true).length,
     completed: list.filter((task) => task.status === "COMPLETED").length,
   };
+}
+
+export async function createManualTask(api, values) {
+  const deadline = values.deadline ? new Date(values.deadline) : null;
+  if (deadline && !Number.isFinite(deadline.getTime())) throw new Error(uiMessages.tasks.invalidDeadline);
+  return api("/api/tasks", { method: "POST", body: JSON.stringify({
+    title: values.title.trim(),
+    ...(values.description.trim() ? { description: values.description.trim() } : {}),
+    priority: values.priority,
+    ...(values.assignedToUserId ? { assigned_to: values.assignedToUserId } : {}),
+    ...(deadline ? { deadline: deadline.toISOString() } : {}),
+  }) });
+}
+
+export async function updateTask(api, id, values) {
+  const deadline = values.deadline ? new Date(values.deadline) : null;
+  if (deadline && !Number.isFinite(deadline.getTime())) throw new Error(uiMessages.tasks.invalidDeadline);
+  return api(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({
+    title: values.title.trim(), description: values.description.trim() || null,
+    priority: values.priority, deadline: deadline ? deadline.toISOString() : null,
+  }) });
+}
+
+const taskStatusTransitions = Object.freeze({
+  DRAFT: Object.freeze(["OPEN"]),
+  OPEN: Object.freeze(["IN_PROGRESS", "BLOCKED", "COMPLETED"]),
+  IN_PROGRESS: Object.freeze(["BLOCKED", "COMPLETED"]),
+  BLOCKED: Object.freeze(["IN_PROGRESS", "COMPLETED"]),
+  COMPLETED: Object.freeze([]),
+  CANCELLED: Object.freeze([]),
+});
+
+export function allowedTaskStatusTransitions(status) {
+  return taskStatusTransitions[status] || [];
+}
+
+export function transitionTask(api, id, status, note = "") {
+  return api(`/api/tasks/${id}/status`, { method: "POST", body: JSON.stringify({
+    status, ...(note.trim() ? { note: note.trim() } : {}),
+  }) });
+}
+
+export function cancelTask(api, id, note = "") {
+  return transitionTask(api, id, "CANCELLED", note);
 }
 
 export function loginErrorMessage(error) {

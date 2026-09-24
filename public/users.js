@@ -1,4 +1,5 @@
 import { uiFormatters, uiMessages } from "./messages.js";
+import { bindResettableDialog, setDialogBusy } from "./ui-core.js";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -13,6 +14,19 @@ function errorMessage(error) {
   if (error?.status === 403) return uiMessages.users.systemAdminRequired;
   if (error?.status === 409) return error.message || uiMessages.users.lastAdminRejected;
   return error?.message || uiMessages.api.requestFailed;
+}
+
+export function createAdministrator(api, values) {
+  return api("/api/admin/users", { method: "POST", body: JSON.stringify({
+    display_name: values.display_name, email: values.email, division_id: Number(values.division_id),
+    role_id: Number(values.role_id), grant_system_admin: values.grant_system_admin, reason: values.reason,
+  }) });
+}
+
+export function changeUserActive(api, user, active) {
+  return api(`/api/admin/users/${user.id}/access`, { method: "PATCH", body: JSON.stringify({
+    division_id: user.division?.id ?? null, role_id: user.role?.id ?? null, active,
+  }) });
 }
 
 export function setupUsersView({ api, badge, formatDate, showGlobal, onSessionRequired }) {
@@ -88,14 +102,20 @@ export function setupUsersView({ api, badge, formatDate, showGlobal, onSessionRe
 
   function input(label, name, value, type = "text") {
     const holder = node("label", "form-label", label); const field = document.createElement("input");
-    field.name = name; field.type = type; field.className = "form-control"; field.value = value ?? ""; holder.append(field); return holder;
+    field.name = name; field.type = type; field.className = "form-control"; field.defaultValue = value ?? ""; holder.append(field); return holder;
   }
 
   function select(label, name, values, current) {
     const holder = node("label", "form-label", label); const field = document.createElement("select");
     field.name = name; field.className = "form-select";
-    field.append(new Option(uiMessages.users.unset, ""), ...values.map((item) => new Option(item.name, item.id, false, Number(item.id) === Number(current))));
+    field.append(new Option(uiMessages.users.unset, "", !current, !current),
+      ...values.map((item) => new Option(item.name, item.id, Number(item.id) === Number(current), Number(item.id) === Number(current))));
     holder.append(field); return holder;
+  }
+
+  function cancelEdit(form) {
+    const button = node("button", "btn btn-link", uiMessages.users.cancel);
+    button.type = "button"; button.addEventListener("click", () => form.reset()); form.append(button);
   }
 
   async function mutation(path, method, body) {
@@ -118,13 +138,30 @@ export function setupUsersView({ api, badge, formatDate, showGlobal, onSessionRe
         node("p", "text-secondary", uiFormatters.userCreated(formatDate(user.created_at, true))), accessBadges(user)); body.append(facts);
 
       const profile = node("form", "user-action"); profile.append(node("h4", "", uiMessages.users.profile), input(uiMessages.users.displayName, "display_name", user.display_name), node("button", "btn btn-outline-secondary", uiMessages.users.saveProfile));
+      profile.querySelector("button").type = "submit"; cancelEdit(profile);
       profile.addEventListener("submit", async (event) => { event.preventDefault(); await mutation(`/api/admin/users/${id}/profile`, "PATCH", { display_name: profile.elements.display_name.value }); await openDetail(id); await loadUsers(); });
       body.append(profile);
 
       const access = node("form", "user-action"); access.append(node("h4", "", uiMessages.users.access), select(uiMessages.users.division, "division_id", state.catalogs.divisions, user.division?.id),
         select(uiMessages.users.role, "role_id", state.catalogs.roles, user.role?.id));
-      const active = node("label", "form-check"); const activeBox = document.createElement("input"); activeBox.type = "checkbox"; activeBox.name = "active"; activeBox.checked = user.active; activeBox.disabled = user.is_current_user; activeBox.className = "form-check-input"; active.append(activeBox, node("span", "form-check-label", user.is_current_user ? uiMessages.users.ownActive : uiMessages.users.active));
+      const active = node("label", "form-check"); const activeBox = document.createElement("input"); activeBox.type = "checkbox"; activeBox.name = "active"; activeBox.defaultChecked = user.active; activeBox.disabled = user.is_current_user; activeBox.className = "form-check-input"; active.append(activeBox, node("span", "form-check-label", user.is_current_user ? uiMessages.users.ownActive : uiMessages.users.active));
       access.append(active, input(uiMessages.users.selfDemotionReason, "reason", ""), node("button", "btn btn-outline-secondary", uiMessages.users.saveAccess));
+      access.querySelector("button").type = "submit"; cancelEdit(access);
+      if (!user.is_current_user) {
+        const lifecycle = node("button", user.active ? "btn btn-outline-danger" : "btn btn-outline-secondary",
+          user.active ? uiMessages.users.deactivate : uiMessages.users.reactivate);
+        lifecycle.type = "button";
+        lifecycle.addEventListener("click", async () => {
+          if (!confirm(user.active ? uiMessages.users.confirmDeactivate : uiMessages.users.confirmReactivate)) return;
+          lifecycle.disabled = true;
+          try {
+            await changeUserActive(api, user, !user.active);
+            await openDetail(id); await Promise.all([loadUsers(), loadSummary()]);
+          } catch (error) { showGlobal(errorMessage(error)); }
+          finally { lifecycle.disabled = false; }
+        });
+        access.append(lifecycle);
+      }
       access.addEventListener("submit", async (event) => { event.preventDefault();
         const selectedDivision = state.catalogs.divisions.find((item) => Number(item.id) === Number(access.elements.division_id.value));
         const demotion = user.is_current_user && user.effective_system_admin
@@ -158,16 +195,19 @@ export function setupUsersView({ api, badge, formatDate, showGlobal, onSessionRe
   $("#users-more").addEventListener("click", () => void loadUsers({ append: true }));
   $("#user-rows").addEventListener("click", (event) => { const button = event.target.closest("button[data-user-id]"); if (button) void openDetail(button.dataset.userId); });
   $("#close-user-detail").addEventListener("click", () => { $("#user-detail").hidden = true; state.selected = null; });
+  bindResettableDialog($("#create-user-dialog"), $("#create-user-form"), $("#create-user-error"));
   $("#create-user").addEventListener("click", () => $("#create-user-dialog").showModal());
   $("#create-user-form").addEventListener("submit", async (event) => {
-    if (event.submitter?.value === "cancel") return;
     event.preventDefault(); const form = event.currentTarget; const error = $("#create-user-error"); error.hidden = true;
+    const submit = $("#create-user-submit"); if (submit.disabled) return;
+    submit.disabled = true; setDialogBusy($("#create-user-dialog"), true);
     try {
-      const result = await mutation("/api/admin/users", "POST", { display_name: form.elements.display_name.value,
+      const result = await createAdministrator(api, { display_name: form.elements.display_name.value,
         email: form.elements.email.value, division_id: Number(form.elements.division_id.value), role_id: Number(form.elements.role_id.value),
         grant_system_admin: form.elements.grant_system_admin.checked, reason: form.elements.reason.value });
-      $("#create-user-dialog").close(); form.reset(); await showTemporary(result.data.temporary_password); await Promise.all([loadUsers(), loadSummary()]);
+      $("#create-user-dialog").close(); await showTemporary(result.data.temporary_password); await Promise.all([loadUsers(), loadSummary()]);
     } catch (caught) { error.textContent = errorMessage(caught); error.hidden = false; }
+    finally { submit.disabled = false; setDialogBusy($("#create-user-dialog"), false); }
   });
   $("#temporary-password-saved").addEventListener("change", (event) => { $("#close-temporary-password").disabled = !event.target.checked; });
   $("#temporary-password-dialog").addEventListener("close", () => { $("#temporary-password").textContent = ""; $("#temporary-password-saved").checked = false; });

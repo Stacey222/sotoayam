@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "../../src/errors.js";
+import { ROLE_PERMISSION_SEEDS } from "../../src/governance/catalog.js";
 import type { AuditLog, AuditLogInput } from "../../src/governance/types.js";
 import type { AuditRepository } from "../../src/repositories/audit.repository.js";
 import type { NewTaskActivity, TaskActivitiesRepository } from "../../src/repositories/task-activities.repository.js";
@@ -86,6 +87,37 @@ describe("Slice 3 Task Core acceptance", () => {
   it("12. populates started_at only on first IN_PROGRESS", async () => { tasks.rows = [task()]; const result = await service.transition(staff(), 1, { status: "IN_PROGRESS" }); expect(result.started_at).toBe(fixedNow.toISOString()); });
   it("13. populates completed_at", async () => { tasks.rows = [task()]; expect((await service.transition(staff(), 1, { status: "COMPLETED" })).completed_at).toBe(fixedNow.toISOString()); });
   it("14. populates cancelled_at", async () => { tasks.rows = [task()]; expect((await service.transition(staff(), 1, { status: "CANCELLED" })).cancelled_at).toBe(fixedNow.toISOString()); });
+  it("allows the assigned worker to cancel but denies an unrelated ordinary user", async () => {
+    tasks.rows = [task({ assigned_to_user_id: 1 })];
+    await expect(service.transition(staff({ id: 2 }), 1, { status: "CANCELLED" })).rejects.toMatchObject({ code: "TASK_FORBIDDEN" });
+    expect((await service.transition(staff(), 1, { status: "CANCELLED" })).status).toBe("CANCELLED");
+  });
+  it("allows only a verified effective SYSTEM_ADMIN actor to administratively cancel without broad edit", async () => {
+    tasks.rows = [task({ assigned_to_user_id: null })];
+    const administrator = admin({ effectiveSystemAdmin: true, permissions: perms("task.view_division") });
+    await expect(service.update(administrator, 1, { title: "Unauthorized edit" })).rejects.toMatchObject({ code: "TASK_FORBIDDEN" });
+    const result = await service.transition(administrator, 1, { status: "CANCELLED", note: "Administrative cleanup" });
+    expect(result.status).toBe("CANCELLED");
+    expect(result.cancelled_at).toBe(fixedNow.toISOString());
+    expect((await service.get(administrator, 1)).status).toBe("CANCELLED");
+    expect(activities.rows.filter((row) => row.activity_type === "STATUS_CHANGE")).toHaveLength(1);
+    expect(activities.rows[0]).toMatchObject({ actor_user_id: 40, note: "Administrative cleanup" });
+    expect(audit.rows.filter((row) => row.action === "TASK_CANCELLED")).toEqual([
+      expect.objectContaining({ actor_type: "USER", actor_user_id: 40, object_id: "1" }),
+    ]);
+    expect(audit.rows).toHaveLength(2);
+  });
+  it("keeps OWNER task create/read/assigned edit plus separate SYSTEM_ADMIN cancellation", async () => {
+    const owner = admin({ roleCode: "OWNER", roleId: 3,
+      permissions: perms(...ROLE_PERMISSION_SEEDS.OWNER), effectiveSystemAdmin: true });
+    const created = await service.createManual(owner, { title: "Owner task", assignedToUserId: owner.id });
+    expect((await service.get(owner, created.id)).title).toBe("Owner task");
+    expect((await service.list(owner, {})).map((row) => row.id)).toContain(created.id);
+    expect((await service.update(owner, created.id, { title: "Updated owner task" })).title).toBe("Updated owner task");
+    tasks.rows.push(task({ id: 2, created_by_user_id: 1, assigned_to_user_id: null }));
+    expect((await service.transition(owner, 2, { status: "CANCELLED" })).status).toBe("CANCELLED");
+    await expect(service.update(owner, 2, { title: "Not assigned" })).rejects.toMatchObject({ code: "TASK_FORBIDDEN" });
+  });
   it("15. derives overdue", () => { expect(isTaskOverdue(task({ deadline: "2026-08-28T00:00:00Z" }), fixedNow)).toBe(true); });
   it("16. never marks completed task overdue", () => { expect(isTaskOverdue(task({ deadline: "2026-08-28T00:00:00Z", status: "COMPLETED", completed_at: fixedNow.toISOString() }), fixedNow)).toBe(false); });
   it("17. never marks cancelled task overdue", () => { expect(isTaskOverdue(task({ deadline: "2026-08-28T00:00:00Z", status: "CANCELLED", cancelled_at: fixedNow.toISOString() }), fixedNow)).toBe(false); });

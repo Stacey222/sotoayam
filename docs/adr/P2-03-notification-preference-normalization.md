@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase A implemented; parity review and any live cutover remain open. This ADR defines the existing P2-03 milestone, not a new routing product. The Phase A runtime accepts only `LEGACY` and `COMPARE`; `NORMALIZED` mode remains unavailable until the separate approval gate in section 4 is satisfied.
+Implemented. Phase A established normalized storage, mirrored writes, and exact parity proof. The independent parity review approved Phase B, and `NORMALIZED` is now the authoritative read mode. `LEGACY` remains an explicit rollback path; this ADR defines the existing P2-03 milestone, not a new routing product.
 
 ## 1. Context and boundaries
 

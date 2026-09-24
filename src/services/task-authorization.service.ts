@@ -26,6 +26,12 @@ export class TaskAuthorizationService {
     }
   }
 
+  assertCanCancel(actor: TaskActor, task: Task): void {
+    this.assertActive(actor);
+    if (actor.effectiveSystemAdmin === true) return;
+    this.assertCanUpdate(actor, task);
+  }
+
   assertCanComplete(actor: TaskActor, task: Task): void {
     this.assertActive(actor);
     if (task.assigned_to_user_id !== actor.id || !actor.permissions.has("task.complete_assigned")) {

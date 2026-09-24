@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { clearAdminSessionCookies, setAdminSessionCookies, type AdminSessionAuthenticator,
+import { clearAdminSessionCookies, csrfCookieName, setAdminSessionCookies, type AdminSessionAuthenticator,
   type SessionPrincipal } from "../auth/admin-session.js";
 import { AppError } from "../errors.js";
 import { AdminAuthenticationService, LoginThrottledError } from "../services/admin-authentication.service.js";
@@ -12,10 +12,10 @@ export interface AdminAuthRoutesOptions {
   cookieSecure: boolean;
 }
 
-function sessionData(principal: SessionPrincipal) {
+function sessionData(principal: SessionPrincipal, cookieSecure: boolean) {
   return { user_id: principal.adminUserId, email: principal.email,
     display_name: principal.displayName, expires_at: principal.expiresAt,
-    password_change_required: principal.passwordChangeRequired };
+    password_change_required: principal.passwordChangeRequired, csrf_cookie_name: csrfCookieName(cookieSecure) };
 }
 
 function requireUnrestricted(principal: SessionPrincipal): void {
@@ -48,7 +48,7 @@ export const adminAuthRoutes = async (app: FastifyInstance, options: AdminAuthRo
       const result = await options.service.login({ email: body?.email, password: body?.password,
         clientIp: request.ip, userAgent: request.headers["user-agent"] });
       setAdminSessionCookies(reply, options.cookieSecure, result.sessionToken, result.csrfToken);
-      return { success: true, data: sessionData(result.principal) };
+      return { success: true, data: sessionData(result.principal, options.cookieSecure) };
     } catch (error) {
       if (error instanceof LoginThrottledError) reply.header("Retry-After", String(error.retryAfterSeconds));
       throw error;
@@ -68,7 +68,7 @@ export const adminAuthRoutes = async (app: FastifyInstance, options: AdminAuthRo
 
   app.get("/session", { config: { rateLimit: "auth-session" } }, async (request, reply) => {
     const principal = await authenticate(request, reply, options);
-    return { success: true, data: sessionData(principal) };
+    return { success: true, data: sessionData(principal, options.cookieSecure) };
   });
 
   app.post("/password", { config: { rateLimit: "auth-password" } }, async (request, reply) => {

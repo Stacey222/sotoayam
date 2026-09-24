@@ -25,25 +25,26 @@ const historical: Record<string, string> = {
   "202609130001_harden_effective_system_admin_invariant.sql": "3b7113fb091685cf3dfe070b99917ae485be197369508943b8fc96c426c0498f",
   "202609140001_create_admin_user_management.sql": "e8c6df6d18cac1a7e967ccc3799e3b3f6e1389396b8ffc9f6ec9cbf0bd7035ca",
   "202609150001_create_runtime_settings_owner_actors.sql": "706c67e26eb263e5991721ca60bc2d180cad46a2174d786bfa826c622cdd9d2b",
+  "202609160001_normalize_telegram_notification_preferences.sql": "716031d0d31580f62f7756211cdd5122564017e03a70eb2af10dadb3074935e7",
 };
 
 const migrationPath = path.resolve("supabase/migrations/202609090002_implement_customer_taxonomy_transition.sql");
 
 describe("P0-14 migration integrity", () => {
-  it("keeps all twenty-one historical migration bytes unchanged", async () => {
+  it("keeps all twenty-two historical migration bytes unchanged", async () => {
     for (const [name, expected] of Object.entries(historical)) {
       const bytes = await readFile(path.resolve("supabase/migrations", name));
       expect(createHash("sha256").update(bytes).digest("hex"), name).toBe(expected);
     }
   });
 
-  it("keeps all twenty-one historical migrations and adds exactly the P2-03 preference migration", async () => {
+  it("keeps all twenty-two historical migrations and adds exactly the OWNER task grant migration", async () => {
     const names = (await readdir(path.resolve("supabase/migrations"))).filter((name) => name.endsWith(".sql")).sort();
     expect(names.slice(-2)).toEqual([
-      "202609150001_create_runtime_settings_owner_actors.sql",
       "202609160001_normalize_telegram_notification_preferences.sql",
+      "202609180001_add_owner_task_capabilities.sql",
     ]);
-    expect(names).toHaveLength(22);
+    expect(names).toHaveLength(23);
   });
 
   it("does not execute destructive operational DML during migration", async () => {

@@ -199,6 +199,7 @@ export class TaskService {
   async transition(actor: TaskActor, id: number, input: TransitionTaskInput): Promise<TaskReadModel> {
     const task = await this.required(id);
     if (input.status === "COMPLETED") this.authorization.assertCanComplete(actor, task);
+    else if (input.status === "CANCELLED") this.authorization.assertCanCancel(actor, task);
     else this.authorization.assertCanUpdate(actor, task);
     if (input.status === "BLOCKED" && !input.note?.trim()) {
       throw new AppError(400, "VALIDATION_ERROR", "Blocked status requires a reason");

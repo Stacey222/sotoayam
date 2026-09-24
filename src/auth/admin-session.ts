@@ -41,6 +41,10 @@ function cookieNames(secure: boolean) {
     : { session: INSECURE_SESSION_COOKIE, csrf: INSECURE_CSRF_COOKIE };
 }
 
+export function csrfCookieName(secure: boolean): string {
+  return cookieNames(secure).csrf;
+}
+
 export function setAdminSessionCookies(reply: FastifyReply, secure: boolean, sessionToken: string, csrfToken: string): void {
   const names = cookieNames(secure);
   const common = { path: "/", secure, sameSite: "strict" as const };

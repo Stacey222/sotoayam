@@ -167,14 +167,16 @@ P2-02 is implemented from `docs/adr/P2-02-message-string-catalog.md`. Server cop
 
 `npm run check:message-catalog` enforces a deliberately bounded inventory of 12 catalog-owned literals across nine production call sites. Focused output/reliability regressions pass 245/245, the complete suite passes 896 tests with 52 environment-gated legacy database tests skipped, and clean disposable PostgreSQL applies all 21 migrations twice. P2-02 adds no migration, dependency, API, persistence, or runtime customization.
 
+## MVP Closure Checkpoint
+
+The authenticated development-instance smoke test passed login, user management, task create/read/edit, `OPEN` to `IN_PROGRESS`, administrative cancellation, runtime settings, one real Telegram test delivery, logout/login, `/health`, and `/ready`. The notification proof was exactly one event, one intent, one delivered delivery, and one Telegram attempt. The dashboard now exposes existing task creation/status/cancellation contracts and a session-only effective-SYSTEM_ADMIN test-notification flow; it does not bypass canonical task or notification services.
+
+Migration #23 grants the generic OWNER role the existing MVP task bundle without coupling OWNER to SYSTEM_ADMIN. Administrative cancellation remains a separate verified effective-SYSTEM_ADMIN exception and does not grant generic edit-all authority. The development instance designates its own OWNER + SYSTEM_ADMIN business actor; no named development identity is a product default.
+
+P2-03 is complete after approved Phase B cutover. `NORMALIZED` is authoritative for the seven existing preferences, while atomic mirrored legacy columns and `LEGACY` resolver mode remain the rollback path.
+
 ## Next Agent
-Recommended: independent P2-03 Phase A parity and migration review.
-
-Next task:
-Review migration #22's backfill/mirror transaction, the seven-type recipient parity evidence, sanitized `COMPARE` mode, and the legacy-only delivery invariant against `docs/adr/P2-03-notification-preference-normalization.md`. Do not switch live reads to normalized storage in this review.
-
-Reason:
-P2-03 Phase A is implemented without a live cutover. Migration #22 applies on clean disposable PostgreSQL 22/22 twice and upgrades a populated 21-migration disposable database with exact backfill; all seven recipient sets match. `LEGACY` is the default and `COMPARE` is shadow-only. No linked development Supabase project was contacted. The formal parity/operator-approval gate remains before `NORMALIZED` reads can be implemented or enabled.
+Recommended: continue with the next incomplete milestone in the existing Phase 2 roadmap.
 
 ## Pending Higher-Level Work
 - Continue with the ordered Phase 2 scope while preserving the P1 security/reliability boundaries and the P2-00 effective-administrator invariant.

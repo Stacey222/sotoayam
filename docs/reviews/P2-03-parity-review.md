@@ -40,3 +40,6 @@ During implementation, seven `SELECT LIMIT 0` calls were executed via a checker 
 ## 9. Next Steps
 **Authorized.** Normalized read cutover (Phase B) may now proceed to the operator-approval step.
 
+## 10. Cutover Record
+
+The approved Phase B cutover was subsequently implemented. `NORMALIZED` is the configured authoritative read mode; the mirrored legacy representation and explicit `LEGACY` mode remain available for rollback without replaying notifications.

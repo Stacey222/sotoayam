@@ -176,12 +176,18 @@ Migration #23 grants the generic OWNER role the existing MVP task bundle without
 P2-03 is complete after approved Phase B cutover. `NORMALIZED` is authoritative for the seven existing preferences, while atomic mirrored legacy columns and `LEGACY` resolver mode remain the rollback path.
 
 ## Next Agent
-Recommended: continue with the next incomplete milestone in the existing Phase 2 roadmap.
+Recommended: independently review P3-01 first-owner bootstrap security and clean-install UX before starting P3-02.
 
 ## Pending Higher-Level Work
-- Continue with the ordered Phase 2 scope while preserving the P1 security/reliability boundaries and the P2-00 effective-administrator invariant.
+- Continue with the ordered Phase 3 scope while preserving the P1 security/reliability boundaries and the P2-00 effective-administrator invariant.
 - P2-09 and P2-01 are complete; preserve their independent SYSTEM_ADMIN and OWNER authorization contracts.
 - Preserve remaining launch gates: Phase 4 clean-room install, upgrade/rollback, restore drill, and final security review are still separate pre-customer requirements.
+
+## P3-01 Fresh Install and First OWNER Bootstrap
+
+P3-01 adds migration `202609250001_create_first_owner_web_bootstrap.sql`, bringing the repository total to 24 while migrations #1-23 remain hash-identical. The customer path is now `/setup`: it collects owner name/email/password, first Divisi, and timezone without exposing an administrator key. Sessionless double-submit CSRF, SameSite cookies, the login-rate policy, strict payload validation, and the database's permanent bootstrap eligibility gate protect the public flow.
+
+`provision_first_owner` composes the existing fresh-install transaction with OWNER assignment, explicit SYSTEM_ADMIN assignment, runtime settings, and business-actor designation under the existing advisory locks. `password_change_required=false` is intentional so the first OWNER can log in immediately. Failed late-stage settings validation proved full rollback; simultaneous disposable-PostgreSQL attempts produced exactly one complete owner. Clean migrations apply 24/24 twice with schema/RLS/RPC/bootstrap/invariant checks passing. No Kento, development email, Telegram identity, or dummy customer data is created by migrations or product bootstrap.
 
 ## Agent Handoff Format
 Every agent completing a task should return:

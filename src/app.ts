@@ -96,6 +96,9 @@ import { RuntimeSettingsProvider } from "./runtime/runtime-settings.js";
 import { SupabaseRuntimeSettingsRepository } from "./repositories/runtime-settings.repository.js";
 import { RuntimeSettingsService } from "./services/runtime-settings.service.js";
 import { runtimeSettingsRoutes } from "./routes/runtime-settings.routes.js";
+import { setupRoutes } from "./routes/setup.routes.js";
+import { SupabaseFirstAdminBootstrapRepository } from "./repositories/first-admin-bootstrap.repository.js";
+import { FirstOwnerBootstrapService } from "./services/first-owner-bootstrap.service.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -107,6 +110,7 @@ export interface BuildAppOptions {
   reminderNotificationsRepository?: ReminderNotificationsRepository;
   telegramPollingRepository?: TelegramPollingRepository;
   logger?: boolean;
+  firstOwnerBootstrapService?: FirstOwnerBootstrapService;
 }
 
 export interface AppRuntime {
@@ -122,6 +126,11 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
   await registerRateLimit(app, { config: options.config });
   const runtimeHealth = new RuntimeHealthState();
   const client = options.repository ? null : createSupabaseClient(options.config);
+  const firstOwnerBootstrapService = options.firstOwnerBootstrapService ?? (client
+    ? new FirstOwnerBootstrapService(new SupabaseFirstAdminBootstrapRepository(client), {
+      reminderSchedulerIntervalSeconds: options.config.reminderSchedulerIntervalSeconds,
+      criticalAlertPolicy: options.config.criticalAlertPolicy,
+    }) : undefined);
   const runtimeSettingsProvider = new RuntimeSettingsProvider({ businessTimeZone: options.config.businessTimeZone,
     reminderSchedulerIntervalSeconds: options.config.reminderSchedulerIntervalSeconds,
     criticalAlertPolicy: options.config.criticalAlertPolicy });
@@ -357,6 +366,12 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     options.config.readyCacheMs ?? 1_000,
   );
   await app.register(healthRoutes, { readiness });
+  if (firstOwnerBootstrapService) await app.register(setupRoutes, {
+    prefix: "/api/setup",
+    service: firstOwnerBootstrapService,
+    cookieSecure: options.config.sessionCookieSecure,
+    defaultBusinessTimeZone: options.config.businessTimeZone,
+  });
   if (adminAuthenticationService && sessionAuthenticator) await app.register(adminAuthRoutes, {
     prefix: "/api/admin/auth", service: adminAuthenticationService,
     authenticator: sessionAuthenticator, cookieSecure: options.config.sessionCookieSecure,
@@ -450,8 +465,22 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
 
   await app.register(async (staticScope) => {
     staticScope.addHook("onRoute", (routeOptions) => {
-      routeOptions.config = { ...routeOptions.config, rateLimit: "exempt" };
+      const setupPage = routeOptions.url === "/setup" || routeOptions.url === "/setup.html";
+      routeOptions.config = { ...routeOptions.config, rateLimit: setupPage ? "login" : "exempt" };
     });
+    if (firstOwnerBootstrapService) {
+      staticScope.addHook("onRequest", async (request, reply) => {
+        if (request.url.split("?", 1)[0] !== "/setup.html") return;
+        const status = await firstOwnerBootstrapService.getStatus();
+        if (!status.eligible) return reply.redirect("/");
+      });
+      const setupPage = async (_request: import("fastify").FastifyRequest, reply: import("fastify").FastifyReply) => {
+        const status = await firstOwnerBootstrapService.getStatus();
+        if (!status.eligible) return reply.redirect("/");
+        return reply.sendFile("setup.html");
+      };
+      staticScope.get("/setup", setupPage);
+    }
     await staticScope.register(fastifyStatic, {
       root: path.resolve(process.cwd(), "public"), prefix: "/", wildcard: false,
     });

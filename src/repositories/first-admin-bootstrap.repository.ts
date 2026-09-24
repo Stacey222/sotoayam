@@ -70,6 +70,7 @@ export interface FirstAdminSetupPreview {
 export interface FirstAdminSetupDivision { code: string; name: string }
 
 export interface FirstAdminProvisioningResult extends FirstAdminBootstrapResult { divisionCode: string }
+export interface FirstOwnerProvisioningResult extends FirstAdminProvisioningResult { settingsVersion: number }
 
 export interface FirstAdminBootstrapInput {
   displayName: string;
@@ -84,6 +85,9 @@ export interface FirstAdminBootstrapRepository {
   preview?(lineage: SetupLineage): Promise<FirstAdminSetupPreview>;
   resolveActiveDivision?(code: string): Promise<FirstAdminSetupDivision | null>;
   provision?(input: FirstAdminBootstrapInput & { lineage: SetupLineage; divisionCode: string; divisionName: string }): Promise<FirstAdminProvisioningResult>;
+  provisionOwner?(input: FirstAdminBootstrapInput & { divisionCode: string; divisionName: string;
+    businessTimeZone: string; reminderSchedulerIntervalSeconds: number;
+    criticalAlertPolicy: unknown }): Promise<FirstOwnerProvisioningResult>;
 }
 
 interface BootstrapRow {
@@ -93,6 +97,7 @@ interface BootstrapRow {
 }
 
 interface ProvisioningRow extends BootstrapRow { division_code: string }
+interface OwnerProvisioningRow extends ProvisioningRow { settings_version: number }
 
 function mapDatabaseDiagnostic(error: DatabaseDiagnostic): FirstAdminBootstrapError {
   const message = error.message ?? "";
@@ -190,6 +195,24 @@ export class SupabaseFirstAdminBootstrapRepository implements FirstAdminBootstra
     const row = data as ProvisioningRow;
     return { userId: Number(row.user_id), assignmentId: Number(row.assignment_id),
       bootstrappedAt: row.bootstrapped_at, divisionCode: row.division_code };
+  }
+
+  async provisionOwner(input: FirstAdminBootstrapInput & { divisionCode: string; divisionName: string;
+    businessTimeZone: string; reminderSchedulerIntervalSeconds: number;
+    criticalAlertPolicy: unknown }): Promise<FirstOwnerProvisioningResult> {
+    const { data, error } = await this.client.rpc("provision_first_owner", {
+      p_display_name: input.displayName, p_email: input.email,
+      p_password_algorithm: input.passwordAlgorithm, p_password_hash: input.passwordHash,
+      p_division_code: input.divisionCode, p_division_name: input.divisionName,
+      p_business_time_zone: input.businessTimeZone,
+      p_reminder_scheduler_interval_seconds: input.reminderSchedulerIntervalSeconds,
+      p_critical_alert_policy: input.criticalAlertPolicy,
+    }).single();
+    if (error) throw mapDatabaseDiagnostic(error);
+    const row = data as OwnerProvisioningRow;
+    return { userId: Number(row.user_id), assignmentId: Number(row.assignment_id),
+      bootstrappedAt: row.bootstrapped_at, divisionCode: row.division_code,
+      settingsVersion: Number(row.settings_version) };
   }
 }
 

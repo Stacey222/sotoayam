@@ -9,6 +9,8 @@ import { RecipientResolverService } from "../src/services/recipient-resolver.ser
 import type { TelegramSender } from "../src/services/telegram.service.js";
 import { TelegramRegistrationService } from "../src/services/telegram-registration.service.js";
 import { TelegramBot } from "../src/telegram/bot.js";
+import { FirstOwnerBootstrapService } from "../src/services/first-owner-bootstrap.service.js";
+import type { FirstAdminBootstrapRepository } from "../src/repositories/first-admin-bootstrap.repository.js";
 import type {
   NotificationPreference,
   TelegramRegistration,
@@ -142,6 +144,29 @@ describe("HTTP API", () => {
     expect(icon.statusCode).toBe(200);
     expect(script.body).toContain('from "./ui-core.js"');
     expect(`${response.body}\n${script.body}\n${core.body}`).not.toMatch(/ADMIN_API_KEY|INTERNAL_API_KEY|SUPABASE_SERVICE_ROLE_KEY/);
+    await app.close();
+  });
+
+  it("serves first-run setup only while bootstrap is eligible", async () => {
+    let eligible = true;
+    const bootstrapRepository = {
+      getStatus: async () => ({ eligible }),
+      bootstrap: async () => { throw new Error("not used"); },
+    } as FirstAdminBootstrapRepository;
+    const firstOwnerBootstrapService = new FirstOwnerBootstrapService(bootstrapRepository, {
+      reminderSchedulerIntervalSeconds: config.reminderSchedulerIntervalSeconds,
+      criticalAlertPolicy: config.criticalAlertPolicy,
+    });
+    const { app } = await buildApp({ config, repository, telegramSender: sender, logger: false,
+      firstOwnerBootstrapService });
+    const page = await app.inject({ method: "GET", url: "/setup" });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain("Buat pemilik pertama");
+    eligible = false;
+    const completed = await app.inject({ method: "GET", url: "/setup" });
+    expect(completed.statusCode).toBe(302);
+    expect(completed.headers.location).toBe("/");
+    expect((await app.inject({ method: "GET", url: "/setup.html" })).statusCode).toBe(302);
     await app.close();
   });
 

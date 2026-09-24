@@ -95,7 +95,6 @@ Create `${APP_ROOT}/shared/.env` from `.env.example` in the repository, then rep
 | `READY_DB_TIMEOUT_MS` | Optional | 250–10000, default 2000; batas satu probe database/schema tanpa retry |
 | `READY_CACHE_MS` | Optional | 0–10000, default 1000; cache readiness proses lokal, tanpa stale-while-error |
 | `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF` | **Deploy-time only** | Required by the deployment script to reach your database. Supply them in the operator's protected environment. **Never** put them in `shared/.env`, the package, or shell history |
-| `SOTOAYAM_BOOTSTRAP_ADMIN_PASSWORD` | **Setup-time only** | Optional automation fallback for the first-administrator password. Prefer `--password-file` or the prompt. Remove it immediately after setup |
 
 Validate the file before deploying:
 
@@ -128,48 +127,21 @@ Run migrations through `deploy-release.sh` rather than invoking `npm run migrate
 
 **Never apply migration files by hand.** Replaying them outside the migration registry can reintroduce starter data that setup already removed. Always use `npm run migrate` through the deployment script.
 
-## First Administrator Setup
+## First OWNER Setup
 
-Run this **exactly once** per installation, after migrations, as the service account with the runtime environment loaded:
-
-```bash
-sudo -u "${APP_USER}" node --env-file="${APP_ROOT}/shared/.env" \
-  "${APP_ROOT}/current/dist/src/cli/setup.js" \
-  --fresh-install --division-name "Operations" --division-code OPERATIONS
-```
-
-Setup requires you to state which kind of installation this is. There is no default and it never guesses:
-
-- `--fresh-install` — a new customer on a new database;
-- `--keep-existing-taxonomy --division-code EXISTING_DIVISION` — an existing installation being brought onto this version.
-
-Before asking for a password, setup prints a read-only `SETUP_PREVIEW`. Read it and confirm it describes what you expect.
-
-**Password handling.** Setup prompts with no echo and asks for confirmation. For automation use `--password-file` pointing at a protected file that you delete immediately afterwards. There is deliberately no `--password` argument — passwords must never appear in shell history or process listings.
-
-Successful output:
+After migrations and application startup, open the public HTTPS address with `/setup`, for example:
 
 ```text
-FIRST_ADMIN_CREATED user_id=<id> email=<normalized-email>
-authority=SYSTEM_ADMIN division=OPERATIONS role=ADMIN
+https://sotoayam.example/setup
 ```
 
-The first administrator gets the `ADMIN` role and `SYSTEM_ADMIN` authority. They do not get `OWNER`, and they do not need a Telegram account.
+Enter the first owner's display name, email, strong initial password, first Divisi name, and business timezone. No administrator API key, SQL access, CLI command, or Telegram identity is required. The browser uses a one-time same-site CSRF token and the setup POST is rate-limited.
 
-Setup is a single transaction: either everything is created or nothing is. If it fails, fix the cause and run it again. Once it has succeeded it can never run again — a second attempt exits with `FIRST_ADMIN_ALREADY_EXISTS` (exit code 3) without prompting for a password. Setup is not an account-recovery tool.
+The transaction creates exactly one customer user with role `OWNER`, an immediately usable scrypt login credential (`password_change_required=false`), a separate explicit `SYSTEM_ADMIN` assignment, the first Divisi, the bootstrap marker, runtime settings, and `business_actor_user_id`. OWNER does not inherit SYSTEM_ADMIN and SYSTEM_ADMIN does not inherit OWNER; the first operator receives both only as explicit bootstrap state.
 
-## Fresh vs Existing Installation
+Setup reuses the locked fresh-install evidence checks. It retires the untouched starter taxonomy only when the database contains no customer users, tasks, Telegram identities, changed seed data, or other operational evidence. Any failure rolls back every effect. Simultaneous attempts serialize, and after success `/setup` redirects to login while API replay returns `FIRST_ADMIN_ALREADY_EXISTS`.
 
-| | Fresh installation | Existing installation |
-| --- | --- | --- |
-| Command | `--fresh-install` with a division name and code | `--keep-existing-taxonomy` with an existing active division code |
-| Divisions after setup | Only the one you named | Every existing division, unchanged |
-| Starter data | Removed | Kept exactly as-is |
-| Your data | None yet | Nothing is deleted, renamed, or deactivated |
-
-A fresh installation ships with a small set of starter divisions so the database is never empty mid-install. Choosing `--fresh-install` tells Sotoayam this database belongs to a new customer, and setup removes that starter data in the same transaction that creates your first division and your administrator.
-
-Setup will refuse to remove anything if it finds *any* sign the installation is already in use — a user, a task, a Telegram registration, a changed starter row, or anything referencing one. In that case it makes no changes at all. Your choice is recorded permanently and cannot be altered afterwards, so make it deliberately.
+The older `npm run setup` CLI remains for previously documented operator compatibility, including its historical ADMIN result. It is not the customer first-OWNER path and must not be used as account recovery. New customer installs use `/setup`.
 
 ## Start Sotoayam
 
@@ -185,7 +157,7 @@ Expected: `/health` returns `{"status":"ok"}` for liveness and `/ready` reports 
 
 This restart is required after fresh setup. Skipping it leaves an obsolete legacy report route registered until the next restart.
 
-Confirm the installation is administratively ready by opening the HTTPS admin URL and signing in with the email and password created by setup. The browser receives a short-lived `HttpOnly` session cookie; it never receives `ADMIN_API_KEY`.
+Confirm the installation is administratively ready by opening the HTTPS admin URL and signing in with the OWNER email and password created at `/setup`. The browser receives a short-lived `HttpOnly` session cookie; it never receives `ADMIN_API_KEY`.
 
 The following server-side check requires an explicit temporary compatibility opt-in (`ADMIN_API_KEY_FALLBACK_ENABLED=true`) and is not the daily administrator login path. Before opting in, use `npm run check:admin-key-usage -- --since <ISO timestamp>` to inspect recorded fallback usage:
 
@@ -244,7 +216,7 @@ Sample starter configurations live under `presets/`. They are reference data you
 
 ## Telegram Setup
 
-Telegram is not required to install Sotoayam, and it is not required to create your first administrator.
+Telegram is not required to install Sotoayam, and it is not required to create your first OWNER.
 
 1. Create a bot with BotFather and put the token in `TELEGRAM_BOT_TOKEN`.
 2. Set `TELEGRAM_POLLING_ENABLED=true` — only when this instance's bot is not being polled by any other process.
@@ -265,7 +237,7 @@ curl -fsS -X PATCH "http://127.0.0.1:${HEALTH_PORT}/api/admin/users/<id>/access"
   -d '{"division_id":<id>,"role_id":<id>,"active":true}'
 ```
 
-Note that this is the only way to add a person: they message the bot first, you assign them afterwards. The first administrator, created by setup, is the one account that exists without Telegram.
+Note that this is the only way to add a Telegram operational identity: they message the bot first, you assign them afterwards. The first OWNER, created by setup, is the initial account that exists without Telegram.
 
 If an administrator password must be recovered, run the server-only command as the service account. It prompts without echo, enforces the same password policy, revokes every session for the account, and writes an audit row:
 

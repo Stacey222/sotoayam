@@ -132,12 +132,12 @@ child.stdin.end(statement);
     .split(/\r?\n/).filter(Boolean);
   const files = (await import("./migrate.js")).discoverMigrations;
   const localVersions = (await files("supabase/migrations")).map((file) => file.split("_")[0]);
-  if (localVersions.length !== 23 || JSON.stringify(versions) !== JSON.stringify(localVersions)) {
-    throw new Error("Linked database migration registry does not match the 23 local migrations");
+  if (localVersions.length !== 24 || JSON.stringify(versions) !== JSON.stringify(localVersions)) {
+    throw new Error("Linked database migration registry does not match the 24 local migrations");
   }
   console.log(`TARGET_PROJECT_REF = ${ref}`);
   console.log(`TARGET_DB = ${target.hostname}/postgres`);
   console.log(`CONNECTION_MODE = ${target.mode}`);
-  console.log("MIGRATIONS = 23/23 MATCH");
+  console.log("MIGRATIONS = 24/24 MATCH");
   await execute(sql);
 }

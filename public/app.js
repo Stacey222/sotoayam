@@ -609,6 +609,25 @@ $("#integration-rows").addEventListener("click", (event) => {
 $("#close-credentials").addEventListener("click", () => { $("#credential-panel").hidden = true; });
 window.addEventListener("hashchange", () => { if (state.authenticated) void navigate(location.hash.slice(1)); });
 
-void api("/api/admin/auth/session", { handleUnauthorized: false })
-  .then((payload) => enterApplication(payload.data))
-  .catch(() => showLogin());
+async function initializeApplication() {
+  try {
+    const setup = await api("/api/setup/status", { handleUnauthorized: false });
+    if (setup?.data?.required) {
+      location.replace("/setup");
+      return;
+    }
+  } catch {
+    showLogin("Status penyiapan Sotoayam tidak dapat diperiksa.");
+    return;
+  }
+  try {
+    const payload = await api("/api/admin/auth/session", { handleUnauthorized: false });
+    enterApplication(payload.data);
+  } catch {
+    const completed = new URLSearchParams(location.search).get("setup") === "complete";
+    showLogin(completed ? "Penyiapan selesai. Masuk menggunakan akun OWNER yang baru dibuat." : "", completed);
+    if (completed) history.replaceState(null, "", "/");
+  }
+}
+
+void initializeApplication();

@@ -95,7 +95,7 @@ Production uses `HOST=127.0.0.1` by default, keeping the configured `PORT` priva
 
 The deployment process also requires `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, and `SUPABASE_PROJECT_REF` in its own protected environment. These deploy-only values establish the non-interactive Supabase CLI link for the inactive release. Do not add them to `shared/.env`, the release archive, shell history, or systemd service environment.
 
-The first-administrator setup password is also setup-time only. Prefer the no-echo prompt. If automation requires `SOTOAYAM_BOOTSTRAP_ADMIN_PASSWORD`, supply it only to the setup process and remove it immediately afterward; never store it in `shared/.env`. A protected `--password-file` is also supported and takes precedence over the environment variable. There is intentionally no `--password` argument.
+Fresh customer credentials are entered only through the one-time HTTPS `/setup` page after application startup. They are not deployment environment variables and must never be stored in `shared/.env`.
 
 ## Fresh customer install
 
@@ -107,31 +107,11 @@ The first-administrator setup password is also setup-time only. Prefer the no-ec
 6. Provide the three deploy-only Supabase variables through the approved protected operator environment, then run the deployment script.
 7. The script installs pinned migration tooling in the inactive release, runs `npm run migrate`, removes link state and development tooling, and only then atomically updates `current`.
 8. The script restarts systemd and requires localhost `/ready` to pass, with bounded retries so a temporary startup `503` does not cause an immediate rollback decision. `/health` remains database-independent liveness.
-9. Bootstrap the first administrator exactly once, as the configured service account and with the runtime environment loaded:
-
-   ```bash
-   sudo -u "${APP_USER}" node --env-file="${APP_ROOT}/shared/.env" "${APP_ROOT}/current/dist/src/cli/setup.js"
-   ```
-
-   Setup requires an explicit installation-lineage decision. For a genuinely new customer database, choose `--fresh-install` and supply the first customer-owned division; for an existing installation, choose `--keep-existing-taxonomy` and identify an existing active division. The flags are mutually exclusive and setup never guesses. Interactive setup prompts for the same choice. Before collecting a password it prints a read-only `SETUP_PREVIEW`; inspect it and confirm the operation. Examples from the active release, after its environment is loaded:
-
-   ```bash
-   npm run setup -- --fresh-install --division-name "Operations" --division-code OPERATIONS
-   npm run setup -- --keep-existing-taxonomy --division-code EXISTING_DIVISION
-   ```
-
-   The no-echo prompts collect any omitted display name, email, division input, password, and password confirmation. Successful output has this form:
-
-   ```text
-   FIRST_ADMIN_CREATED user_id=<id> email=<normalized-email>
-   authority=SYSTEM_ADMIN division=<selected-division-code> role=ADMIN
-   ```
-
-   Fresh setup retires origin seed taxonomy only when the preview and locked transaction prove the exact seed is untouched and unreferenced. Any user, task, Telegram mapping, non-seed audit evidence, changed seed, or inbound reference refuses retirement with zero provisioning writes. Setup requires no Telegram bot or Telegram identity. It is permanently refused after any bootstrap or historical system-authority assignment; reruns return `FIRST_ADMIN_ALREADY_EXISTS` with exit code 3 and do not prompt for a password. Do not use setup for administrator recovery.
-10. After successful fresh setup, restart the service and require `/ready` to pass; use `/health` separately for liveness. Installation provenance is intentionally read once at process startup; the pre-setup process sees absent provenance as legacy-compatible, so the restart removes the benign temporary legacy report alias for a `FRESH` installation. Then, from a protected operator environment containing the runtime configuration, run `node scripts/deploy/check-vps-runtime.mjs` in the active release. It verifies configuration shape, the pinned Node runtime, and generic readiness only. Confirm `GET /api/admin/system-authority/status` reports `READY`.
+9. Open the customer HTTPS URL at `/setup`. Create the first OWNER with their email, strong password, first Divisi, and business timezone. This page is available only before bootstrap and requires neither SQL nor `ADMIN_API_KEY`. The locked transaction explicitly assigns both OWNER role and independent SYSTEM_ADMIN authority, stores runtime settings, and designates the same user as business actor. It rolls back completely on any failure and refuses every replay.
+10. After successful fresh setup, restart the service and require `/ready` to pass; use `/health` separately for liveness. Installation provenance is intentionally read once at process startup; the pre-setup process sees absent provenance as legacy-compatible, so the restart removes the benign temporary legacy report alias for a `FRESH` installation. Sign in with the new OWNER credential, then run `node scripts/deploy/check-vps-runtime.mjs` from a protected operator environment. It verifies configuration shape, the pinned Node runtime, and generic readiness only.
 11. Verify exactly one process and, when polling was selected, exactly one Telegram poller.
 
-The bootstrap creates a credential for the future session system, but administrator login does not exist until P1-01; HTTP admin routes continue to require `ADMIN_API_KEY`. The bootstrap administrator has no legacy Telegram mapping but can be managed through normalized user-access APIs. If the same person later registers through Telegram, that registration creates a separate user identity; setup does not merge identities.
+The first OWNER can log in immediately with the P1-01 session flow. The browser receives an HttpOnly session cookie and never receives shared administrator or service credentials. Bootstrap does not create a Telegram identity; later Telegram registration remains a separate existing product flow.
 
 After setup, manage customer-owned divisions, baseline role display names, task categories, and collaboration rules through the protected admin APIs. Codes are stable identifiers; display names may change. The sample under `presets/warehouse-b2b-b2c/` is declarative reference data only and is not applied automatically.
 

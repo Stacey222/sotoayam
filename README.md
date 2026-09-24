@@ -24,12 +24,9 @@ Persyaratan: versi Node.js pada `.node-version` dan project Supabase.
 2. Salin nama variable dari `.env.example` ke `.env` milik lokal dan isi secret secara lokal. Jangan commit `.env`.
 3. Build aplikasi: `npm run build`. Perintah migrasi memakai runner hasil build.
 4. Hubungkan Supabase CLI ke project yang dituju dengan project ref milik operator, lalu jalankan seluruh migration terurut dengan `npm run migrate`.
-5. Pilih mode setup secara eksplisit dan provision administrator pertama tepat sekali:
-   - instalasi customer baru: `npm run setup -- --fresh-install --division-name "Operations" --division-code OPERATIONS`;
-   - instalasi lama: `npm run setup -- --keep-existing-taxonomy --division-code EXISTING_DIVISION`.
-   Pada mode fresh, setup membuat Divisi nyata pertama milik customer dan administrator pertama di dalam satu transaksi.
-6. Setelah setup fresh, restart service bila sudah berjalan agar provenance baru dibaca. Untuk development lokal, jalankan `npm run dev`.
-7. Buka `http://localhost:3000`, lalu masuk dengan email dan password administrator yang dibuat oleh setup. Untuk localhost HTTP saja, set `SESSION_COOKIE_SECURE=false` dengan `TRUST_PROXY=false`; cookie tidak aman ditolak pada host non-loopback atau saat proxy trust aktif.
+5. Jalankan aplikasi (`npm run dev`), lalu buka `http://localhost:3000/setup`. Form satu-kali tersebut membuat OWNER customer pertama, credential login, assignment `SYSTEM_ADMIN` eksplisit, Divisi pertama, runtime timezone, dan business actor dalam satu transaksi.
+6. Setelah setup fresh, restart service bila sudah berjalan agar provenance baru dibaca.
+7. Buka `http://localhost:3000`, lalu masuk dengan email dan password OWNER yang dibuat pada halaman setup. Untuk localhost HTTP saja, set `SESSION_COOKIE_SECURE=false` dengan `TRUST_PROXY=false`; cookie tidak aman ditolak pada host non-loopback atau saat proxy trust aktif.
 8. Jalankan test: `npm test`; typecheck/build: `npm run typecheck` dan `npm run build`.
 
 Dashboard browser memakai HTML/CSS/JavaScript bawaan dengan aset runtime Tabler Free yang disimpan lokal di `public/vendor`; tidak ada build frontend, CDN, atau font/icon eksternal. Setelah login, halaman root membaca data langsung dari endpoint tugas, integrasi, metadata kredensial aman, status/aktivitas notifikasi, health, dan alert yang dapat diakses sesi tersebut. Data atau izin yang belum tersedia ditampilkan sebagai `Belum tersedia`, bukan angka contoh.

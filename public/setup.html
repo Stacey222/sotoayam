@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Penyiapan awal Sotoayam">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'self'">
+  <title>Penyiapan Awal · Sotoayam</title>
+  <link rel="stylesheet" href="/vendor/tabler/tabler.min.css"><link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="page page-center login-page" aria-labelledby="setup-title">
+    <div class="container container-tight py-4">
+      <div class="text-center mb-4 brand-heading"><span class="avatar bg-green-lt">S</span><strong>Sotoayam</strong></div>
+      <form id="setup-form" class="card card-md" novalidate hidden>
+        <div class="card-body">
+          <p class="text-uppercase text-green fw-bold small mb-2">Penyiapan awal</p>
+          <h1 id="setup-title" class="h2 mb-2">Buat pemilik pertama</h1>
+          <p class="text-secondary">Akun ini mengelola bisnis dan menerima kewenangan sistem awal secara terpisah. Penyiapan hanya dapat diselesaikan satu kali.</p>
+          <div id="setup-notice" class="alert alert-danger" role="alert" hidden></div>
+          <div class="mb-3"><label class="form-label" for="owner-name">Nama pemilik</label><input id="owner-name" name="display_name" class="form-control" maxlength="120" autocomplete="name" required></div>
+          <div class="mb-3"><label class="form-label" for="owner-email">Email</label><input id="owner-email" name="email" class="form-control" type="email" maxlength="254" autocomplete="username" required></div>
+          <div class="mb-3"><label class="form-label" for="division-name">Nama Divisi utama</label><input id="division-name" name="division_name" class="form-control" maxlength="120" placeholder="Contoh: Operasional" required></div>
+          <div class="mb-3"><label class="form-label" for="business-time-zone">Zona waktu</label><input id="business-time-zone" name="business_time_zone" class="form-control" maxlength="100" placeholder="Asia/Jakarta" required></div>
+          <div class="mb-3"><label class="form-label" for="owner-password">Kata sandi awal</label><input id="owner-password" name="password" class="form-control" type="password" minlength="12" maxlength="256" autocomplete="new-password" required><small class="form-hint">Minimal 12 karakter; jangan gunakan nama, email, atau kata sandi umum.</small></div>
+          <div class="mb-3"><label class="form-label" for="owner-password-confirmation">Ulangi kata sandi</label><input id="owner-password-confirmation" name="password_confirmation" class="form-control" type="password" minlength="12" maxlength="256" autocomplete="new-password" required></div>
+          <button id="setup-submit" class="btn btn-green w-100" type="submit">Selesaikan Penyiapan</button>
+        </div>
+        <div class="card-footer text-center text-secondary">Kata sandi tidak pernah ditampilkan atau disimpan di browser.</div>
+      </form>
+      <div id="setup-loading" class="card card-body text-center text-secondary">Memeriksa status instalasi…</div>
+    </div>
+  </main>
+  <script type="module" src="/setup.js"></script>
+</body>
+</html>

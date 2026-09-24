@@ -190,3 +190,10 @@ OWNER remains a permission-based business role, independent from SYSTEM_ADMIN au
 
 Decision: the OWNER role gains the existing `task.view_assigned`, `task.create`, `task.update_assigned`, `task.complete_assigned`, `task.add_activity`, and `task.view_division` permissions through forward-only migration #23. This lets a dual OWNER + SYSTEM_ADMIN user retain MVP task workflows without making either authority inherit the other. Cross-Divisi task access and ordinary assignee-only update rules remain unchanged; administrative cancellation is a separate, session-derived effective-SYSTEM_ADMIN exception that preserves task audit and status lifecycle.
 Status: Implemented. The development instance uses its own designated OWNER + SYSTEM_ADMIN business actor; that identity is development data, not a product-global account or installation default.
+
+## D-028 - Fresh customer bootstrap creates one explicit OWNER + SYSTEM_ADMIN operator
+
+Decision: a new customer completes first-run setup through the one-time `/setup` browser flow, not SQL, source edits, or a customer-facing CLI procedure.
+Status: Implemented for P3-01.
+
+The atomic service-role RPC reuses the historical fresh-install evidence gate and `gwens_system_admin_invariant`, then assigns the OWNER role, an independent explicit SYSTEM_ADMIN authority, runtime settings, and `business_actor_user_id` to the same first user. OWNER and SYSTEM_ADMIN do not inherit from each other outside this explicit bootstrap operation. The initial password is scrypt-hashed, works immediately with `password_change_required=false`, never enters logs or browser storage, and setup cannot be replayed. The legacy CLI remains available for previously documented operator compatibility but is not the customer first-OWNER path.

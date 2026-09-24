@@ -122,8 +122,9 @@ Legend:
 
 ## Phase 3 — UI/UX & Operations
 
-- [ ] P3-01 Login/logout/session UI.
+- [x] P3-01 Fresh install + first OWNER bootstrap.
   Owner: Codex -> Antigravity critique
+  Note: the session login/logout UI prerequisite was delivered earlier. P3-01 now provides the commercial one-time `/setup` flow: migration #24 atomically creates the first OWNER, explicit SYSTEM_ADMIN assignment, credential, Divisi, runtime settings, business actor, and bootstrap marker with no development identity defaults.
 - [ ] P3-02 Operational views: critical alerts, failed deliveries, integrations.
   Owner: Claude Code IA -> Codex build -> Antigravity review
 - [ ] P3-03 Division/role management UI.

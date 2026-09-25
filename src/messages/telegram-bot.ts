@@ -1,4 +1,6 @@
 export const telegramBotMessages = {
+  pairingSucceeded: "Telegram berhasil terhubung ke akun Sotoayam Anda.",
+  pairingFailed: "Tautan Telegram tidak valid atau sudah kedaluwarsa. Buat tautan baru dari Sotoayam.",
   privateChatOnly: {
     task: "Task Console hanya tersedia melalui private chat.",
     it: "IT Console hanya tersedia melalui private chat.",

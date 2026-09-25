@@ -6,7 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { discoverMigrations } from "./migrate.js";
 
-const EXPECTED_MIGRATION_COUNT = 24;
+const EXPECTED_MIGRATION_COUNT = 25;
 const REQUIRED_READINESS_RPC = "load_telegram_polling_state()";
 
 export interface MigrationManifest {

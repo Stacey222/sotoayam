@@ -27,22 +27,23 @@ const historical: Record<string, string> = {
   "202609150001_create_runtime_settings_owner_actors.sql": "706c67e26eb263e5991721ca60bc2d180cad46a2174d786bfa826c622cdd9d2b",
   "202609160001_normalize_telegram_notification_preferences.sql": "716031d0d31580f62f7756211cdd5122564017e03a70eb2af10dadb3074935e7",
   "202609180001_add_owner_task_capabilities.sql": "f5289292123df7e76a3de5880838eb9a916d39403534dcb3523a342a7d9d54ff",
+  "202609250001_create_first_owner_web_bootstrap.sql": "dfaa2e1532b1787dc7caad5d301b20361c12e4e2c5c17db1a194dc18f0ca618e",
 };
 
 const migrationPath = path.resolve("supabase/migrations/202609090002_implement_customer_taxonomy_transition.sql");
 
 describe("P0-14 migration integrity", () => {
-  it("keeps all twenty-three historical migration bytes unchanged", async () => {
+  it("keeps all twenty-four historical migration bytes unchanged", async () => {
     for (const [name, expected] of Object.entries(historical)) {
       const bytes = await readFile(path.resolve("supabase/migrations", name));
       expect(createHash("sha256").update(bytes).digest("hex"), name).toBe(expected);
     }
   });
 
-  it("keeps all twenty-three historical migrations and adds exactly the first-owner bootstrap migration", async () => {
+  it("keeps all twenty-four historical migrations and adds exactly the Telegram onboarding migration", async () => {
     const names = (await readdir(path.resolve("supabase/migrations"))).filter((name) => name.endsWith(".sql")).sort();
-    expect(names.at(-1)).toBe("202609250001_create_first_owner_web_bootstrap.sql");
-    expect(names).toHaveLength(24);
+    expect(names.at(-1)).toBe("202609260001_create_customer_telegram_pairing.sql");
+    expect(names).toHaveLength(25);
   });
 
   it("does not execute destructive operational DML during migration", async () => {

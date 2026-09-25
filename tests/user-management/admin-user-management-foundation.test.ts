@@ -193,7 +193,7 @@ describe("P2-09 Admin & User Management acceptance", () => {
 
   it("U-19 preserves P2-09 through subsequent additive migrations", async () => {
     const names = (await readdir(path.resolve("supabase/migrations"))).filter((name) => name.endsWith(".sql")).sort();
-    expect(names).toHaveLength(24); expect(names).toContain("202609140001_create_admin_user_management.sql");
+    expect(names).toHaveLength(25); expect(names).toContain("202609140001_create_admin_user_management.sql");
     expect(createHash("sha256").update(await readFile(historicalPath)).digest("hex")).toBe(historicalHash);
   });
 });

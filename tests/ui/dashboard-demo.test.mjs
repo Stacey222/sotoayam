@@ -9,6 +9,15 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 });
 
 describe("Sotoayam runnable dashboard demo", () => {
+  it("exposes customer Telegram pairing and all seven preference controls without chat IDs", async () => {
+    const html = await asset("index.html"); const settings = await asset("settings.js");
+    expect(html).toContain('id="telegram-onboarding-card"');
+    expect(html).toContain('id="customer-readiness-list"');
+    expect(settings).toContain('/api/admin/telegram-onboarding/pairings');
+    expect(settings).toContain('/api/admin/telegram-onboarding/preferences');
+    expect(settings).not.toMatch(/chat[_-]?id/i);
+    expect(Object.keys((await import("../../public/messages.js")).uiMessages.testNotification.types)).toHaveLength(7);
+  });
   it("offers a SYSTEM_ADMIN-only test notification form through the session and CSRF client", async () => {
     const html = await asset("index.html");
     const app = await asset("app.js");

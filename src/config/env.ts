@@ -8,6 +8,7 @@ export interface SupabaseConfig {
 
 export interface AppConfig extends SupabaseConfig {
   telegramBotToken: string;
+  telegramBotUsername?: string;
   internalApiKey: string;
   adminApiKey?: string;
   host?: string;
@@ -136,6 +137,13 @@ function parseBusinessTimeZone(value: string | undefined): string {
   return timeZone;
 }
 
+function parseTelegramBotUsername(value: string | undefined): string | undefined {
+  const username = value?.trim().replace(/^@/, "");
+  if (!username) return undefined;
+  if (!/^[A-Za-z0-9_]{5,32}$/.test(username)) throw new Error("Invalid environment variable: TELEGRAM_BOT_USERNAME");
+  return username;
+}
+
 export function loadConfig(): AppConfig {
   const supabase = loadSupabaseConfig();
   const host = parseHost(process.env.HOST);
@@ -161,6 +169,7 @@ export function loadConfig(): AppConfig {
   const config: AppConfig = {
     ...supabase,
     telegramBotToken: requireEnv("TELEGRAM_BOT_TOKEN"),
+    telegramBotUsername: parseTelegramBotUsername(process.env.TELEGRAM_BOT_USERNAME),
     internalApiKey: requireEnv("INTERNAL_API_KEY"),
     adminApiKey,
     host,

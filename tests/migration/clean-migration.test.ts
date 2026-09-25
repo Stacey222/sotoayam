@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import { assertDisposableIdentity, buildMigrationManifest } from "../../scripts/check-clean-migrations.js";
 
 describe("P1-09 clean migration harness", () => {
-  it("discovers the complete ordered 24-migration schema manifest", async () => {
+  it("discovers the complete ordered 25-migration schema manifest", async () => {
     const manifest = await buildMigrationManifest(path.resolve("supabase/migrations"));
-    expect(manifest.migrations).toHaveLength(24);
+    expect(manifest.migrations).toHaveLength(25);
     expect(manifest.migrations[0]).toBe("202608260001_create_telegram_users.sql");
-    expect(manifest.migrations.at(-1)).toBe("202609250001_create_first_owner_web_bootstrap.sql");
-    expect(manifest.tables).toHaveLength(35);
+    expect(manifest.migrations.at(-1)).toBe("202609260001_create_customer_telegram_pairing.sql");
+    expect(manifest.tables).toHaveLength(36);
     expect(manifest.tables).toContain("telegram_polling_state");
     expect(manifest.functions).toContain("load_telegram_polling_state");
     expect(manifest.requiredExtensions).toEqual([]);

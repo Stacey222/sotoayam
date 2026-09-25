@@ -99,6 +99,9 @@ import { runtimeSettingsRoutes } from "./routes/runtime-settings.routes.js";
 import { setupRoutes } from "./routes/setup.routes.js";
 import { SupabaseFirstAdminBootstrapRepository } from "./repositories/first-admin-bootstrap.repository.js";
 import { FirstOwnerBootstrapService } from "./services/first-owner-bootstrap.service.js";
+import { SupabaseTelegramOnboardingRepository } from "./repositories/telegram-onboarding.repository.js";
+import { TelegramOnboardingService } from "./services/telegram-onboarding.service.js";
+import { telegramOnboardingRoutes } from "./routes/telegram-onboarding.routes.js";
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -317,6 +320,10 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
       malformedMaxBatches: options.config.telegramMalformedMaxBatches ?? 3,
     },
   );
+  const telegramOnboardingService = client
+    ? new TelegramOnboardingService(new SupabaseTelegramOnboardingRepository(client), options.config.telegramBotUsername)
+    : undefined;
+  if (telegramOnboardingService) bot.attachPairingService(telegramOnboardingService);
 
   app.setErrorHandler((error, request, reply) => {
     const appError = error instanceof AppError ? error : null;
@@ -484,6 +491,9 @@ export async function buildApp(options: BuildAppOptions): Promise<AppRuntime> {
     await staticScope.register(fastifyStatic, {
       root: path.resolve(process.cwd(), "public"), prefix: "/", wildcard: false,
     });
+  });
+  if (telegramOnboardingService) await app.register(telegramOnboardingRoutes, {
+    prefix: "/api/admin/telegram-onboarding", service: telegramOnboardingService, ...adminAuthorization,
   });
 
   return { app, bot, reminderScheduler };

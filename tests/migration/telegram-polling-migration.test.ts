@@ -7,7 +7,7 @@ const migration = path.resolve("supabase/migrations/202609120001_create_telegram
 describe("P1-05 migration contract", () => {
   it("P5-21 adds exactly one eighteenth migration without altering existing tables", async () => {
     const names = (await readdir(path.resolve("supabase/migrations"))).filter((name) => name.endsWith(".sql")).sort();
-    expect(names).toHaveLength(24);
+    expect(names).toHaveLength(25);
     expect(names).toContain("202609120001_create_telegram_polling_state.sql");
     const sql = await readFile(migration, "utf8");
     expect(sql).not.toMatch(/alter\s+table\s+public\.(?!telegram_polling_state|telegram_processed_updates)/i);

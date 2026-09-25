@@ -218,7 +218,7 @@ Sample starter configurations live under `presets/`. They are reference data you
 
 Telegram is not required to install Sotoayam, and it is not required to create your first OWNER.
 
-1. Create a bot with BotFather and put the token in `TELEGRAM_BOT_TOKEN`.
+1. Create a bot with BotFather, put the token in `TELEGRAM_BOT_TOKEN`, and put its username without `@` in `TELEGRAM_BOT_USERNAME`.
 2. Set `TELEGRAM_POLLING_ENABLED=true` — only when this instance's bot is not being polled by any other process.
 3. Restart the service. Polling starts and stops with the process; there is no runtime toggle.
 
@@ -226,7 +226,9 @@ The polling offset and update dedupe ledger are persisted in PostgreSQL. Process
 
 **Never run two pollers on one bot token.** If you also run Sotoayam on a laptop, that copy must have `TELEGRAM_POLLING_ENABLED=false`.
 
-Staff join by sending `/start` to the bot. That creates an inactive, unassigned user record. An administrator then assigns division, role, and active status:
+The first OWNER links their existing Sotoayam account from **Sistem â†’ Siapkan Telegram**. The generated deep link is bound to that signed-in user, expires after 10 minutes, and is single-use; no chat ID or database edit is needed. See `docs/customer-onboarding.md`.
+
+Staff may still join by sending plain `/start` to the bot. That creates an inactive, unassigned user record. An administrator then assigns division, role, and active status:
 
 ```bash
 curl -fsS "http://127.0.0.1:${HEALTH_PORT}/api/admin/users?status=pending" \
@@ -237,7 +239,7 @@ curl -fsS -X PATCH "http://127.0.0.1:${HEALTH_PORT}/api/admin/users/<id>/access"
   -d '{"division_id":<id>,"role_id":<id>,"active":true}'
 ```
 
-Note that this is the only way to add a Telegram operational identity: they message the bot first, you assign them afterwards. The first OWNER, created by setup, is the initial account that exists without Telegram.
+Plain `/start` remains the operational staff registration flow. The authenticated pairing link is the customer OWNER flow and attaches Telegram to the intended existing account.
 
 If an administrator password must be recovered, run the server-only command as the service account. It prompts without echo, enforces the same password policy, revokes every session for the account, and writes an audit row:
 

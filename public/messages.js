@@ -64,6 +64,11 @@ export const uiMessages = Object.freeze({
     updated: "Pengaturan runtime berhasil diterapkan.", conflict: "Pengaturan berubah atau tidak berbeda. Muat ulang sebelum mencoba lagi.",
     confirmActor: "Ganti penanggung jawab bisnis?", actorUpdated: "Penanggung jawab bisnis berhasil diperbarui.",
     actorConflict: "Pengguna tidak memenuhi syarat atau versi pengaturan sudah berubah." }),
+  telegram: Object.freeze({ connected: "Terhubung", notConnected: "Belum terhubung", ownerReady: "Akun Owner dibuat",
+    settingsReady: "Pengaturan bisnis tersedia", connectionReady: "Telegram terhubung",
+    preferencesReady: "Preferensi notifikasi ditinjau", testReady: "Notifikasi uji berhasil dikirim",
+    linkOpened: "Telegram dibuka. Tekan Start untuk menyelesaikan pairing.",
+    preferencesSaved: "Preferensi notifikasi tersimpan." }),
 });
 
 export const statusLabels = Object.freeze({ in_progress: "Dikerjakan", open: "Terbuka", blocked: "Terhambat", completed: "Selesai",

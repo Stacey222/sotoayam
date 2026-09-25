@@ -10,6 +10,7 @@ import type { TelegramOwnerConsole } from "./owner-console.js";
 import type { RuntimeHealthState } from "../runtime/health-state.js";
 import type { TelegramPollingRepository, TelegramUpdateType } from "../repositories/telegram-polling.repository.js";
 import { commonMessages, formatActiveTelegramAccount, telegramBotMessages } from "../messages/catalog.js";
+import type { TelegramOnboardingService } from "../services/telegram-onboarding.service.js";
 
 export interface TelegramUpdate {
   update_id: number;
@@ -61,6 +62,7 @@ export class TelegramBot {
   private controller?: AbortController;
   private activeUpdate?: Promise<void>;
   private abandonActiveUpdate = false;
+  private pairingService?: TelegramOnboardingService;
 
   constructor(
     private readonly token: string,
@@ -78,6 +80,8 @@ export class TelegramBot {
     private readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void> = abortableDelay,
     private readonly shutdownGraceMs = TELEGRAM_SHUTDOWN_GRACE_MS,
   ) {}
+
+  attachPairingService(service: TelegramOnboardingService): void { this.pairingService = service; }
 
   async handleUpdate(update: TelegramUpdate): Promise<void> {
     if (update.callback_query) {
@@ -143,13 +147,27 @@ export class TelegramBot {
     this.logger.info({ updateId: update.update_id }, "Telegram /start received");
     const username = message.from?.username ?? message.chat.username ?? null;
     const firstName = message.from?.first_name ?? message.chat.first_name ?? null;
+    const startPayload = (message.text ?? "").match(/^\/start(?:@\w+)?(?:\s+(.+?))?\s*$/i)?.[1]?.trim();
+    const pairingToken = startPayload && /^[A-Za-z0-9_-]{40,64}$/.test(startPayload) ? startPayload : undefined;
+    if (startPayload && !pairingToken) {
+      await this.sender.sendMessage(message.chat.id, telegramBotMessages.pairingFailed);
+      return;
+    }
     let registeredUser: TelegramUser;
     try {
-      registeredUser = await this.registrationService.register({
-        telegram_chat_id: message.chat.id,
-        telegram_username: username,
-        telegram_first_name: firstName,
-      });
+      if (pairingToken) {
+        if (message.from?.id === undefined || !this.isPrivateChat(message.chat, message.from.id) || !this.pairingService) {
+          await this.sender.sendMessage(message.chat.id, telegramBotMessages.pairingFailed);
+          return;
+        }
+        registeredUser = await this.pairingService.consume(pairingToken, message.from.id, username, firstName);
+      } else {
+        registeredUser = await this.registrationService.register({
+          telegram_chat_id: message.chat.id,
+          telegram_username: username,
+          telegram_first_name: firstName,
+        });
+      }
     } catch (error) {
       const diagnostic = error instanceof DatabaseError
         ? {
@@ -170,7 +188,7 @@ export class TelegramBot {
       try {
         await this.sender.sendMessage(
           message.chat.id,
-          telegramBotMessages.registrationFailed,
+          pairingToken ? telegramBotMessages.pairingFailed : telegramBotMessages.registrationFailed,
         );
       } catch (sendError) {
         this.logger.error(
@@ -190,7 +208,9 @@ export class TelegramBot {
         { updateId: update.update_id, accessStatus: accessState.status, division: accessState.divisionCode, role: accessState.roleCode },
         "Telegram final normalized access state resolved",
       );
-      const response = accessState.status === "ACTIVE"
+      const response = pairingToken
+        ? telegramBotMessages.pairingSucceeded
+        : accessState.status === "ACTIVE"
         ? formatActiveTelegramAccount(accessState.divisionCode, accessState.roleCode)
         : telegramBotMessages.registrationPending;
       await this.sender.sendMessage(message.chat.id, response);

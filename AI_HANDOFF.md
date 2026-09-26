@@ -176,7 +176,7 @@ Migration #23 grants the generic OWNER role the existing MVP task bundle without
 P2-03 is complete after approved Phase B cutover. `NORMALIZED` is authoritative for the seven existing preferences, while atomic mirrored legacy columns and `LEGACY` resolver mode remain the rollback path.
 
 ## Next Agent
-Recommended: independently review P3-01 first-owner bootstrap security and clean-install UX before starting P3-02.
+Recommended: define the existing P3-05 pagination/loading/basic-responsive-layout scope against the current dashboard before implementation.
 
 ## Pending Higher-Level Work
 - Continue with the ordered Phase 3 scope while preserving the P1 security/reliability boundaries and the P2-00 effective-administrator invariant.
@@ -196,6 +196,14 @@ P3-03 provides manual operator commands `backup:create`, `backup:verify`, and `b
 Restore is limited to an explicitly marked clean recovery target whose migration registry exactly matches all 25 repository migrations. It keeps triggers and foreign keys active, restores all public application tables in one transaction, clears ephemeral sessions/login attempts/pairing tokens, reconstructs the seven normalized Telegram preferences through the P2-03 trigger, and validates OWNER, effective SYSTEM_ADMIN, business actor, bootstrap/credential, Telegram mapping, settings, and readiness-schema invariants. Disposable PostgreSQL proof covers successful recovery, checksum/format rejection, target/confirmation guards, and `/setup` replay refusal. Environment secrets remain outside the database archive and must be recovered separately.
 
 Final review moved all hard post-restore invariants inside the restore transaction before commit, expanded the clean-target gate to every non-seed operational table, verified the recovered password hash with the original fixture password, and proved an invalid archive rolls back without emitting restore success. Focused recovery coverage passes 8/8; the complete suite passes 987 tests with 52 environment-gated database tests skipped, and clean migration verification applies 25/25 twice.
+
+## P3-04 Packaging + Production Deployment State
+
+P3-04 defines the supported V1 production topology as one Linux VPS running the exact pinned Node.js LTS patch under a non-root systemd service, with Nginx terminating HTTPS and proxying only to the localhost Sotoayam port. Production startup now fails closed for non-loopback binding, insecure session cookies, or disabled proxy trust. Runtime secrets live only in the protected systemd environment file; deploy-only Supabase credentials are rejected there and remain temporary operator inputs for the explicit pre-activation migration step.
+
+The release archive is built only from a clean committed worktree, carries compiled server/migration code, public assets, migrations, operator documentation/templates, and non-secret Git/Node version metadata, and excludes `.env`, local Supabase state, dependencies, tests, logs, backups, and internal engineering documents. Packaging uses a partial filename and atomically publishes the final archive only after success. The environment installer refuses silent replacement, cleans failed `.env.next` files, and requires explicit `--replace` for a reviewed update.
+
+Final review found and closed the silent environment-overwrite and misleading partial/dirty-archive risks. Production-like smoke proves built-code startup, `/health`, `/ready`, static UI, fresh `/setup`, SIGTERM shutdown, and no watcher. The full suite passes 998 tests with 52 environment-gated tests skipped; contract, secret, governance, catalog, dependency-audit, and clean-migration gates pass, with all 25 migrations applying twice unchanged.
 
 ## Agent Handoff Format
 Every agent completing a task should return:

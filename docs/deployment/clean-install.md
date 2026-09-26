@@ -1,5 +1,7 @@
 # Sotoayam Clean Installation
 
+For a customer VPS, use this setup reference together with the supported [production deployment guide](vps-production.md) and [operator checklist](production-checklist.md). The production process must use local Nginx HTTPS, `HOST=127.0.0.1`, `SESSION_COOKIE_SECURE=true`, and `TRUST_PROXY=true`.
+
 This guide installs a new Sotoayam instance for one customer, from the release package to a running system with the customer's own divisions, categories, and collaboration rules.
 
 Every Sotoayam instance serves one customer and owns its own database.
@@ -101,6 +103,8 @@ Validate the file before deploying:
 ```bash
 bash scripts/deploy/install-env.sh
 ```
+
+The installer refuses to replace an existing production environment. After reviewing and securely backing up an intentional update, use `bash scripts/deploy/install-env.sh --replace`. Failed validation removes the temporary `.env.next` file and never changes the current environment.
 
 It checks the shape of the configuration and requires each operational flag to be explicitly `true` or `false`. It never prints values.
 

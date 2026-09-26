@@ -14,6 +14,8 @@ const freshEnvironment = (overrides = {}) => ({
   INTERNAL_API_KEY: "test-internal-key",
   INTERNAL_API_KEY_FALLBACK_ENABLED: "true",
   ADMIN_API_KEY_FALLBACK_ENABLED: "false",
+  SESSION_COOKIE_SECURE: "true",
+  TRUST_PROXY: "true",
   HOST: "127.0.0.1",
   PORT: "3000",
   TELEGRAM_POLLING_ENABLED: "true",
@@ -70,6 +72,10 @@ describe("generic VPS runtime validation", () => {
       .toContain("INTERNAL_API_KEY_FALLBACK_ENABLED");
     expect(validateRuntimeEnvironment(freshEnvironment({ ADMIN_API_KEY_FALLBACK_ENABLED: "true" })).missing)
       .toContain("ADMIN_API_KEY");
+    expect(validateRuntimeEnvironment(freshEnvironment({ SESSION_COOKIE_SECURE: "false" })).invalid)
+      .toContain("SESSION_COOKIE_SECURE");
+    expect(validateRuntimeEnvironment(freshEnvironment({ TRUST_PROXY: "false" })).invalid)
+      .toContain("TRUST_PROXY");
   });
 
   it("rejects an unsupported Node runtime before the readiness request", async () => {

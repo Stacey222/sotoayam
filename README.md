@@ -2,6 +2,10 @@
 
 Backend dan dashboard operasional untuk tugas, integrasi, notifikasi, kesehatan layanan, registrasi pengguna Telegram, serta routing notifikasi dari n8n. Business logic recipient berada di backend, sehingga n8n hanya mengirim event dan tidak menyimpan Telegram Chat ID.
 
+## Production Deployment
+
+Deployment V1 yang didukung adalah satu Linux VPS dengan systemd, Nginx/HTTPS, aplikasi Node yang hanya bind ke localhost, serta Supabase/PostgreSQL eksternal. Mulai dari [panduan VPS production](docs/deployment/vps-production.md) dan [checklist operator](docs/deployment/production-checklist.md); backup/restore wajib mengikuti [panduan recovery](docs/deployment/backup-restore.md). Jangan mengekspos port Node, menjalankan lebih dari satu Telegram poller, atau memakai reset/seed development pada production.
+
 ## Architecture
 
 ```text

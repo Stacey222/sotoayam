@@ -130,7 +130,7 @@ Legend:
 - [x] P3-03 Backup / Restore + Customer Recovery.
   Owner: Codex -> independent review
   Note: V1 uses a checksummed PostgreSQL logical data archive plus non-secret manifest, restores only to an explicitly identified clean recovery target with the same migration registry, and validates OWNER/SYSTEM_ADMIN/business actor/bootstrap/Telegram/settings invariants. Division/role management UI remains unimplemented scope to schedule without reusing this milestone ID.
-- [ ] P3-04 Inline validation, error banners, destructive-action confirmation.
+- [x] P3-04 Packaging + Production Deployment.
   Owner: Codex -> Antigravity critique
 - [ ] P3-05 Pagination/loading/basic responsive layout.
   Owner: Codex

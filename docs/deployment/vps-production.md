@@ -2,6 +2,8 @@
 
 Sotoayam runs as one non-root systemd service. Hermes is a separate application and Telegram bot; its process, token, and configuration must never be reused or modified by this deployment.
 
+Supported V1 topology: `Internet -> HTTPS Nginx -> 127.0.0.1:3000 Sotoayam -> Supabase/PostgreSQL + Telegram Bot API`. The supported host is a Linux VPS with the exact Node.js version from `.node-version`, npm, systemd, and Nginx. Kubernetes, containers, multiple application replicas, and a publicly exposed Node port are outside the V1 contract. Start with the concise [production checklist](production-checklist.md).
+
 ## Fresh installation configuration
 
 Deployment scripts share this small environment-variable contract:
@@ -93,6 +95,8 @@ Choose `BUSINESS_TIME_ZONE` for the customer. `UTC` is the safe fresh fallback; 
 
 Production uses `HOST=127.0.0.1` by default, keeping the configured `PORT` private to the VPS.
 
+The systemd unit sets `NODE_ENV=production`. In that mode Sotoayam fails startup unless the bind host is loopback, `SESSION_COOKIE_SECURE=true`, and `TRUST_PROXY=true`. The supported production route terminates HTTPS at trusted local Nginx. Local HTTP development instead uses a non-production `NODE_ENV`, `SESSION_COOKIE_SECURE=false`, and `TRUST_PROXY=false` on loopback.
+
 The deployment process also requires `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, and `SUPABASE_PROJECT_REF` in its own protected environment. These deploy-only values establish the non-interactive Supabase CLI link for the inactive release. Do not add them to `shared/.env`, the release archive, shell history, or systemd service environment.
 
 Fresh customer credentials are entered only through the one-time HTTPS `/setup` page after application startup. They are not deployment environment variables and must never be stored in `shared/.env`.
@@ -100,8 +104,8 @@ Fresh customer credentials are entered only through the one-time HTTPS `/setup` 
 ## Fresh customer install
 
 1. Verify a clean Git checkpoint and all tests/checkers.
-2. Create `shared/.env` from `.env.example`, replace every placeholder, choose the customer timezone, and explicitly select all three operational flags. Confirm a dedicated Telegram bot has no competing poller before selecting polling `true`.
-3. Pass the completed file through `scripts/deploy/install-env.sh`; it validates configuration shape without requiring historical users, Divisi, roles, rules, or row counts.
+2. Create `shared/.env` from the runtime section of `.env.example`, replace every placeholder, choose the customer timezone, and explicitly select all three operational flags. Remove the deployment-only Supabase lines before installation. Confirm a dedicated Telegram bot has no competing poller before selecting polling `true`.
+3. Pass the completed file through `scripts/deploy/install-env.sh`; it validates configuration shape without requiring historical users, Divisi, roles, rules, or row counts. It refuses to overwrite an existing environment. For a reviewed configuration replacement, preserve a protected backup and rerun explicitly as `install-env.sh --replace`.
 4. Run `scripts/deploy/package-release.ps1` locally.
 5. Upload the archive, `scripts/deploy/deploy-release.sh`, and `scripts/deploy/deployment-config.sh` over SSH, preserving their relative location.
 6. Provide the three deploy-only Supabase variables through the approved protected operator environment, then run the deployment script.
@@ -112,6 +116,28 @@ Fresh customer credentials are entered only through the one-time HTTPS `/setup` 
 11. Verify exactly one process and, when polling was selected, exactly one Telegram poller.
 
 The first OWNER can log in immediately with the P1-01 session flow. The browser receives an HttpOnly session cookie and never receives shared administrator or service credentials. Bootstrap does not create a Telegram identity; later Telegram registration remains a separate existing product flow.
+
+## Build and start contract
+
+```bash
+npm ci --include=dev --ignore-scripts
+npm run build
+npm run migrate
+npm prune --omit=dev --ignore-scripts
+npm start
+```
+
+`npm start` executes `node dist/src/server.js`; it never starts `tsx watch`, applies migrations, resets data, or seeds development identities. `deploy-release.sh` runs migrations against the inactive release and stops before activation if they fail.
+
+## systemd, Nginx, and HTTPS
+
+`docs/deployment/sotoayam.service` is the readable default systemd template. `bootstrap-vps.sh` renders the same policy using configured `APP_ROOT`, `APP_USER`, and `APP_GROUP`; use that rendered unit for non-default paths. It contains no secrets, reads the mode-`0640` shared environment, runs as a dedicated non-root user, logs to journald, restarts on failure, and handles `SIGTERM` with a 30-second stop budget.
+
+Point the customer DNS A/AAAA record at the VPS, obtain a certificate through the OS-supported ACME/Certbot path, then adapt `docs/deployment/nginx-sotoayam.conf`. Replace the example domain and certificate paths, run `sudo nginx -t`, and reload Nginx. The proxy preserves Host, overwrites client-supplied forwarding headers, and sends `X-Forwarded-Proto=https`, which defines the `TRUST_PROXY=true` boundary. Expose only SSH, HTTP, and HTTPS in the firewall; never port 3000.
+
+## Release contents and recovery boundary
+
+`scripts/deploy/package-release.ps1` accepts only a clean committed worktree and a new output path. It builds to a uniquely named partial archive, atomically publishes the final name only after success, and removes partial files on failure. The versioned archive contains compiled server/migration code, public assets, lockfile, migrations, operator docs/templates, and non-secret `release-metadata.json` (format, app version, Git SHA, Node version, creation time). It excludes `.env`, local Supabase link configuration, `node_modules`, tests, logs, backups, internal ADRs, and reviews. Application rollback is permitted only to a schema-compatible prior release; migrations are forward-only and never rolled back automatically. Follow [backup and recovery](backup-restore.md) before risky upgrades.
 
 After setup, manage customer-owned divisions, baseline role display names, task categories, and collaboration rules through the protected admin APIs. Codes are stable identifiers; display names may change. The sample under `presets/warehouse-b2b-b2c/` is declarative reference data only and is not applied automatically.
 

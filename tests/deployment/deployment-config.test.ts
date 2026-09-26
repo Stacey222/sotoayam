@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it } from "vitest";
 const projectRoot = path.resolve(import.meta.dirname, "../..");
 const configScript = path.join(projectRoot, "scripts/deploy/deployment-config.sh");
 const bootstrapScript = path.join(projectRoot, "scripts/deploy/bootstrap-vps.sh");
+const serviceTemplate = path.join(projectRoot, "docs/deployment/sotoayam.service");
+const nginxTemplate = path.join(projectRoot, "docs/deployment/nginx-sotoayam.conf");
 const bashCommand = process.platform === "win32"
   ? path.join(process.env.ProgramFiles ?? "C:\\Program Files", "Git/bin/bash.exe")
   : "bash";
@@ -98,6 +100,26 @@ describe("fresh-install deployment configuration", () => {
 
   it("contains no founder-specific deployment username", async () => {
     await expect(readFile(bootstrapScript, "utf8")).resolves.not.toContain("karburontok3");
+  });
+
+  it("ships a non-root, secret-free systemd template with graceful shutdown policy", async () => {
+    const unit = await readFile(serviceTemplate, "utf8");
+    expect(unit).toContain("User=sotoayam");
+    expect(unit).toContain("EnvironmentFile=/opt/sotoayam/shared/.env");
+    expect(unit).toContain("Environment=NODE_ENV=production");
+    expect(unit).toContain("KillSignal=SIGTERM");
+    expect(unit).toContain("Restart=on-failure");
+    expect(unit).not.toMatch(/SUPABASE_|TELEGRAM_BOT_TOKEN|INTERNAL_API_KEY=/);
+  });
+
+  it("ships one HTTPS Nginx path that keeps Node private and overwrites forwarding headers", async () => {
+    const nginx = await readFile(nginxTemplate, "utf8");
+    expect(nginx).toContain("return 301 https://$host$request_uri");
+    expect(nginx).toContain("proxy_pass http://127.0.0.1:3000");
+    expect(nginx).toContain("proxy_set_header Host $host");
+    expect(nginx).toContain("proxy_set_header X-Forwarded-For $remote_addr");
+    expect(nginx).toContain("proxy_set_header X-Forwarded-Proto https");
+    expect(nginx).not.toContain("$proxy_add_x_forwarded_for");
   });
 });
 

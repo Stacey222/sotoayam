@@ -9,6 +9,8 @@ const REQUIRED_RUNTIME_ENV = [
   "INTERNAL_API_KEY",
   "INTERNAL_API_KEY_FALLBACK_ENABLED",
   "ADMIN_API_KEY_FALLBACK_ENABLED",
+  "SESSION_COOKIE_SECURE",
+  "TRUST_PROXY",
   "HOST",
   "PORT",
   "TELEGRAM_POLLING_ENABLED",
@@ -24,6 +26,8 @@ const BOOLEAN_RUNTIME_ENV = [
   "CRITICAL_ALERT_EVALUATOR_ENABLED",
   "INTERNAL_API_KEY_FALLBACK_ENABLED",
   "ADMIN_API_KEY_FALLBACK_ENABLED",
+  "SESSION_COOKIE_SECURE",
+  "TRUST_PROXY",
 ];
 
 export function validateRuntimeEnvironment(environment) {
@@ -32,6 +36,8 @@ export function validateRuntimeEnvironment(environment) {
   const port = Number(environment.PORT);
   if (!Number.isInteger(port) || port < 1 || port > 65535) invalid.push("PORT");
   if (environment.HOST !== "127.0.0.1") invalid.push("HOST");
+  if (environment.SESSION_COOKIE_SECURE !== "true") invalid.push("SESSION_COOKIE_SECURE");
+  if (environment.TRUST_PROXY !== "true") invalid.push("TRUST_PROXY");
   if (environment.CRITICAL_ALERT_EVALUATOR_ENABLED === "true" && environment.REMINDER_SCHEDULER_ENABLED !== "true") {
     invalid.push("CRITICAL_ALERT_EVALUATOR_ENABLED");
   }

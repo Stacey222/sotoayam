@@ -296,6 +296,22 @@ describe("Supabase server credential validation", () => {
       expect(() => loadConfig()).toThrow("SESSION_COOKIE_SECURE=false requires a loopback HOST and TRUST_PROXY=false");
     });
 
+    it("fails closed when the production proxy or secure-cookie contract is missing", () => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("HOST", "127.0.0.1");
+      vi.stubEnv("SESSION_COOKIE_SECURE", "true");
+      vi.stubEnv("TRUST_PROXY", "false");
+      expect(() => loadConfig()).toThrow("Invalid production environment: TRUST_PROXY must be true");
+      vi.stubEnv("TRUST_PROXY", "true");
+      vi.stubEnv("SESSION_COOKIE_SECURE", "false");
+      expect(() => loadConfig()).toThrow("SESSION_COOKIE_SECURE=false requires a loopback HOST and TRUST_PROXY=false");
+      vi.stubEnv("SESSION_COOKIE_SECURE", "true");
+      vi.stubEnv("HOST", "0.0.0.0");
+      expect(() => loadConfig()).toThrow("Invalid production environment: HOST must be loopback");
+      vi.stubEnv("HOST", "127.0.0.1");
+      expect(loadConfig()).toMatchObject({ sessionCookieSecure: true, trustProxy: true });
+    });
+
     it("bounds absolute and idle session lifetimes", () => {
       vi.stubEnv("SESSION_ABSOLUTE_TTL_SECONDS", "899");
       expect(() => loadConfig()).toThrow("Invalid environment variable: SESSION_ABSOLUTE_TTL_SECONDS");

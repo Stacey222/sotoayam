@@ -166,6 +166,17 @@ export function loadConfig(): AppConfig {
   if (!sessionCookieSecure && (!isLoopbackHost(host) || trustProxy)) {
     throw new Error("Invalid environment: SESSION_COOKIE_SECURE=false requires a loopback HOST and TRUST_PROXY=false");
   }
+  if (process.env.NODE_ENV === "production") {
+    if (!isLoopbackHost(host)) {
+      throw new Error("Invalid production environment: HOST must be loopback behind the supported reverse proxy");
+    }
+    if (!sessionCookieSecure) {
+      throw new Error("Invalid production environment: SESSION_COOKIE_SECURE must be true");
+    }
+    if (!trustProxy) {
+      throw new Error("Invalid production environment: TRUST_PROXY must be true");
+    }
+  }
   const config: AppConfig = {
     ...supabase,
     telegramBotToken: requireEnv("TELEGRAM_BOT_TOKEN"),

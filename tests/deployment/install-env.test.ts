@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -25,6 +25,8 @@ function environmentText(overrides: Record<string, string> = {}): string {
     INTERNAL_API_KEY_FALLBACK_ENABLED: "true",
     ADMIN_API_KEY: "test-admin-key-with-sufficient-length-123456",
     ADMIN_API_KEY_FALLBACK_ENABLED: "false",
+    SESSION_COOKIE_SECURE: "true",
+    TRUST_PROXY: "true",
     HOST: "127.0.0.1",
     PORT: "3000",
     TELEGRAM_POLLING_ENABLED: "true",
@@ -38,11 +40,14 @@ function environmentText(overrides: Record<string, string> = {}): string {
   return `${Object.entries(values).map(([name, value]) => `${name}=${value}`).join("\n")}\n`;
 }
 
-async function runInstaller(input: string) {
+async function runInstaller(input: string, options: { existing?: string; args?: string[] } = {}) {
   const appRoot = await mkdtemp(path.join(os.tmpdir(), "sotoayam-install-env-"));
   temporaryDirectories.push(appRoot);
   await mkdir(path.join(appRoot, "shared"));
-  const result = spawnSync(bashCommand, [bashPath(installScript)], {
+  if (options.existing !== undefined) {
+    await writeFile(path.join(appRoot, "shared", ".env"), options.existing, "utf8");
+  }
+  const result = spawnSync(bashCommand, [bashPath(installScript), ...(options.args ?? [])], {
     encoding: "utf8",
     input,
     env: { ...process.env, APP_ROOT: bashPath(appRoot) },
@@ -72,6 +77,19 @@ describe("runtime environment installation", { timeout: INSTALLER_TEST_TIMEOUT_M
     expect(result.status, result.stderr).toBe(0);
   });
 
+  it("refuses to overwrite an existing environment unless --replace is explicit", async () => {
+    const original = "ORIGINAL=preserved\n";
+    const refused = await runInstaller(environmentText(), { existing: original });
+    expect(refused.result.status).not.toBe(0);
+    expect(refused.result.stderr).toContain("already exists");
+    expect(await readFile(path.join(refused.appRoot, "shared", ".env"), "utf8")).toBe(original);
+
+    const replaced = await runInstaller(environmentText(), { existing: original, args: ["--replace"] });
+    expect(replaced.result.status, replaced.result.stderr).toBe(0);
+    expect(await readFile(path.join(replaced.appRoot, "shared", ".env"), "utf8"))
+      .toContain("SESSION_COOKIE_SECURE=true");
+  });
+
   it("accepts no administrator key by default and requires it for explicit fallback", async () => {
     const withoutKey = environmentText({ ADMIN_API_KEY: "" }).replace("ADMIN_API_KEY=\n", "");
     expect((await runInstaller(withoutKey)).result.status).toBe(0);
@@ -83,9 +101,10 @@ describe("runtime environment installation", { timeout: INSTALLER_TEST_TIMEOUT_M
   });
 
   it("rejects invalid operational flag values", async () => {
-    const { result } = await runInstaller(environmentText({ TELEGRAM_POLLING_ENABLED: "sometimes" }));
+    const { appRoot, result } = await runInstaller(environmentText({ TELEGRAM_POLLING_ENABLED: "sometimes" }));
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("TELEGRAM_POLLING_ENABLED must be true or false");
+    await expect(readFile(path.join(appRoot, "shared", ".env.next"), "utf8")).rejects.toThrow();
   });
 
   it("rejects an enabled evaluator when the scheduler is disabled", async () => {
@@ -95,5 +114,23 @@ describe("runtime environment installation", { timeout: INSTALLER_TEST_TIMEOUT_M
     }));
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("CRITICAL_ALERT_EVALUATOR_ENABLED requires REMINDER_SCHEDULER_ENABLED");
+  });
+
+  it.each(["SUPABASE_PROJECT_REF", "SUPABASE_DB_PASSWORD", "SUPABASE_ACCESS_TOKEN"])(
+    "rejects deploy-only %s from the runtime environment file",
+    async (name) => {
+      const { result } = await runInstaller(`${environmentText()}${name}=not-a-runtime-secret\n`);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain(`${name} is deploy-only`);
+    },
+  );
+
+  it.each([
+    ["SESSION_COOKIE_SECURE", "false", "SESSION_COOKIE_SECURE must be true for production"],
+    ["TRUST_PROXY", "false", "TRUST_PROXY must be true for the supported reverse proxy deployment"],
+  ])("rejects unsafe production %s", async (name, value, message) => {
+    const { result } = await runInstaller(environmentText({ [name]: value }));
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(message);
   });
 });

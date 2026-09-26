@@ -181,16 +181,17 @@ describe("release deployment migration gate", () => {
 describe("release packaging", () => {
   it("excludes local Supabase config while retaining migration tooling and inventory", async () => {
     const packaging = await readFile(path.join(projectRoot, "scripts/deploy/package-release.ps1"), "utf8");
-    const archiveCommand = packaging.match(/^\s*tar -czf \$output (.+)$/m)?.[1] ?? "";
+    const archiveCommand = packaging.match(/^\s*tar -czf \$partial (.+)$/m)?.[1] ?? "";
     const archiveEntries = archiveCommand.split(/\s+/);
     expect(archiveEntries).not.toContain("supabase/config.toml");
     expect(archiveEntries).toContain("supabase/migrations");
+    expect(archiveEntries).toContain("release-metadata.json");
     expect(packaging.indexOf("npm run build")).toBeLessThan(packaging.indexOf("tar -czf"));
   });
 
   it("ships the migration runner compiled so production-only installs never require tsx", async () => {
     const packaging = await readFile(path.join(projectRoot, "scripts/deploy/package-release.ps1"), "utf8");
-    const archiveCommand = packaging.match(/^\s*tar -czf \$output (.+)$/m)?.[1] ?? "";
+    const archiveCommand = packaging.match(/^\s*tar -czf \$partial (.+)$/m)?.[1] ?? "";
     const archiveEntries = archiveCommand.split(/\s+/);
     expect(archiveEntries).toContain("dist/scripts/migrate.js");
     expect(archiveEntries).not.toContain("scripts/migrate.ts");
@@ -204,20 +205,45 @@ describe("release packaging", () => {
 
   it("ships customer/operator installation documentation and an environment example, never internal ADRs or reviews", async () => {
     const packaging = await readFile(path.join(projectRoot, "scripts/deploy/package-release.ps1"), "utf8");
-    const archiveCommand = packaging.match(/^\s*tar -czf \$output (.+)$/m)?.[1] ?? "";
+    const archiveCommand = packaging.match(/^\s*tar -czf \$partial (.+)$/m)?.[1] ?? "";
     const archiveEntries = archiveCommand.split(/\s+/);
     expect(archiveEntries).toContain(".env.example");
     expect(archiveEntries).toContain("docs/deployment/clean-install.md");
-    expect(archiveEntries).toContain("docs/database-recovery.md");
+    expect(archiveEntries).toContain("docs/deployment/vps-production.md");
+    expect(archiveEntries).toContain("docs/deployment/production-checklist.md");
+    expect(archiveEntries).toContain("docs/deployment/backup-restore.md");
+    expect(archiveEntries).toContain("docs/deployment/sotoayam.service");
+    expect(archiveEntries).toContain("docs/deployment/nginx-sotoayam.conf");
+    expect(archiveEntries).toContain("scripts/deploy/smoke-production.mjs");
     expect(archiveEntries.some((entry) => entry.startsWith("docs/adr") || entry.startsWith("docs/reviews"))).toBe(false);
     expect(archiveEntries).not.toContain("README.md");
 
     const envExample = await readFile(path.join(projectRoot, ".env.example"), "utf8");
     const installGuide = await readFile(path.join(projectRoot, "docs/deployment/clean-install.md"), "utf8");
-    const recoveryGuide = await readFile(path.join(projectRoot, "docs/database-recovery.md"), "utf8");
+    const recoveryGuide = await readFile(path.join(projectRoot, "docs/deployment/backup-restore.md"), "utf8");
     for (const content of [envExample, installGuide, recoveryGuide]) {
       expect(content).not.toMatch(/gwensoto/i);
       expect(content).not.toMatch(/\bADR\b|adversarial/i);
     }
+  });
+
+  it("creates non-secret version metadata and always removes its temporary source file", async () => {
+    const packaging = await readFile(path.join(projectRoot, "scripts/deploy/package-release.ps1"), "utf8");
+    expect(packaging).toContain('format = "SOTOAYAM_RELEASE_V1"');
+    expect(packaging).toContain("git_commit = $commit");
+    expect(packaging).toContain("node_version = (Get-Content .node-version -Raw).Trim()");
+    expect(packaging).toContain("Remove-Item -LiteralPath $metadataPath -Force");
+    expect(packaging).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY|TELEGRAM_BOT_TOKEN|INTERNAL_API_KEY/);
+  });
+
+  it("refuses dirty or existing outputs and publishes only a completed partial archive", async () => {
+    const packaging = await readFile(path.join(projectRoot, "scripts/deploy/package-release.ps1"), "utf8");
+    expect(packaging).toContain("git status --porcelain --untracked-files=all");
+    expect(packaging).toContain("Refusing to package an uncommitted Git worktree");
+    expect(packaging).toContain("Refusing to overwrite an existing release archive");
+    expect(packaging).toContain("tar -czf $partial");
+    expect(packaging).toContain("[System.IO.File]::Move($partial, $output)");
+    expect(packaging).toContain("Remove-Item -LiteralPath $partial -Force");
+    expect(packaging.indexOf("tar -czf $partial")).toBeLessThan(packaging.indexOf("[System.IO.File]::Move($partial, $output)"));
   });
 });

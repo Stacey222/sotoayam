@@ -6,6 +6,18 @@ source "${SCRIPT_DIR}/deployment-config.sh"
 load_deployment_config
 TARGET="${APP_ROOT}/shared/.env"
 NEXT="${TARGET}.next"
+REPLACE_ENV=false
+if [[ "$#" -gt 1 || ( "$#" -eq 1 && "$1" != "--replace" ) ]]; then
+  echo "Usage: install-env.sh [--replace]" >&2
+  exit 1
+fi
+if [[ "$#" -eq 1 ]]; then
+  REPLACE_ENV=true
+fi
+if [[ -e "${TARGET}" && "${REPLACE_ENV}" != "true" ]]; then
+  echo "Environment installation refused: ${TARGET} already exists; review the new file and rerun with --replace" >&2
+  exit 1
+fi
 REQUIRED=(
   SUPABASE_URL
   SUPABASE_SERVICE_ROLE_KEY
@@ -13,6 +25,8 @@ REQUIRED=(
   INTERNAL_API_KEY
   INTERNAL_API_KEY_FALLBACK_ENABLED
   ADMIN_API_KEY_FALLBACK_ENABLED
+  SESSION_COOKIE_SECURE
+  TRUST_PROXY
   HOST
   PORT
   TELEGRAM_POLLING_ENABLED
@@ -24,8 +38,15 @@ REQUIRED=(
 )
 
 umask 0027
+trap 'rm -f -- "${NEXT}"' EXIT
 tr -d '\r' >"${NEXT}"
 test -s "${NEXT}"
+for name in SUPABASE_PROJECT_REF SUPABASE_DB_PASSWORD SUPABASE_ACCESS_TOKEN; do
+  if grep -q "^${name}=" "${NEXT}"; then
+    echo "Environment validation failed: ${name} is deploy-only and must not be stored in shared/.env" >&2
+    exit 1
+  fi
+done
 for name in "${REQUIRED[@]}"; do
   if [[ "$(grep -c "^${name}=" "${NEXT}")" -ne 1 ]]; then
     echo "Environment validation failed: ${name} must appear exactly once" >&2
@@ -36,7 +57,7 @@ for name in "${REQUIRED[@]}"; do
     exit 1
   fi
 done
-for name in TELEGRAM_POLLING_ENABLED REMINDER_SCHEDULER_ENABLED CRITICAL_ALERT_EVALUATOR_ENABLED INTERNAL_API_KEY_FALLBACK_ENABLED ADMIN_API_KEY_FALLBACK_ENABLED; do
+for name in TELEGRAM_POLLING_ENABLED REMINDER_SCHEDULER_ENABLED CRITICAL_ALERT_EVALUATOR_ENABLED INTERNAL_API_KEY_FALLBACK_ENABLED ADMIN_API_KEY_FALLBACK_ENABLED SESSION_COOKIE_SECURE TRUST_PROXY; do
   if ! grep -Eq "^${name}=(true|false|\"true\"|\"false\")$" "${NEXT}"; then
     echo "Environment validation failed: ${name} must be true or false" >&2
     exit 1
@@ -57,6 +78,14 @@ if ! grep -Eq '^HOST=(127\.0\.0\.1|"127\.0\.0\.1")$' "${NEXT}"; then
   echo "Environment validation failed: HOST must be 127.0.0.1" >&2
   exit 1
 fi
+if ! grep -Eq '^SESSION_COOKIE_SECURE=(true|"true")$' "${NEXT}"; then
+  echo "Environment validation failed: SESSION_COOKIE_SECURE must be true for production" >&2
+  exit 1
+fi
+if ! grep -Eq '^TRUST_PROXY=(true|"true")$' "${NEXT}"; then
+  echo "Environment validation failed: TRUST_PROXY must be true for the supported reverse proxy deployment" >&2
+  exit 1
+fi
 SCHEDULER_VALUE="$(sed -n 's/^REMINDER_SCHEDULER_ENABLED=//p' "${NEXT}" | tr -d '"')"
 EVALUATOR_VALUE="$(sed -n 's/^CRITICAL_ALERT_EVALUATOR_ENABLED=//p' "${NEXT}" | tr -d '"')"
 if [[ "${EVALUATOR_VALUE}" == "true" && "${SCHEDULER_VALUE}" != "true" ]]; then
@@ -65,6 +94,7 @@ if [[ "${EVALUATOR_VALUE}" == "true" && "${SCHEDULER_VALUE}" != "true" ]]; then
 fi
 chmod 0640 "${NEXT}"
 mv "${NEXT}" "${TARGET}"
+trap - EXIT
 echo "REQUIRED_ENV_NAMES=PASS"
 echo "RUNTIME_FLAG_CONFIGURATION=PASS"
 echo "VPS_HOST=LOCALHOST_CONFIGURED"

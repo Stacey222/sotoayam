@@ -189,6 +189,14 @@ P3-01 adds migration `202609250001_create_first_owner_web_bootstrap.sql`, bringi
 
 `provision_first_owner` composes the existing fresh-install transaction with OWNER assignment, explicit SYSTEM_ADMIN assignment, runtime settings, and business-actor designation under the existing advisory locks. `password_change_required=false` is intentional so the first OWNER can log in immediately. Failed late-stage settings validation proved full rollback; simultaneous disposable-PostgreSQL attempts produced exactly one complete owner. Clean migrations apply 24/24 twice with schema/RLS/RPC/bootstrap/invariant checks passing. No Kento, development email, Telegram identity, or dummy customer data is created by migrations or product bootstrap.
 
+## P3-03 Backup / Restore + Customer Recovery State
+
+P3-03 provides manual operator commands `backup:create`, `backup:verify`, and `backup:restore`. The V1 artifact is a custom-format PostgreSQL public-schema data archive paired with a non-secret V1 manifest and SHA-256 checksum. Direct and same-project Session Pooler connections are accepted only with an explicit 20-character Supabase project ref, port 5432, and `sslmode=require`; transaction pooler and ambiguous identities are rejected.
+
+Restore is limited to an explicitly marked clean recovery target whose migration registry exactly matches all 25 repository migrations. It keeps triggers and foreign keys active, restores all public application tables in one transaction, clears ephemeral sessions/login attempts/pairing tokens, reconstructs the seven normalized Telegram preferences through the P2-03 trigger, and validates OWNER, effective SYSTEM_ADMIN, business actor, bootstrap/credential, Telegram mapping, settings, and readiness-schema invariants. Disposable PostgreSQL proof covers successful recovery, checksum/format rejection, target/confirmation guards, and `/setup` replay refusal. Environment secrets remain outside the database archive and must be recovered separately.
+
+Final review moved all hard post-restore invariants inside the restore transaction before commit, expanded the clean-target gate to every non-seed operational table, verified the recovered password hash with the original fixture password, and proved an invalid archive rolls back without emitting restore success. Focused recovery coverage passes 8/8; the complete suite passes 987 tests with 52 environment-gated database tests skipped, and clean migration verification applies 25/25 twice.
+
 ## Agent Handoff Format
 Every agent completing a task should return:
 

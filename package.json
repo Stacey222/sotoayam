@@ -15,6 +15,9 @@
     "dev:prepare-owner": "tsx scripts/prepare-kento-owner.ts",
     "dev:reset-data": "tsx scripts/dev-reset-data.ts",
     "dev:seed-dummy": "tsx scripts/dev-seed-dummy.ts",
+    "backup:create": "tsx scripts/backup-create.ts",
+    "backup:verify": "tsx scripts/backup-verify.ts",
+    "backup:restore": "tsx scripts/backup-restore.ts",
     "integration:credential": "node dist/src/cli/integration-credential.js",
     "integration:credential:dev": "tsx src/cli/integration-credential.ts",
     "check:admin-key-usage": "tsx scripts/check-admin-key-usage.ts",
@@ -39,7 +42,7 @@
     "check:clean-migrations": "tsx scripts/check-clean-migrations.ts",
     "migrate": "node dist/scripts/migrate.js",
     "migrate:dev": "tsx scripts/migrate.ts",
-    "test": "vitest run",
+    "test": "vitest run --maxWorkers=2",
     "test:contract": "vitest run tests/contracts",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit"

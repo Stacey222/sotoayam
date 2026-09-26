@@ -197,3 +197,10 @@ Decision: a new customer completes first-run setup through the one-time `/setup`
 Status: Implemented for P3-01.
 
 The atomic service-role RPC reuses the historical fresh-install evidence gate and `gwens_system_admin_invariant`, then assigns the OWNER role, an independent explicit SYSTEM_ADMIN authority, runtime settings, and `business_actor_user_id` to the same first user. OWNER and SYSTEM_ADMIN do not inherit from each other outside this explicit bootstrap operation. The initial password is scrypt-hashed, works immediately with `password_change_required=false`, never enters logs or browser storage, and setup cannot be replayed. The legacy CLI remains available for previously documented operator compatibility but is not the customer first-OWNER path.
+
+## D-029 - Customer recovery uses a verified data-only logical archive
+
+Decision: P3-03 recovery uses a PostgreSQL custom-format, public-schema data archive with a non-secret versioned manifest and SHA-256 checksum.
+Status: Implemented and reviewed for P3-03.
+
+The restore target must be an explicitly confirmed clean recovery database with the exact same migration registry; schema, RLS, functions, and grants come from forward migrations rather than from the archive. Restore truncates all migrated public tables together and loads the archive in one transaction without disabling triggers or foreign keys. Sessions, login-attempt history, and pairing tokens are intentionally excluded. During the P2-03 rollback-compatible period, normalized Telegram preference rows are reconstructed by the official mirrored-write trigger from the seven archived legacy booleans to avoid duplicate trigger effects, then parity/invariants are checked. Database and environment-secret recovery remain separate operator responsibilities.

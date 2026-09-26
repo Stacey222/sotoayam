@@ -41,6 +41,8 @@ Readiness memakai satu RPC read-only tanpa retry, dibatasi oleh `READY_DB_TIMEOU
 
 P2-03 telah melewati review parity dan memakai `NOTIFICATION_PREFERENCE_RESOLVER_MODE=NORMALIZED` untuk pembacaan tujuh preferensi notifikasi. `COMPARE` menghitung selisih penerima legacy dan normalized lalu hanya mencatat jumlah ter-sanitasi, sedangkan `LEGACY` tetap tersedia sebagai rollback operasional tanpa menghapus tabel normalized atau memutar ulang delivery.
 
+Backup/customer recovery V1 tersedia melalui `npm run backup:create`, `npm run backup:verify`, dan `npm run backup:restore`. Restore hanya didukung ke target recovery bersih yang telah menerima versi migrasi identik; secret environment tidak masuk manifest atau archive. Ikuti [panduan backup dan pemulihan](docs/deployment/backup-restore.md), jangan menjalankan `pg_restore` langsung ke database aktif.
+
 ## Legacy Compatibility Identifiers
 
 Instalasi lama dapat memiliki nama teknis yang sudah menjadi kontrak deployment atau data persisten: path `/opt/gwens-automation`, unit `gwens-automation.service`, akun/grup sistem `gwens`, project ID Supabase lokal `gwensoto`, contract ID `GWENS_LEGACY_SCHEMA_V1`, serta advisory-lock key `gwens_*` di migration historis. Jangan mengubahnya tanpa migrasi deployment dan database yang terkoordinasi. Penyimpanan browser legacy `gwens-admin-key` telah dipensiunkan oleh migrasi sesi P1-01 dan tidak lagi dibaca. Identifier lain tersebut hanya untuk kompatibilitas; identitas produk resminya adalah Sotoayam.

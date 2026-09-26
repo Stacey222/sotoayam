@@ -127,8 +127,9 @@ Legend:
   Note: the session login/logout UI prerequisite was delivered earlier. P3-01 now provides the commercial one-time `/setup` flow: migration #24 atomically creates the first OWNER, explicit SYSTEM_ADMIN assignment, credential, Divisi, runtime settings, business actor, and bootstrap marker with no development identity defaults.
 - [x] P3-02 Customer Configuration + Telegram Onboarding.
   Owner: Claude Code IA -> Codex build -> Antigravity review
-- [ ] P3-03 Division/role management UI.
-  Owner: Codex
+- [x] P3-03 Backup / Restore + Customer Recovery.
+  Owner: Codex -> independent review
+  Note: V1 uses a checksummed PostgreSQL logical data archive plus non-secret manifest, restores only to an explicitly identified clean recovery target with the same migration registry, and validates OWNER/SYSTEM_ADMIN/business actor/bootstrap/Telegram/settings invariants. Division/role management UI remains unimplemented scope to schedule without reusing this milestone ID.
 - [ ] P3-04 Inline validation, error banners, destructive-action confirmation.
   Owner: Codex -> Antigravity critique
 - [ ] P3-05 Pagination/loading/basic responsive layout.

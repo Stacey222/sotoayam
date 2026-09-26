@@ -282,35 +282,15 @@ The report returns totals by status with overdue and upcoming counts, and suppor
 
 ## Backup
 
-Take a backup before every deployment or migration, and at least daily.
+Take and verify a backup before every deployment or migration, and at least daily. Use `npm run backup:create` followed by `npm run backup:verify`; these commands validate the database identity and migration registry, produce a checksum manifest, and never print credentials. Keep at least seven daily recovery points plus the latest pre-migration one, encrypted outside Git and outside the server. The environment secrets are backed up separately.
 
-```bash
-pg_dump --format=custom --schema=public --no-owner --no-acl \
-  --file=/protected/backups/sotoayam-backup-$(date -u +%Y%m%d).dump
-```
-
-Supply the connection through the environment or an authorized Supabase CLI session. Never put a password or connection URI on the command line.
-
-After every backup:
-
-1. `pg_restore --list <file>` and require exit code 0;
-2. record the UTC timestamp, byte size, and SHA-256 checksum;
-3. store it outside Git and outside the server, with restricted permissions.
-
-Keep at least seven daily recovery points plus the latest pre-migration one. Full detail is in `docs/database-recovery.md`.
+The exact environment variables, accepted Direct/Session Pooler formats, and failure handling are documented in [`backup-restore.md`](backup-restore.md).
 
 ## Restore
 
-Restore only into an isolated, non-production target. Confirm it is not production before running anything.
+Restore only into an isolated, migrated, explicitly marked recovery target with `npm run backup:restore`. Do not drop schemas or run `pg_restore` manually: the supported command verifies format/checksum/migrations/target cleanliness, restores data atomically with foreign keys and triggers active, and checks customer invariants afterward.
 
-```bash
-psql "<recovery-target>" --set ON_ERROR_STOP=1 --command "drop schema public cascade;"
-pg_restore --exit-on-error --no-owner --no-acl --dbname="<recovery-target>" <backup.dump>
-```
-
-Require exit code 0. Then verify: the expected tables and functions exist, row-level security is enabled on every application table, no policy grants public access, and your row counts match.
-
-A recovery drill should be run at least monthly and before any high-risk migration. Never point a production Telegram bot at a recovery target.
+A recovery drill should be run at least monthly and before any high-risk migration. Never point a production Telegram bot at a recovery target. Follow the complete acceptance and rollback procedure in [`backup-restore.md`](backup-restore.md).
 
 ## Integration Credentials
 

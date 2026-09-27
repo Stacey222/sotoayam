@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolvePostgresTools } from "./check-clean-migrations.js";
+import { resolvePostgresTools } from "./postgres-tools.js";
 
 export interface DevelopmentDatabaseTarget {
   connectionUrl: string;

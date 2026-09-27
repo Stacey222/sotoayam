@@ -142,6 +142,12 @@ Legend:
 - [ ] P3-08 External free-tier uptime monitoring against `/ready`.
   Owner: Codex
 
+## Release Readiness + Customer Handoff
+
+- [x] RR-01 Customer Release Package + Acceptance Handoff.
+  Owner: Codex -> independent review
+  Note: prepares the versioned customer artifact, customer-facing release notes, operator handbook, acceptance checklist, support boundary, and handoff runbook without changing product behavior or closing the separate Phase 4 commercial launch gates.
+
 ## Phase 4 — Commercial Release Candidate
 
 - [ ] P4-01 Clean-room install on fresh VPS + fresh Supabase + fresh Telegram bot.

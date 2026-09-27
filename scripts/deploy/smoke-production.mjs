@@ -42,7 +42,9 @@ function fakeSupabase() {
 }
 
 async function waitFor(url, child) {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  // Match the deployment readiness warm-up budget: cold Windows/Linux starts
+  // may need more than 10 seconds while remaining healthy and bounded.
+  for (let attempt = 0; attempt < 300; attempt += 1) {
     if (child.exitCode !== null) throw new Error(`Production process exited during startup with code ${child.exitCode}`);
     try {
       const response = await fetch(url);

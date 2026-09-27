@@ -21,13 +21,13 @@ Before you begin, create the Supabase project and note its project reference, da
 
 ## Release Package
 
-Build the package on your workstation:
+Build the package on your workstation. Use the official version and the first 12 Git SHA characters, for example `sotoayam-v1.0.0-abcdef123456.tar.gz`:
 
 ```powershell
-powershell -NoProfile -File scripts\deploy\package-release.ps1 -OutputPath C:\path\to\sotoayam-release.tar.gz
+powershell -NoProfile -File scripts\deploy\package-release.ps1 -OutputPath C:\path\to\sotoayam-v1.0.0-abcdef123456.tar.gz
 ```
 
-The package contains the compiled application, the admin web assets, the migration files, the migration runner, and the deployment helper scripts. It deliberately contains no `.env`, no secrets, and no database identity.
+The package contains the compiled application, the admin web assets, migration and recovery runners, customer/operator documents, and the supported deployment helper scripts. It deliberately contains no `.env`, no secrets, and no database identity. Extract the `scripts/deploy` helpers from the archive to an operator staging directory before the first server bootstrap/deploy; do not run them from the active release directory.
 
 Copy three things to the server, keeping their relative locations:
 

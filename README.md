@@ -4,7 +4,7 @@ Backend dan dashboard operasional untuk tugas, integrasi, notifikasi, kesehatan 
 
 ## Production Deployment
 
-Deployment V1 yang didukung adalah satu Linux VPS dengan systemd, Nginx/HTTPS, aplikasi Node yang hanya bind ke localhost, serta Supabase/PostgreSQL eksternal. Mulai dari [panduan VPS production](docs/deployment/vps-production.md) dan [checklist operator](docs/deployment/production-checklist.md); backup/restore wajib mengikuti [panduan recovery](docs/deployment/backup-restore.md). Jangan mengekspos port Node, menjalankan lebih dari satu Telegram poller, atau memakai reset/seed development pada production.
+Deployment V1 yang didukung adalah satu Linux VPS dengan systemd, Nginx/HTTPS, aplikasi Node yang hanya bind ke localhost, serta Supabase/PostgreSQL eksternal. Mulai dari [panduan VPS production](docs/deployment/vps-production.md) dan [checklist operator](docs/deployment/production-checklist.md); backup/restore wajib mengikuti [panduan recovery](docs/deployment/backup-restore.md). Handoff customer memakai [release notes 1.0.0](docs/customer-release-notes-v1.0.0.md), [panduan operator](docs/customer-operator-guide.md), [checklist penerimaan](docs/customer-acceptance-checklist.md), dan [runbook handoff](docs/customer-handoff-runbook.md). Jangan mengekspos port Node, menjalankan lebih dari satu Telegram poller, atau memakai reset/seed development pada production.
 
 ## Architecture
 

@@ -43,19 +43,6 @@ $APP_ROOT/
 
 The reusable deployment commands do not infer SSH accounts or home directories. Provide host, operator, and SSH configuration outside repository source. Do not embed passwords, tokens, API keys, or private keys in repository files.
 
-## Existing legacy installation compatibility
-
-Existing installations using compatibility-sensitive identifiers are not renamed automatically. Supply their existing values for every deployment operation:
-
-```bash
-export APP_ROOT="/opt/gwens-automation"
-export APP_USER="gwens"
-export APP_GROUP="gwens"
-export SERVICE_NAME="gwens-automation.service"
-```
-
-The legacy paths, service account/group, and unit name remain supported inputs because renaming an active installation requires a separately reviewed cutover. They are not fresh-install recommendations. Do not rerun bootstrap over an existing installation without first reviewing ownership, systemd, sudoers, and rollback compatibility.
-
 ## Environment
 
 `shared/.env` contains only the production values required by `src/config/env.ts`:
@@ -107,7 +94,7 @@ Fresh customer credentials are entered only through the one-time HTTPS `/setup` 
 2. Create `shared/.env` from the runtime section of `.env.example`, replace every placeholder, choose the customer timezone, and explicitly select all three operational flags. Remove the deployment-only Supabase lines before installation. Confirm a dedicated Telegram bot has no competing poller before selecting polling `true`.
 3. Pass the completed file through `scripts/deploy/install-env.sh`; it validates configuration shape without requiring historical users, Divisi, roles, rules, or row counts. It refuses to overwrite an existing environment. For a reviewed configuration replacement, preserve a protected backup and rerun explicitly as `install-env.sh --replace`.
 4. Run `scripts/deploy/package-release.ps1` locally.
-5. Upload the archive, `scripts/deploy/deploy-release.sh`, and `scripts/deploy/deployment-config.sh` over SSH, preserving their relative location.
+5. Extract the packaged `scripts/deploy` helpers to an operator staging directory, then upload the archive, `scripts/deploy/deploy-release.sh`, and `scripts/deploy/deployment-config.sh` over SSH, preserving their relative location.
 6. Provide the three deploy-only Supabase variables through the approved protected operator environment, then run the deployment script.
 7. The script installs pinned migration tooling in the inactive release, runs `npm run migrate`, removes link state and development tooling, and only then atomically updates `current`.
 8. The script restarts systemd and requires localhost `/ready` to pass, with bounded retries so a temporary startup `503` does not cause an immediate rollback decision. `/health` remains database-independent liveness.
@@ -137,17 +124,11 @@ Point the customer DNS A/AAAA record at the VPS, obtain a certificate through th
 
 ## Release contents and recovery boundary
 
-`scripts/deploy/package-release.ps1` accepts only a clean committed worktree and a new output path. It builds to a uniquely named partial archive, atomically publishes the final name only after success, and removes partial files on failure. The versioned archive contains compiled server/migration code, public assets, lockfile, migrations, operator docs/templates, and non-secret `release-metadata.json` (format, app version, Git SHA, Node version, creation time). It excludes `.env`, local Supabase link configuration, `node_modules`, tests, logs, backups, internal ADRs, and reviews. Application rollback is permitted only to a schema-compatible prior release; migrations are forward-only and never rolled back automatically. Follow [backup and recovery](backup-restore.md) before risky upgrades.
+`scripts/deploy/package-release.ps1` accepts only a clean committed worktree and the exact new output name `sotoayam-v<version>-<12-character-commit>.tar.gz`. It builds to a uniquely named partial archive, computes a SHA-256 sidecar, publishes the archive/checksum pair only after both are complete, and removes partial or incomplete outputs on failure. The versioned archive contains compiled server/migration/recovery code, public assets, lockfile, migrations, supported deploy helpers, customer/operator docs/templates, and non-secret `release-metadata.json` (format, app version, Git SHA, Node version, migration count, creation time). It excludes `.env`, local Supabase link configuration, `node_modules`, tests, logs, backups, development/legacy helpers, internal ADRs, and reviews. Verify the `.sha256` sidecar before extracting or deploying the archive. Application rollback is permitted only to a schema-compatible prior release; migrations are forward-only and never rolled back automatically. Follow [backup and recovery](backup-restore.md) before risky upgrades.
 
 After setup, manage customer-owned divisions, baseline role display names, task categories, and collaboration rules through the protected admin APIs. Codes are stable identifiers; display names may change. The sample under `presets/warehouse-b2b-b2c/` is declarative reference data only and is not applied automatically.
 
 Any install, CLI, link, or migration failure exits non-zero before `current` changes or systemd restarts. A failure after migration but before activation leaves the database forward-migrated and the previous application release active; investigate compatibility before retrying. A post-activation restart or health failure exits non-zero and leaves the manual application rollback procedure below available. It never reverses database migrations automatically.
-
-## Existing staged / legacy installation
-
-The origin installation deliberately started with polling, reminders, and critical evaluation disabled while another process remained authoritative. That sequence is not a universal fresh-install prerequisite. Existing installations performing the same controlled handover may explicitly select all three flags as `false`, verify health and dry runs, stop the previous poller, then enable only the approved workers.
-
-`scripts/deploy/check-legacy-staged-runtime.mjs` retains the historical business-data assertion for the origin installation. It is opt-in, is not included in fresh release archives, and must never be used as a customer acceptance gate. The generic `check-vps-runtime.mjs` does not use an admin key or inspect users, Telegram identities, Divisi, roles, collaboration rules, or row counts.
 
 ## Telegram Task Console State
 

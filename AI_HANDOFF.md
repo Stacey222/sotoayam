@@ -176,7 +176,7 @@ Migration #23 grants the generic OWNER role the existing MVP task bundle without
 P2-03 is complete after approved Phase B cutover. `NORMALIZED` is authoritative for the seven existing preferences, while atomic mirrored legacy columns and `LEGACY` resolver mode remain the rollback path.
 
 ## Next Agent
-Recommended: define the existing P3-05 pagination/loading/basic-responsive-layout scope against the current dashboard before implementation.
+Recommended: execute the remaining Phase 4 commercial-release gates in order, beginning with P4-01 clean-room installation; RR-01 does not replace those gates.
 
 ## Pending Higher-Level Work
 - Continue with the ordered Phase 3 scope while preserving the P1 security/reliability boundaries and the P2-00 effective-administrator invariant.
@@ -204,6 +204,14 @@ P3-04 defines the supported V1 production topology as one Linux VPS running the 
 The release archive is built only from a clean committed worktree, carries compiled server/migration code, public assets, migrations, operator documentation/templates, and non-secret Git/Node version metadata, and excludes `.env`, local Supabase state, dependencies, tests, logs, backups, and internal engineering documents. Packaging uses a partial filename and atomically publishes the final archive only after success. The environment installer refuses silent replacement, cleans failed `.env.next` files, and requires explicit `--replace` for a reviewed update.
 
 Final review found and closed the silent environment-overwrite and misleading partial/dirty-archive risks. Production-like smoke proves built-code startup, `/health`, `/ready`, static UI, fresh `/setup`, SIGTERM shutdown, and no watcher. The full suite passes 998 tests with 52 environment-gated tests skipped; contract, secret, governance, catalog, dependency-audit, and clean-migration gates pass, with all 25 migrations applying twice unchanged.
+
+## RR-01 Customer Release Handoff State
+
+RR-01 prepares Sotoayam 1.0.0 as the first customer release without changing business behavior. The customer set now includes release notes, an operator guide, a PASS/FAIL acceptance checklist, and a founder-independent handoff runbook. The documented V1 boundary is one instance per customer, Telegram-only notifications, Linux VPS/systemd/Nginx, externally managed Supabase/PostgreSQL and secrets, and operator-managed encrypted backup retention.
+
+Release packaging includes those documents and compiled production recovery commands while continuing to exclude tests, internal ADR/reviews, development database tooling, local state, secrets, dependencies, logs, and backups. `backup:create`, `backup:verify`, and `backup:restore` now execute compiled JavaScript so they remain available after production dependencies are pruned. The final distributable archive is intentionally created only from the clean committed RR-01 checkpoint; live deployment remains outside this milestone.
+
+Independent final review closed three release blockers: the package filename/checksum are now bound to the committed release identity, customer documentation no longer carries origin-installation branding, and compiled backup tooling no longer pulls an internal checker/development fixture into the archive. RR-01 validation passes 20/20 focused release/handoff tests and the full 1005-test active suite, with 52 environment-gated tests skipped. Typecheck, build, nine contract tests, secret/governance/message-catalog checks, clean disposable migrations 25/25 twice, dependency audit, candidate archive inventory, and diff checks pass. Production-like smoke passes on checksum-verified Node 24.20.0 for built startup, `/health`, `/ready`, static UI, fresh `/setup`, and graceful SIGTERM. A 30-second finite Vitest timeout replaces the unrealistic five-second default for Windows process/database integration tests; worker count and assertions remain unchanged.
 
 ## Agent Handoff Format
 Every agent completing a task should return:

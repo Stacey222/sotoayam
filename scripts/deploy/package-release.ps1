@@ -12,6 +12,11 @@ $partial = "${output}.partial.${PID}"
 $checksumOutput = "${output}.sha256"
 $checksumPartial = "${checksumOutput}.partial.${PID}"
 $published = $false
+$stageRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+$stage = [System.IO.Path]::GetFullPath((Join-Path $stageRoot ("sotoayam-release-stage-" + [System.IO.Path]::GetRandomFileName())))
+if (-not $stage.StartsWith($stageRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+  throw "Unable to create a safe release staging path"
+}
 
 if (Test-Path -LiteralPath $metadataPath) {
   throw "Refusing to overwrite existing release-metadata.json"
@@ -56,8 +61,38 @@ try {
   # The deploy flow creates link state from protected environment variables; never ship a developer project identity.
   # Migration and recovery tooling ships compiled so customer commands never require the devDependency runtime
   # (tsx) in a production-only install. Internal ADRs, reviews, tests, and development database tools never ship.
-  tar -czf $partial dist/src dist/scripts/migrate.js dist/scripts/backup-create.js dist/scripts/backup-verify.js dist/scripts/backup-restore.js dist/scripts/backup-recovery.js dist/scripts/postgres-tools.js public package.json package-lock.json .node-version .env.example release-metadata.json docs/customer-release-notes-v1.0.0.md docs/customer-operator-guide.md docs/customer-acceptance-checklist.md docs/customer-handoff-runbook.md docs/customer-onboarding.md docs/deployment/clean-install.md docs/deployment/vps-production.md docs/deployment/production-checklist.md docs/deployment/backup-restore.md docs/deployment/sotoayam.service docs/deployment/nginx-sotoayam.conf scripts/deploy/bootstrap-vps.sh scripts/deploy/install-env.sh scripts/deploy/deploy-release.sh scripts/deploy/rollback.sh scripts/deploy/deployment-config.sh scripts/deploy/check-vps-runtime.mjs scripts/deploy/smoke-production.mjs supabase/migrations
-  if ($LASTEXITCODE -ne 0) { throw "Release packaging failed" }
+  $archiveEntries = @(
+    "dist/src", "dist/scripts/migrate.js", "dist/scripts/backup-create.js", "dist/scripts/backup-verify.js",
+    "dist/scripts/backup-restore.js", "dist/scripts/backup-recovery.js", "dist/scripts/postgres-tools.js",
+    "public", "package.json", "package-lock.json", ".node-version", ".env.example", "release-metadata.json",
+    "docs/customer-release-notes-v1.0.0.md", "docs/customer-operator-guide.md",
+    "docs/customer-acceptance-checklist.md", "docs/customer-handoff-runbook.md", "docs/customer-onboarding.md",
+    "docs/deployment/clean-install.md", "docs/deployment/vps-production.md",
+    "docs/deployment/production-checklist.md", "docs/deployment/backup-restore.md",
+    "docs/deployment/sotoayam.service", "docs/deployment/nginx-sotoayam.conf",
+    "scripts/deploy/bootstrap-vps.sh", "scripts/deploy/install-env.sh", "scripts/deploy/deploy-release.sh",
+    "scripts/deploy/rollback.sh", "scripts/deploy/deployment-config.sh", "scripts/deploy/check-vps-runtime.mjs",
+    "scripts/deploy/smoke-production.mjs", "supabase/migrations"
+  )
+  New-Item -ItemType Directory -Path $stage | Out-Null
+  foreach ($entry in $archiveEntries) {
+    $source = Join-Path $projectRoot $entry
+    $destination = Join-Path $stage $entry
+    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+    Copy-Item -LiteralPath $source -Destination $destination -Recurse -Force
+  }
+  foreach ($script in Get-ChildItem -LiteralPath (Join-Path $stage "scripts/deploy") -File -Filter "*.sh") {
+    $contents = [System.IO.File]::ReadAllText($script.FullName)
+    $normalized = $contents.Replace("`r`n", "`n").Replace("`r", "`n")
+    [System.IO.File]::WriteAllText($script.FullName, $normalized, [System.Text.UTF8Encoding]::new($false))
+  }
+  Push-Location $stage
+  try {
+    tar -czf $partial dist/src dist/scripts/migrate.js dist/scripts/backup-create.js dist/scripts/backup-verify.js dist/scripts/backup-restore.js dist/scripts/backup-recovery.js dist/scripts/postgres-tools.js public package.json package-lock.json .node-version .env.example release-metadata.json docs/customer-release-notes-v1.0.0.md docs/customer-operator-guide.md docs/customer-acceptance-checklist.md docs/customer-handoff-runbook.md docs/customer-onboarding.md docs/deployment/clean-install.md docs/deployment/vps-production.md docs/deployment/production-checklist.md docs/deployment/backup-restore.md docs/deployment/sotoayam.service docs/deployment/nginx-sotoayam.conf scripts/deploy/bootstrap-vps.sh scripts/deploy/install-env.sh scripts/deploy/deploy-release.sh scripts/deploy/rollback.sh scripts/deploy/deployment-config.sh scripts/deploy/check-vps-runtime.mjs scripts/deploy/smoke-production.mjs supabase/migrations
+    if ($LASTEXITCODE -ne 0) { throw "Release packaging failed" }
+  } finally {
+    Pop-Location
+  }
   $checksum = (Get-FileHash -LiteralPath $partial -Algorithm SHA256).Hash.ToLowerInvariant()
   $checksumLine = "$checksum  $expectedName`n"
   [System.IO.File]::WriteAllText($checksumPartial, $checksumLine, [System.Text.UTF8Encoding]::new($false))
@@ -72,6 +107,7 @@ try {
 } finally {
   Remove-Item -LiteralPath $partial -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $checksumPartial -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
   if (-not $published) {
     Remove-Item -LiteralPath $output -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $checksumOutput -Force -ErrorAction SilentlyContinue

@@ -306,7 +306,16 @@ describe("release packaging", () => {
     expect(packaging).toContain("[System.IO.File]::Move($partial, $output)");
     expect(packaging).toContain("Remove-Item -LiteralPath $partial -Force");
     expect(packaging).toContain("Remove-Item -LiteralPath $checksumPartial -Force");
+    expect(packaging).toContain("Remove-Item -LiteralPath $stage -Recurse -Force");
     expect(packaging).toContain("if (-not $published)");
     expect(packaging.indexOf("tar -czf $partial")).toBeLessThan(packaging.indexOf("[System.IO.File]::Move($partial, $output)"));
+  });
+
+  it("normalizes packaged Linux shell scripts to LF in an isolated staging directory", async () => {
+    const packaging = await readFile(path.join(projectRoot, "scripts/deploy/package-release.ps1"), "utf8");
+    expect(packaging).toContain('Get-ChildItem -LiteralPath (Join-Path $stage "scripts/deploy") -File -Filter "*.sh"');
+    expect(packaging).toContain('$contents.Replace("`r`n", "`n").Replace("`r", "`n")');
+    expect(packaging.indexOf("Copy-Item -LiteralPath $source")).toBeLessThan(packaging.indexOf("tar -czf $partial"));
+    expect(packaging.indexOf("$normalized =")).toBeLessThan(packaging.indexOf("tar -czf $partial"));
   });
 });

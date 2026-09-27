@@ -40,3 +40,19 @@ Use this checklist with [VPS production deployment](vps-production.md). Never pa
 - [ ] `npm run backup:create` produces archive plus manifest and `npm run backup:verify` passes.
 - [ ] `journalctl -u sotoayam.service` contains no secret values or repeated crash loop.
 - [ ] Record the active Git SHA/release directory and the previous compatible release for application rollback.
+
+## Upgrade and rollback gate
+
+- [ ] Verify the pre-upgrade backup before changing the active release.
+- [ ] Confirm migration execution is explicit and stops activation on failure.
+- [ ] Rehearse same-schema replacement or a real prior-release upgrade without replacing existing database state.
+- [ ] Confirm code-only rollback is schema-compatible; otherwise require recovery from the verified pre-upgrade backup.
+- [ ] Test the recorded previous-release switch and repeat `/health`, `/ready`, login, settings, and task smoke checks.
+
+## Commercial go-live gate
+
+- [ ] Official artifact checksum and `release-metadata.json` match the approved commit, version, Node runtime, and migration count.
+- [ ] Clean-room install and first OWNER setup pass using only shipped customer documentation.
+- [ ] Backup verification and restore drill to a clean recovery target pass.
+- [ ] Authentication, CSRF, setup replay, OWNER/SYSTEM_ADMIN separation, pairing, secret, proxy, and recovery guards pass final review.
+- [ ] No unresolved release blocker remains; the final tag is created only after explicit approval.

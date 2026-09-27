@@ -42,6 +42,7 @@ describe("customer release handoff", () => {
   it("provides an executable PASS/FAIL acceptance and founder-independent handoff sequence", async () => {
     const checklist = await read("docs/customer-acceptance-checklist.md");
     const runbook = await read("docs/customer-handoff-runbook.md");
+    const onboarding = await read("docs/customer-onboarding.md");
     expect(checklist.match(/PASS\/FAIL/g)?.length).toBeGreaterThanOrEqual(1);
     for (const expected of ["25 migrasi", "`/setup`", "OWNER", "notifikasi uji", "Tugas uji",
       "`GET /health`", "`GET /ready`", "`npm run backup:create`", "`npm run backup:verify`", "restore"]) {
@@ -52,6 +53,7 @@ describe("customer release handoff", () => {
       expect(runbook).toContain(expected);
     }
     expect(runbook).not.toMatch(/Kento|owner@sotoayam\.local/i);
+    expect(onboarding).toContain("Customer tidak perlu mengetahui chat ID Telegram");
   });
 
   it("keeps customer package inputs free from origin identities and legacy deployment branding", async () => {

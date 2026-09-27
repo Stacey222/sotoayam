@@ -28,3 +28,7 @@ Sotoayam 1.0.0 adalah rilis pelanggan pertama untuk satu instalasi per pelanggan
 ## Tanggung jawab operator
 
 Operator mengikuti [panduan operasi](customer-operator-guide.md), menyelesaikan [checklist penerimaan](customer-acceptance-checklist.md), menjaga secret dan patch OS, memastikan hanya satu poller aktif, serta membuat dan memverifikasi backup secara berkala. Detail pembagian dukungan tercantum di panduan operasi.
+
+## Gate go-live komersial
+
+Artifact release dan checksum yang valid belum otomatis mengizinkan production customer. Clean-room install, restore drill, upgrade/rollback rehearsal, security review, dan seluruh checklist penerimaan harus lulus tanpa blocker sebelum tag final atau commercial go-live disetujui.

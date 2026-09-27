@@ -5,7 +5,7 @@ import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } 
 import os from "node:os";
 import path from "node:path";
 import { discoverMigrations } from "./migrate.js";
-import { resolvePostgresTools } from "./postgres-tools.js";
+import { resolvePostgresClientTools } from "./postgres-tools.js";
 
 export const BACKUP_FORMAT = "SOTOAYAM_LOGICAL_DATA_V1";
 export const RESTORE_CONFIRMATION = "RESTORE_SOTOAYAM_BACKUP";
@@ -101,19 +101,8 @@ function redact(value: string): string {
     .trim();
 }
 
-function executableName(name: string): string {
-  return process.platform === "win32" ? `${name}.exe` : name;
-}
-
 async function resolveBackupTools(): Promise<BackupTools> {
-  const base = await resolvePostgresTools();
-  const directory = path.dirname(base.psql);
-  const pgDump = path.join(directory, executableName("pg_dump"));
-  const pgRestore = path.join(directory, executableName("pg_restore"));
-  await Promise.all([access(pgDump), access(pgRestore)]).catch(() => {
-    throw new Error("PostgreSQL pg_dump and pg_restore were not found beside psql");
-  });
-  return { psql: base.psql, pgDump, pgRestore };
+  return resolvePostgresClientTools();
 }
 
 function databaseEnvironment(password: string): NodeJS.ProcessEnv {

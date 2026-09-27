@@ -12,4 +12,5 @@ Runbook ini menghubungkan prosedur instalasi, penerimaan, dan operasi tanpa shor
 8. Customer dan operator mengisi [Checklist Penerimaan](customer-acceptance-checklist.md), termasuk alur pengguna, tugas, notifikasi uji, health, dan readiness.
 9. Operator menjalankan `backup:create` serta `backup:verify`, menyimpan archive dan manifest di storage terenkripsi di luar VPS, dan mencatat retensi.
 10. Customer memastikan [Panduan Operator](customer-operator-guide.md) dan [Backup dan Pemulihan](deployment/backup-restore.md) dapat diakses oleh petugas yang ditunjuk.
-11. Handoff ditandatangani secara operasional hanya setelah seluruh item checklist `PASS`; kegagalan diklasifikasikan sebagai bug aplikasi, masalah operator/infrastruktur, atau kustomisasi tidak didukung.
+11. Sebelum commercial go-live, operator juga membuktikan clean-room install artifact resmi, restore drill, upgrade/rollback rehearsal, dan security gate; artifact yang valid saja belum cukup.
+12. Handoff ditandatangani secara operasional hanya setelah seluruh item checklist `PASS` dan tidak ada blocker release; kegagalan diklasifikasikan sebagai bug aplikasi, masalah operator/infrastruktur, atau kustomisasi tidak didukung.

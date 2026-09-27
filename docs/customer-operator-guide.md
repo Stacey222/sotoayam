@@ -85,6 +85,18 @@ Bagikan hanya potongan yang sudah disanitasi. Jangan menyalin environment, autho
 
 Jangan mengubah tabel/row database, registry migrasi, RLS/grant, hash credential, session, authority assignment, notification intent/delivery, Telegram offset/dedupe, runtime setting, atau file release. Jangan menjalankan reset/seed development, `supabase db reset`, migration repair, atau SQL ad hoc. Perubahan secret dilakukan melalui environment file dan prosedur deployment; perubahan bisnis dilakukan melalui dashboard/API resmi.
 
+## 16. Upgrade
+
+Sebelum upgrade, jalankan `npm run backup:create` dan `npm run backup:verify`, simpan release aktif serta checksum artifact baru, lalu gunakan `scripts/deploy/deploy-release.sh`. Migrasi harus selesai sebelum symlink `current` berpindah dan service direstart. Setelah aktivasi, wajib periksa `/health`, `/ready`, login OWNER, settings, serta satu alur tugas. Jangan menjalankan `/setup` kembali dan jangan menyalin database lama di atas database baru.
+
+## 17. Rollback
+
+Rollback aplikasi dengan `scripts/deploy/rollback.sh` hanya aman bila release sebelumnya kompatibel dengan schema database yang sudah maju. Script tidak pernah membatalkan migrasi. Bila release lama tidak kompatibel dengan schema baru, hentikan traffic/worker dan pulihkan backup pre-upgrade ke target recovery bersih sesuai panduan; jangan menjalankan SQL reversal manual. Setelah rollback atau recovery, ulangi health, readiness, login, settings, dan alur tugas sebelum membuka traffic.
+
+## 18. Gate commercial go-live
+
+Go-live komersial memerlukan seluruh checklist penerimaan `PASS`, clean-room install artifact resmi, backup/restore drill, upgrade dan rollback rehearsal, security review, checksum/metadata release cocok, serta tidak ada blocker aktif. Artifact yang berhasil dibangun sendiri belum berarti customer production boleh diaktifkan.
+
 ## Batas dukungan
 
 Customer/operator bertanggung jawab atas akun dan keamanan VPS, domain/DNS, subscription dan availability Supabase/database, kepemilikan bot Telegram, penyimpanan/rotasi secret, update OS, kapasitas disk/jaringan, serta penyimpanan dan retensi backup.

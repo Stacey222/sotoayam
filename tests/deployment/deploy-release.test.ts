@@ -242,6 +242,7 @@ describe("release packaging", () => {
     expect(archiveEntries).toContain("docs/customer-operator-guide.md");
     expect(archiveEntries).toContain("docs/customer-acceptance-checklist.md");
     expect(archiveEntries).toContain("docs/customer-handoff-runbook.md");
+    expect(archiveEntries).toContain("docs/customer-onboarding.md");
     expect(archiveEntries).toContain("scripts/deploy/smoke-production.mjs");
     expect(archiveEntries).toContain("scripts/deploy/bootstrap-vps.sh");
     expect(archiveEntries).toContain("scripts/deploy/install-env.sh");
@@ -257,6 +258,19 @@ describe("release packaging", () => {
     for (const content of [envExample, installGuide, recoveryGuide]) {
       expect(content).not.toMatch(/gwensoto/i);
       expect(content).not.toMatch(/\bADR\b|adversarial/i);
+    }
+
+    expect(installGuide).toContain("docs/customer-onboarding.md");
+    const shippedMarkdown = archiveEntries.filter((entry) => entry.endsWith(".md"));
+    for (const entry of shippedMarkdown) {
+      const markdown = await readFile(path.join(projectRoot, entry), "utf8");
+      const relativeLinks = [...markdown.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)]
+        .map((match) => match[1]!.split("#", 1)[0]!)
+        .filter((target) => target !== "" && !/^(?:[a-z]+:|\/)/i.test(target));
+      for (const target of relativeLinks) {
+        const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(entry), target));
+        expect(archiveEntries, `${entry} links to unpackaged ${resolved}`).toContain(resolved);
+      }
     }
   });
 
